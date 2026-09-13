@@ -213,9 +213,10 @@ class GuardianState:
 
     def integration_status(self) -> dict[str, Any]:
         return {
-            "mcp_protocol": "2025-11-25",
-            "mcp_transport": "streamable-http-compatible",
-            "alexa_plus_demo": "web-simulation",
+            "mcp_protocol": "2026-07-28 (backward-compatible with 2025-11-25)",
+            "mcp_transport": "official-streamable-http",
+            "mcp_sdk": "modelcontextprotocol/python-sdk-v2",
+            "alexa_plus_demo": "web-simulation-over-official-mcp-runtime",
             "ring": "ring-compatible-event-simulator; official Ring API/device adapter pending",
             "local_llm": bool(os.getenv("INNEROS_LOCAL_LLM_URL")),
             "aws_strands_enabled": os.getenv("AWS_STRANDS_ENABLED", "0") == "1",
