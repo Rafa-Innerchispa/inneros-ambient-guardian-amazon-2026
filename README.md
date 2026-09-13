@@ -30,6 +30,7 @@ The public hackathon build controls only a simulator. Private customer/device co
 - **No `approve_action` MCP tool**. A model can prepare an action but cannot approve its own request
 - Alexa+ web simulation with typed input, browser speech recognition, and spoken responses
 - Ring-compatible normalized event simulator for safe public testing
+- Honest physical-device readiness reporting: Alexa/Echo and Ring are marked pending until official account/device linking is proven
 - Local Qwen/vLLM reasoning using an OpenAI-compatible endpoint
 - Deterministic local fallback if the LLM is unavailable
 - **AWS Strands Agents SDK** as a real read-only orchestration/synthesis layer against the local OpenAI-compatible Qwen endpoint
@@ -144,6 +145,15 @@ The integration uses `strands.Agent` with `strands.models.openai.OpenAIModel`, p
 | `integration_status` | No | Reports MCP/Strands/Ring/local model state |
 
 There is deliberately **no MCP execution/approval tool**.
+
+## Physical Alexa and Ring readiness
+
+The public repo currently proves the local-first MCP/web path, not a physical Echo or Ring device binding. `integration_status` reports:
+
+- physical Alexa/Echo: not linked until the owner account/device completes Alexa+ MCP Toolkit or Alexa Skill testing;
+- Ring: simulator-only until a Ring Developer OAuth/test-account/device binding is demonstrated.
+
+This is intentional. The product should never imply real-home control or Ring access from a simulator-only proof.
 
 ## Docker
 

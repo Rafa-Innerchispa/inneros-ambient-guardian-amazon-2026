@@ -52,6 +52,20 @@ export AMBIENT_GUARDIAN_PUBLIC_ORIGIN=https://guardian.example.com
 
 Terminate HTTPS at a trusted reverse proxy or managed ingress. Do not expose the local model endpoint to the Internet.
 
+## Amazon physical-device gate
+
+For a physical Alexa/Echo proof, deploy the same ASGI service behind an HTTPS hostname with:
+
+- TLS termination,
+- host/origin restrictions through `AMBIENT_GUARDIAN_PUBLIC_HOST` and `AMBIENT_GUARDIAN_PUBLIC_ORIGIN`,
+- upstream rate limiting,
+- no public exposure of the local vLLM/Qwen endpoint,
+- no MCP tool that approves or executes physical actions.
+
+The Alexa+ MCP Toolkit path should be used only if the owner account/device is eligible. If the owner account is not eligible, use an Alexa Skill/Agent Skill wrapper that calls this service through the same HTTPS origin and keeps approval outside Alexa's model/tool surface.
+
+For Ring, keep the simulator enabled until the owner has a Ring Developer app, OAuth/account linking, webhook signing configuration, and either an official test account or a real device. Do not label the Ring track complete before that binding is demonstrated.
+
 ## Cloud portability
 
 The container only requires HTTP ingress. It can run on Cloud Run, ECS/Fargate, Kubernetes, a VM, or the existing local InnerOS host. The default demo remains functional without a model connection because it has a deterministic local fallback.

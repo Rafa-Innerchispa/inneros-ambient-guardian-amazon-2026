@@ -10,6 +10,8 @@ from typing import Any
 
 import httpx
 
+from .ring import RingAdapterStatus, RingSimulatorAdapter
+
 
 def utc_now() -> datetime:
     return datetime.now(timezone.utc)
@@ -61,6 +63,7 @@ class GuardianState:
         self._lock = threading.RLock()
         self._ttl = action_ttl_seconds
         self.adapter = SimulatorAdapter()
+        self.ring_adapter = RingSimulatorAdapter()
         self.events: list[dict[str, Any]] = []
         self.pending: dict[str, PendingAction] = {}
         self.evidence: list[dict[str, Any]] = []
@@ -81,6 +84,7 @@ class GuardianState:
             self.pending = {}
             self.evidence = []
             self.adapter = SimulatorAdapter()
+            self.ring_adapter = RingSimulatorAdapter()
 
     def add_event(self, event_type: str, source: str = "ring-compatible-simulator") -> dict[str, Any]:
         event_map = {
@@ -212,12 +216,16 @@ class GuardianState:
             return list(self.evidence)
 
     def integration_status(self) -> dict[str, Any]:
+        ring_status: RingAdapterStatus = self.ring_adapter.status()
         return {
             "mcp_protocol": "2026-07-28 (backward-compatible with 2025-11-25)",
             "mcp_transport": "official-streamable-http",
             "mcp_sdk": "modelcontextprotocol/python-sdk-v2",
             "alexa_plus_demo": "web-simulation-over-official-mcp-runtime",
-            "ring": "ring-compatible-event-simulator; official Ring API/device adapter pending",
+            "physical_alexa": "not-linked; requires owner-visible Alexa+ MCP Toolkit or Alexa Skill account-linking test on the physical Echo",
+            "ring": ring_status.summary,
+            "ring_official_path": ring_status.official_path,
+            "ring_device_verification": ring_status.device_verification,
             "local_llm": bool(os.getenv("INNEROS_LOCAL_LLM_URL")),
             "aws_strands_enabled": os.getenv("AWS_STRANDS_ENABLED", "0") == "1",
         }
