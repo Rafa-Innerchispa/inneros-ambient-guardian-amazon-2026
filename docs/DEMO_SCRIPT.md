@@ -1,29 +1,69 @@
-# Demo video outline - under 3 minutes
+# Demo video script — under 3 minutes
 
-## 0:00-0:20 - Problem
+Use this as the recording outline. The final video must be public on YouTube or Vimeo and in English.
 
-"Smart homes generate alerts, but people still have to investigate five apps before they know whether anything is actually wrong. Ambient Guardian lets Alexa+ ask InnerOS one higher-level question: what is happening, what should happen next, and can we prove it happened?"
+## 0:00–0:20 — Problem
 
-## 0:20-1:05 - Understand
+“Smart-home systems can detect events, but people still have to investigate alerts, decide what matters, and verify whether an action actually happened. InnerOS Ambient Guardian gives Alexa+ a local-first MCP guardian that can understand context and prepare safe actions without giving the model direct physical authority.”
 
-1. Show the web Alexa+ simulation.
-2. Trigger `Unknown person`.
-3. Ask: "Alexa, is everything okay at home?"
-4. Show `attention_required`, the concise answer, and the event context.
-5. Point out local-Qwen mode when the local endpoint is connected.
+## 0:20–0:45 — Architecture
 
-## 1:05-1:50 - Act safely
+Show the UI and briefly mention:
 
-1. Ask: "Alexa, lock the front door."
-2. Show that the system prepares the action but explicitly says it was **not executed**.
-3. Click approve.
-4. Show post-action verification and the evidence ID.
-5. Replay the approval token if useful to show fail-closed behavior.
+- official MCP Python SDK v2 / Streamable HTTP
+- AWS Strands Agents SDK
+- local Qwen/vLLM
+- deterministic safety policy
+- separate human approval boundary
+- verification evidence
 
-## 1:50-2:25 - Architecture
+Key line:
 
-Show the simple flow: Alexa+ -> MCP -> InnerOS local reasoning -> adapter -> approval -> verification -> evidence. Mention that AWS Strands is optional orchestration and cannot authorize physical actions.
+“The model can understand and propose. It cannot approve its own physical action.”
 
-## 2:25-2:55 - Why it matters
+## 0:45–1:15 — Understand the situation
 
-"The product is not another dashboard. It reduces the distance between 'What is happening?' and 'What safely happened next?' while keeping sensitive context local and keeping the human in control."
+1. Trigger **Unknown person**.
+2. Ask: **“Alexa, is everything okay at home?”**
+3. Show the answer and the Strands/local-Qwen reasoning mode.
+
+Explain that Strands receives read-only property context and has no physical-action tools.
+
+## 1:15–1:55 — Prepare, approve, verify
+
+1. Ask: **“Alexa, lock the front door.”**
+2. Point out that the response says the action is only prepared and has not executed.
+3. Show the expiring one-time proposal.
+4. Click the human **Approve bounded action** control.
+5. Show the returned verification evidence and observed locked state.
+
+Key line:
+
+“No approval, no physical action. No verification, no success claim.”
+
+## 1:55–2:15 — Fail-closed safety
+
+Ask: **“Alexa, unlock the front door.”**
+
+Show that no action is prepared. Mention that negated commands such as “do not lock the front door” also fail closed.
+
+If time permits, replay the already-used approval token and show that it is rejected.
+
+## 2:15–2:40 — Engineering proof
+
+Briefly show the public GitHub repository:
+
+- MIT license
+- GitHub Actions green
+- official MCP HTTP smoke
+- Docker build
+- security/architecture docs
+- friction log
+
+Mention that the full Strands -> Qwen path was validated on an AMD local AI node.
+
+## 2:40–2:55 — Close
+
+“Ambient Guardian reduces the distance between ‘What is happening?’ and ‘What safely happened next?’ while keeping sensitive reasoning local and keeping humans in control of physical effects.”
+
+End on the project name and repository/Devpost page.
