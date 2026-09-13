@@ -74,7 +74,7 @@ def main() -> None:
             approval.raise_for_status()
             evidence = approval.json()["evidence"]
             assert evidence["verified"] is True
-            assert evidence["observed"]["front_door"] == "locked"
+            assert evidence["observed_state"]["front_door_locked"] is True
 
             replay = client.post(f"/api/actions/{prepared['approval_token']}/approve")
             assert replay.status_code == 409
