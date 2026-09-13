@@ -43,19 +43,40 @@ def status() -> dict[str, Any]:
         "model": _model_id(),
         "local_endpoint_configured": bool(os.getenv("INNEROS_LOCAL_LLM_URL")),
         "authorization_boundary": "read-only-synthesis; deterministic code authorizes actions",
+        "vllm_empty_tools_compat": True,
     }
+
+
+def _openai_model_class():
+    try:
+        from strands.models.openai import OpenAIModel  # type: ignore
+    except ImportError as exc:
+        raise RuntimeError(
+            "Install strands-agents[openai] to use the local OpenAI-compatible provider"
+        ) from exc
+
+    class VLLMCompatibleOpenAIModel(OpenAIModel):
+        """Strands OpenAI model that omits an empty tools array for strict vLLM servers.
+
+        Strands 1.x currently formats `tools=[]` when an Agent has no tools. OpenAI accepts
+        that shape, while vLLM correctly requires the field to be omitted or non-empty.
+        Removing only the empty field preserves the deliberately tool-less safety boundary.
+        """
+
+        def format_request(self, *args: Any, **kwargs: Any) -> dict[str, Any]:
+            request = super().format_request(*args, **kwargs)
+            if request.get("tools") == []:
+                request.pop("tools", None)
+            return request
+
+    return VLLMCompatibleOpenAIModel
 
 
 def build_model():
     provider = _provider()
     if provider == "local-openai":
-        try:
-            from strands.models.openai import OpenAIModel  # type: ignore
-        except ImportError as exc:
-            raise RuntimeError(
-                "Install strands-agents[openai] to use the local OpenAI-compatible provider"
-            ) from exc
-        return OpenAIModel(
+        model_class = _openai_model_class()
+        return model_class(
             client_args={
                 "api_key": os.getenv("INNEROS_LOCAL_LLM_API_KEY", "inneros-local"),
                 "base_url": _local_base_url(),

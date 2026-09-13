@@ -51,3 +51,13 @@ This log records real integration friction encountered while building Ambient Gu
 - **Severity:** Critical for real actuators.
 - **Workaround:** removed execution approval from MCP entirely. MCP can only prepare. The hackathon UI uses a separate human approval route, and the public adapter remains a simulator.
 - **Suggestion:** Alexa+/agent integration guidance for physical systems should include a reference pattern for verifiable user confirmation that cannot be self-issued by the model.
+
+## 6. Strands OpenAI provider sends `tools: []`, strict vLLM rejects it
+
+- **Task:** execute a real Strands Agent against the local Qwen/vLLM OpenAI-compatible endpoint with zero tools.
+- **Steps:** installed Strands in an isolated venv on the model host and ran the read-only synthesis smoke test.
+- **Expected:** a normal Chat Completions request without tool calling.
+- **Actual:** Strands formatted the request with `tools: []`; vLLM returned HTTP 400 because `tools` must either be non-empty or omitted.
+- **Severity:** Important for local/OpenAI-compatible provider interoperability.
+- **Workaround:** added a tiny `VLLMCompatibleOpenAIModel` subclass that calls Strands' formatter unchanged and removes only the `tools` field when the generated list is empty. The agent remains deliberately tool-less.
+- **Suggestion:** the Strands OpenAI provider should omit `tools` whenever there are no tool specs. This matches stricter OpenAI-compatible servers and avoids requiring dummy tools.
