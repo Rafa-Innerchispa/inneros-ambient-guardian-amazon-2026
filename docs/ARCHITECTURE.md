@@ -1,40 +1,60 @@
 # Architecture
 
-## Thesis
+## Product boundary
 
-Ambient Guardian is an orchestration boundary between an ambient conversational interface and systems that can observe or affect the physical world. The system deliberately separates **understanding** from **authorization**.
+InnerOS Ambient Guardian is a local-first orchestration layer for ambient property safety. The hackathon build is intentionally a standalone, public-safe implementation. It does not contain private camera URLs, customer credentials, local network addresses, face/pet enrollment data, or production home-control secrets.
 
-## Flow
+## Runtime
 
-1. Alexa+ or the included web simulation sends a user request.
-2. The MCP layer exposes read-only context tools and bounded action tools.
-3. `GuardianState` normalizes recent Ring-compatible and IoT events.
-4. `GuardianReasoner` prefers a local OpenAI-compatible Qwen/vLLM endpoint when configured.
-5. If the model is unavailable, a deterministic local fallback keeps the demo and safety path operational.
-6. Physical consequences use `prepare_action` first.
-7. A one-time approval token is required by `approve_action`.
-8. The adapter executes only the allowlisted action.
-9. The system observes post-action state and emits evidence only after verification.
+One ASGI application is built by the official MCP Python SDK v2. The application serves:
 
-## MCP
+- `/mcp` — official Streamable HTTP MCP surface
+- `/` — simulated Alexa+ experience
+- `/health` — health/readiness surface
+- `/api/*` — simulator, human approval, evidence, and diagnostics routes
 
-The public server advertises protocol version `2025-11-25` and provides a Streamable-HTTP-compatible route at `/mcp`:
+This removes the earlier split between a hand-written JSON-RPC endpoint and the official MCP implementation.
 
-- `POST /mcp` for JSON-RPC requests
-- `GET /mcp` for an event-stream notification path
-- `DELETE /mcp` to terminate a demo session
-- `Mcp-Session-Id` returned at initialization and checked on later session calls
+## Reasoning path
 
-The final validation task is to exercise this endpoint against the Alexa+ participant preview/test surface and capture evidence.
+1. Event adapters normalize context.
+2. `GuardianState` computes a deterministic safety status.
+3. `GuardianReasoner` uses local Qwen/vLLM when configured and otherwise falls back deterministically.
+4. When `AWS_STRANDS_ENABLED=1`, a real `strands.Agent` with an explicit `OpenAIModel` synthesizes the supplied read-only context using the local OpenAI-compatible endpoint.
+5. Strands receives no physical-action tools.
 
-## Adapters
+## Action path
 
-The default `SimulatorAdapter` cannot control real hardware. Real Ring/Home Assistant/InnerOS adapters belong behind the same bounded interface and must not accept arbitrary URLs or arbitrary commands.
+Action handling is deliberately separated from reasoning:
 
-## AWS Builder integration
+```text
+natural-language request
+  -> deterministic phrase parser
+  -> allowlist check
+  -> prepare_action
+  -> one-time expiring token
+  -> human approval route
+  -> adapter.execute
+  -> verify observed state
+  -> immutable-style evidence record
+```
 
-`aws_strands.py` is an opt-in Strands SDK bridge. It may summarize context or recommendations, but it is prohibited from authorizing physical actions. Local reasoning and policy remain functional if AWS access is unavailable.
+`prepare_action` is available to MCP. Approval/execution is **not** an MCP tool. This prevents an agent from preparing and approving its own request.
 
-## Privacy
+## Current adapter
 
-The public repository contains interfaces and simulator behavior only. Private camera endpoints, device identities, customer data, local server addresses, tokens, and Home Assistant credentials stay outside Git.
+The public `SimulatorAdapter` supports only:
+
+- `lock_front_door`
+- `enable_delivery_mode`
+- `disable_delivery_mode`
+
+It never controls a real door. A future real adapter must preserve the exact same prepare → human approval → execute → verify boundary and add authentication, authorization, durable idempotency, and device-specific verification.
+
+## Ring boundary
+
+The current project normalizes Ring-like event concepts but does not claim an official Ring integration. The repository and submission should remain Alexa+-primary until an official Ring API/SDK/simulator/device path is demonstrated.
+
+## Persistence
+
+Hackathon state is in-memory by design. Restarting the service resets demo events, pending proposals, and evidence. Production persistence is intentionally out of scope until identity, tenant isolation, and a durable audit store are defined.

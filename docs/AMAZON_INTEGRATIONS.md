@@ -1,40 +1,40 @@
-# Amazon integration map
+# Amazon integrations
 
 ## Alexa+ primary track
 
-Implemented:
+Ambient Guardian exposes an official MCP Python SDK v2 Streamable HTTP server at `/mcp`. The SDK supports the current protocol generation while retaining compatibility with the hackathon-required `2025-11-25` generation.
 
-- self-hosted MCP endpoint
-- advertised protocol `2025-11-25`
-- Streamable-HTTP-compatible session lifecycle
-- tool discovery and tool calls
-- simulated Alexa+ web experience with voice input/output when the browser supports it
+The repo includes both an in-process MCP SDK test and a real HTTP client smoke test. CI boots the service and connects to `/mcp` over HTTP before the build is considered green.
 
-Remaining validation:
-
-- run the endpoint against the Alexa+ hackathon preview/test surface and capture evidence/screenshots
-- record the final demo using the exact participant-facing Amazon tooling if access is available
+The simulated Alexa+ web experience is served by the same ASGI application as the MCP server, so the demo and MCP tools share one state and policy boundary.
 
 ## AWS Builder mini challenge
 
-Implemented:
+The project incorporates the **AWS Strands Agents SDK** directly in the runtime.
 
-- optional `strands-agents` dependency
-- real Strands SDK import and `Agent` execution path in `src/ambient_guardian/aws_strands.py`
-- explicit separation from the safety-critical local path
+- `strands.Agent` is the orchestration/synthesis layer.
+- `strands.models.openai.OpenAIModel` connects Strands to our local Qwen/vLLM OpenAI-compatible endpoint.
+- The integration is enabled explicitly with `AWS_STRANDS_ENABLED=1`.
+- Strands receives no physical-action tools; action authorization is deterministic application code.
+- Bedrock is optional and is not required for the local-first demo. We do not claim Bedrock success while the account-level Bedrock operation remains unavailable.
 
-Current account note:
+This architecture demonstrates an AWS agent SDK without making the safety-critical path or demo availability depend on a cloud model.
 
-- Bedrock access is not required for the local demo. If account eligibility continues returning `ValidationException: Operation not allowed`, the project remains functional and Strands is enabled only when the account/runtime is available.
+## Open Source mini challenge
 
-## Ring
+This repository was created publicly during the hackathon and includes:
 
-Implemented:
+- MIT license
+- complete source
+- run instructions
+- tests and CI
+- Docker packaging
+- architecture/security docs
+- friction log
+- reproducible MCP and Strands smokes
 
-- normalized Ring-compatible event contract
-- safe simulator events used by the demo
-- adapter boundary ready for official Ring API/device work
+GitHub username: `Rafa-Innerchispa`.
 
-Not yet claimed:
+## Ring status
 
-- Ring primary track qualification. We will only select Ring once an official Ring API, SDK, simulator, or physical device is shown working in code and video.
+The current build has a Ring-compatible event normalization/simulation boundary only. A physical Ring device is not necessary under the hackathon rules, but an official Ring API/SDK/simulator/device integration is still required before entering the Ring track. Until that evidence exists, the project remains Alexa+-primary and does not imply official Ring API usage.
