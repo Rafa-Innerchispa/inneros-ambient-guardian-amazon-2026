@@ -77,4 +77,6 @@ def test_integration_status_is_honest_about_ring_and_official_mcp():
     data = client.get("/api/integrations").json()
     assert data["mcp_transport"] == "official-streamable-http"
     assert "2025-11-25" in data["mcp_protocol"]
-    assert "official Ring" in data["ring"]
+    assert "simulator-only" in data["ring"]
+    assert data["ring_device_verification"] == "pending_real_or_official_test_account"
+    assert "not-linked" in data["physical_alexa"]

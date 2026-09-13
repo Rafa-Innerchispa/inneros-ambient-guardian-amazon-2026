@@ -8,6 +8,14 @@ The repo includes both an in-process MCP SDK test and a real HTTP client smoke t
 
 The simulated Alexa+ web experience is served by the same ASGI application as the MCP server, so the demo and MCP tools share one state and policy boundary.
 
+### Physical Alexa/Echo status
+
+Current physical-device status is **not linked**. The project is functional through the web simulation and official MCP runtime, but it does not claim that Rafael's physical Alexa/Echo is bound yet.
+
+The official preferred path is Alexa+ MCP Toolkit when the owner account/device has access. Amazon's Alexa+ docs currently describe Category SDK and MCP Toolkit as available to select partners, so the physical-device test can only be marked PASS after the owner account/device can register the add-on and complete the owner-visible linking/test flow.
+
+Fallback path, if Alexa+ MCP Toolkit is unavailable for the owner account or region: create an Alexa Skill/Agent Skill that calls the same Ambient Guardian backend. That fallback must preserve the same safety boundary: Alexa may ask, summarize, and prepare; Alexa must not receive a physical execution/approval tool.
+
 ## AWS Builder mini challenge
 
 The project incorporates the **AWS Strands Agents SDK** directly in the runtime.
@@ -38,3 +46,13 @@ GitHub username: `Rafa-Innerchispa`.
 ## Ring status
 
 The current build has a Ring-compatible event normalization/simulation boundary only. A physical Ring device is not necessary under the hackathon rules, but an official Ring API/SDK/simulator/device integration is still required before entering the Ring track. Until that evidence exists, the project remains Alexa+-primary and does not imply official Ring API usage.
+
+The current Ring Developer path is now concrete enough to preserve in code:
+
+1. Register through Ring Developer / Amazon Developer.
+2. Use OAuth/account authorization to access linked Ring devices for an owner/test account.
+3. Configure signed webhooks for real-time motion/doorbell events.
+4. Use device status/history APIs for context.
+5. Optionally open WebRTC/WHEP video sessions for video-only inspection when the product and account permit it.
+
+The repository therefore keeps `RingSimulatorAdapter` as the local test fixture and a `RingEventAdapter` boundary for the future official adapter. Device verification remains `pending_real_or_official_test_account` until credentials and a Ring test account/device are bound.
