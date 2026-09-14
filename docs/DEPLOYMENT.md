@@ -69,3 +69,20 @@ For Ring, keep the simulator enabled until the owner has a Ring Developer app, O
 ## Cloud portability
 
 The container only requires HTTP ingress. It can run on Cloud Run, ECS/Fargate, Kubernetes, a VM, or the existing local InnerOS host. The default demo remains functional without a model connection because it has a deterministic local fallback.
+
+## Custom Alexa Skill endpoint
+
+The Custom Skill fallback endpoint is `POST /api/alexa-skill` on the same ASGI application as MCP and the web demo. Deploy it only behind HTTPS.
+
+Recommended environment:
+
+```bash
+AMBIENT_GUARDIAN_PUBLIC_HOST=<public-hostname>
+AMBIENT_GUARDIAN_PUBLIC_ORIGIN=https://<public-hostname>
+AMBIENT_GUARDIAN_ALEXA_SKILL_SECRET=<owner-managed-secret>
+```
+
+Do not configure Amazon Developer Console with a LAN IP, raw vLLM endpoint, Home Assistant endpoint, or MCP LAN URL. The endpoint must remain a bounded wrapper; approval/execution stays outside the Alexa Skill surface.
+
+This task did not deploy production and did not run `ask configure`, `ask deploy`, or `alexa-ai configure`.
+

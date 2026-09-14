@@ -11,12 +11,14 @@ from starlette.responses import HTMLResponse, JSONResponse, Response
 
 from . import aws_strands
 from .core import GuardianReasoner, GuardianState
+from .alexa_skill import handle_alexa_skill_request
 from .orchestration import simulated_alexa_turn
 
 APP_VERSION = "0.4.0"
 STATE = GuardianState()
 REASONER = GuardianReasoner()
 STATIC_DIR = Path(__file__).parent / "static"
+SKILL_SECRET_HEADER = "x-inneros-alexa-skill-secret"
 
 mcp = MCPServer(
     "InnerOS Ambient Guardian",
@@ -149,6 +151,19 @@ async def simulated_alexa(request: Request) -> Response:
     except ValueError as exc:
         return JSONResponse({"detail": str(exc)}, status_code=400)
     return JSONResponse(simulated_alexa_turn(utterance, STATE, REASONER))
+
+@mcp.custom_route("/api/alexa-skill", methods=["POST"])
+async def alexa_skill(request: Request) -> Response:
+    configured_secret = os.getenv("AMBIENT_GUARDIAN_ALEXA_SKILL_SECRET", "").strip()
+    if configured_secret:
+        supplied_secret = request.headers.get(SKILL_SECRET_HEADER, "").strip()
+        if supplied_secret != configured_secret:
+            return JSONResponse({"detail": "unauthorized"}, status_code=401)
+    try:
+        payload = await _read_object(request)
+    except ValueError as exc:
+        return JSONResponse({"detail": str(exc)}, status_code=400)
+    return JSONResponse(handle_alexa_skill_request(payload, STATE, REASONER))
 
 
 @mcp.custom_route("/api/actions/{token}/approve", methods=["POST"])
