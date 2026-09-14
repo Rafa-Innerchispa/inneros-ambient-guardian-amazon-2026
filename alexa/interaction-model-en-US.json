@@ -1,0 +1,53 @@
+{
+  "interactionModel": {
+    "languageModel": {
+      "invocationName": "ambient guardian",
+      "intents": [
+        {"name": "AMAZON.CancelIntent", "samples": []},
+        {"name": "AMAZON.HelpIntent", "samples": []},
+        {"name": "AMAZON.StopIntent", "samples": []},
+        {
+          "name": "GuardianStatusIntent",
+          "slots": [],
+          "samples": [
+            "if everything is okay at home",
+            "what is happening at home",
+            "check the property",
+            "give me the home status",
+            "is the front door okay"
+          ]
+        },
+        {
+          "name": "RecentEventsIntent",
+          "slots": [],
+          "samples": [
+            "what happened recently",
+            "tell me the recent events",
+            "what alerts do we have",
+            "summarize recent activity"
+          ]
+        },
+        {
+          "name": "PrepareAllowedActionIntent",
+          "slots": [{"name": "action", "type": "AllowedGuardianAction"}],
+          "samples": [
+            "prepare to {action}",
+            "ask guardian to {action}",
+            "can you {action}",
+            "{action}"
+          ]
+        }
+      ],
+      "types": [
+        {
+          "name": "AllowedGuardianAction",
+          "values": [
+            {"name": {"value": "lock the front door", "synonyms": ["secure the front door", "lock front door"]}},
+            {"name": {"value": "enable delivery mode", "synonyms": ["turn on delivery mode", "start delivery mode"]}},
+            {"name": {"value": "disable delivery mode", "synonyms": ["turn off delivery mode", "stop delivery mode"]}}
+          ]
+        }
+      ]
+    }
+  }
+}

@@ -67,3 +67,17 @@ Mention that the full Strands -> Qwen path was validated on an AMD local AI node
 “Ambient Guardian reduces the distance between ‘What is happening?’ and ‘What safely happened next?’ while keeping sensitive reasoning local and keeping humans in control of physical effects.”
 
 End on the project name and repository/Devpost page.
+
+## Physical Echo fallback script
+
+When the development Custom Skill is linked to Rafael's Echo:
+
+1. Say: “Alexa, ask ambient guardian if everything is okay at home.”
+2. Confirm the answer is a status summary and says no physical action executed.
+3. Say: “Alexa, ask ambient guardian for recent events.”
+4. Say: “Alexa, ask ambient guardian to prepare to lock the front door.”
+5. Confirm the response says the action is prepared, has not executed, and needs approval outside Alexa.
+6. Show the separate human approval UI/API only if the demo explicitly needs the verification step.
+
+Do not claim Alexa+ MCP Toolkit physical linking unless the owner account/device actually has that access and the native path is tested.
+

@@ -56,3 +56,32 @@ The current Ring Developer path is now concrete enough to preserve in code:
 5. Optionally open WebRTC/WHEP video sessions for video-only inspection when the product and account permit it.
 
 The repository therefore keeps `RingSimulatorAdapter` as the local test fixture and a `RingEventAdapter` boundary for the future official adapter. Device verification remains `pending_real_or_official_test_account` until credentials and a Ring test account/device are bound.
+
+## Custom Alexa Skill fallback implementation
+
+Status: **READY FOR DEVELOPMENT-STAGE OWNER LINKING**.
+
+The repository now includes a standard Custom Alexa Skill fallback for accounts that do not yet have Alexa+ MCP Toolkit access:
+
+- HTTPS handler path: `POST /api/alexa-skill`
+- Interaction model: `alexa/interaction-model-en-US.json`
+- Runtime adapter: `src/ambient_guardian/alexa_skill.py`
+- Supported intents: `GuardianStatusIntent`, `RecentEventsIntent`, `PrepareAllowedActionIntent`, plus built-in Help/Cancel/Stop.
+
+Safety boundary: the Custom Skill can read status, summarize recent events, and prepare allowlisted actions. It does **not** expose approve or execute intents, and it does not speak or return the approval token. Human approval stays outside Alexa through the guarded web/API channel.
+
+Optional endpoint secret: set `AMBIENT_GUARDIAN_ALEXA_SKILL_SECRET` on the service and send the same value as `x-inneros-alexa-skill-secret`. This is a lightweight development-stage shared secret; production should add Amazon request-signature validation and account linking before public exposure.
+
+Owner-visible linking checklist:
+
+1. In Amazon Developer Console, create a Custom Skill named InnerOS Ambient Guardian.
+2. Use locale `en-US` and invocation name `ambient guardian`.
+3. Paste `alexa/interaction-model-en-US.json` into the JSON editor and build the model.
+4. Configure the endpoint to the public HTTPS deployment plus `/api/alexa-skill`.
+5. If `AMBIENT_GUARDIAN_ALEXA_SKILL_SECRET` is enabled, configure the endpoint/proxy to inject `x-inneros-alexa-skill-secret`; do not paste secrets into Git or coordination.
+6. Enable the development skill on the same Amazon account as the physical Echo/Alexa app.
+7. Test: “Alexa, ask ambient guardian if everything is okay at home.”
+8. Test: “Alexa, ask ambient guardian to prepare to lock the front door.” Verify it prepares only and says approval is separate.
+
+Alexa+ MCP Toolkit remains the preferred upgrade path when Rafael's owner account/device gets select-partner access. Until then, the Custom Skill fallback is the functional physical Echo path.
+
