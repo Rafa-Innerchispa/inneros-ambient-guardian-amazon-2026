@@ -206,3 +206,23 @@ The security regression suite includes `unlock`/negation parsing, token expirati
 ## License
 
 MIT. See [`LICENSE`](LICENSE).
+
+
+## Hackathon Judge Mode (no Echo required)
+
+The canonical hackathon demo now uses the **real self-hosted MCP backend** with truth-labeled simulated Amazon device edges. Physical Echo and Ring hardware are optional product-validation paths, not submission blockers.
+
+Open the web UI and use the three Judge Mode scenarios:
+
+1. **Home status** — read-only property context.
+2. **Front-door event** — Ring-compatible simulated event -> Guardian context.
+3. **Prepare lock** — bounded proposal with `executed=false` until a separate human approval step.
+
+Truth boundary shown in the UI:
+
+- REAL: MCP Streamable HTTP runtime and Guardian policy/state.
+- SIMULATED: Alexa+ browser voice experience.
+- SIMULATED: Ring-compatible event source.
+- SAFE: MCP/model cannot approve or execute its own physical action.
+
+See `docs/JUDGE_DEMO.md` and `docs/DEMO_SCRIPT.md` for the reproducible judge flow and recording script.

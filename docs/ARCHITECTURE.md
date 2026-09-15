@@ -58,3 +58,29 @@ The current project normalizes Ring-like event concepts but does not claim an of
 ## Persistence
 
 Hackathon state is in-memory by design. Restarting the service resets demo events, pending proposals, and evidence. Production persistence is intentionally out of scope until identity, tenant isolation, and a durable audit store are defined.
+
+
+## Hackathon demo boundary — 2026-09-15
+
+The submission demo intentionally separates **real backend/runtime evidence** from **simulated Amazon device edges**:
+
+```text
+SIMULATED Alexa+ browser voice
+            |
+            v
+REAL Ambient Guardian ASGI + official MCP Streamable HTTP
+            |
+            +--> REAL local-first reasoning / deterministic fallback
+            +--> REAL bounded prepare_action policy
+            +--> SEPARATE human approval surface
+            +--> REAL verification/evidence logic over safe simulator adapter
+
+SIMULATED Ring-compatible event source
+            |
+            v
+REAL normalized Guardian event/state pipeline
+```
+
+Physical Echo and Ring devices are optional product-validation endpoints. They are not architectural dependencies and do not block the hackathon demo.
+
+The model/MCP surface can read context and prepare an allowlisted action. It cannot approve or execute. Approval remains outside the MCP tool surface.
