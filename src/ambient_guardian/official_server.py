@@ -4,7 +4,15 @@ import os
 from pathlib import Path
 from typing import Any
 
-from mcp.server import MCPServer
+try:
+    from mcp.server import MCPServer
+
+    MCP_SDK_V2 = True
+except ImportError:  # pragma: no cover - compatibility with older local tooling
+    from mcp.server.fastmcp import FastMCP as MCPServer
+
+    MCP_SDK_V2 = False
+
 from mcp.server.transport_security import TransportSecuritySettings
 from starlette.requests import Request
 from starlette.responses import HTMLResponse, JSONResponse, Response
@@ -20,7 +28,6 @@ STATIC_DIR = Path(__file__).parent / "static"
 
 mcp = MCPServer(
     "InnerOS Ambient Guardian",
-    version=APP_VERSION,
     instructions=(
         "Use read-only tools freely. Physical actions must be prepared first. "
         "Execution requires a separate human approval channel that is not exposed as an MCP tool. "
@@ -64,7 +71,7 @@ def integration_status() -> dict[str, Any]:
     """Report MCP, Alexa+ demo, Ring adapter, local LLM, and AWS Strands readiness."""
     return {
         **STATE.integration_status(),
-        "official_mcp_sdk": "python-sdk-v2",
+        "official_mcp_sdk": "python-sdk-v2" if MCP_SDK_V2 else "python-sdk-v1-compat",
         "approval_channel": "human-only web/API route; not exposed as an MCP tool",
         "aws_strands": aws_strands.status(),
     }
@@ -193,11 +200,21 @@ def _transport_security() -> TransportSecuritySettings | None:
 
 def build_app():
     """Build one ASGI app containing official MCP plus the Alexa+ simulation UI."""
-    kwargs: dict[str, Any] = {"json_response": True}
     security = _transport_security()
+    if MCP_SDK_V2:
+        kwargs: dict[str, Any] = {
+            "streamable_http_path": "/mcp",
+            "json_response": True,
+            "host": os.getenv("HOST", "127.0.0.1"),
+        }
+        if security is not None:
+            kwargs["transport_security"] = security
+        return mcp.streamable_http_app(**kwargs)
+
+    mcp.settings.json_response = True  # type: ignore[attr-defined]
     if security is not None:
-        kwargs["transport_security"] = security
-    return mcp.streamable_http_app(**kwargs)
+        mcp.settings.transport_security = security  # type: ignore[attr-defined]
+    return mcp.streamable_http_app()
 
 
 app = build_app()
