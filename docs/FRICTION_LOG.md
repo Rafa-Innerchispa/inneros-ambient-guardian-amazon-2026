@@ -61,3 +61,24 @@ This log records real integration friction encountered while building Ambient Gu
 - **Severity:** Important for local/OpenAI-compatible provider interoperability.
 - **Workaround:** added a tiny `VLLMCompatibleOpenAIModel` subclass that calls Strands' formatter unchanged and removes only the `tools` field when the generated list is empty. The agent remains deliberately tool-less.
 - **Suggestion:** the Strands OpenAI provider should omit `tools` whenever there are no tool specs. This matches stricter OpenAI-compatible servers and avoids requiring dummy tools.
+
+
+## 7. Physical devices looked mandatory until the organizer clarified the track
+
+- **Task:** decide whether to buy and bind Echo/Ring hardware before the hackathon demo.
+- **Steps:** reviewed the organizer update after the initial physical-device plan was already underway.
+- **Expected:** physical Alexa/Ring hardware might be necessary to make the submission credible.
+- **Actual:** the organizer explicitly allowed an Alexa+ Agent Skill or self-hosted MCP server, allowed a simulated Alexa+ experience using existing agentic tools, and stated that Ring may use APIs, SDKs, simulators, or devices with no physical device required.
+- **Severity:** High for schedule/cost, low for architecture.
+- **Workaround:** removed Echo/Ring hardware from the hackathon critical path and built a truth-labeled Judge Mode on the real MCP backend.
+- **Suggestion:** put the device requirement/non-requirement directly in each track's primary requirements page, not only in later participant updates.
+
+## 8. Shared host Python did not match the repo-declared MCP generation
+
+- **Task:** rerun the full suite from a fresh local-only worktree on 2026-09-15.
+- **Steps:** invoked pytest through the shared control-plane interpreter.
+- **Expected:** repository tests to use MCP v2 from the project declaration.
+- **Actual:** collection failed because the shared interpreter exposed an older MCP API and lacked `MCPServer` / top-level `Client`.
+- **Severity:** Moderate.
+- **Workaround:** created an isolated `.venv` inside the worktree, installed only `requirements.txt`, and reran the suite successfully.
+- **Suggestion:** keep project-local environments mandatory for MCP examples and print the SDK version in the default smoke test.

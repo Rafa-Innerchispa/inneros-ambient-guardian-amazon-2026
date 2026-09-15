@@ -84,3 +84,12 @@ Technical build is complete and functional. Project page, repo, Open Source evid
 
 ## TODO Official Form Fields
 See `docs/DEVPOST_FORM_ANSWERS.md`. Remaining user-owned inputs are submitter type, organization/N/A, country/Canada answer, age/jurisdiction/employee attestations, public video URL, and final authorization to submit.
+
+
+## Demo truth boundary update — 2026-09-15
+
+For the hackathon recording, Ambient Guardian uses the real self-hosted MCP/Guardian backend and a browser-based **SIMULATED ALEXA+ EXPERIENCE**. The front-door source is a **SIMULATED Ring-compatible event adapter**. Physical Echo and Ring devices are optional product-validation hardware and are not required for the judge demo.
+
+The demo is intentionally explicit about that boundary. Judges can reproduce three scenarios from one screen: home status, front-door context, and a bounded prepare-lock flow that remains `executed=false` until a separate human approval step. The model/MCP surface cannot approve or execute its own physical action.
+
+Do not change this language to imply a physical Echo or bound Ring device unless that integration is separately proven before final submission.

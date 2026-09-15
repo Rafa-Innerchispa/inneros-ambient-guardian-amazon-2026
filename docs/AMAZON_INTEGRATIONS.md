@@ -56,3 +56,18 @@ The current Ring Developer path is now concrete enough to preserve in code:
 5. Optionally open WebRTC/WHEP video sessions for video-only inspection when the product and account permit it.
 
 The repository therefore keeps `RingSimulatorAdapter` as the local test fixture and a `RingEventAdapter` boundary for the future official adapter. Device verification remains `pending_real_or_official_test_account` until credentials and a Ring test account/device are bound.
+
+
+## Hackathon device strategy — 2026-09-15
+
+The current hackathon path no longer treats physical Echo or Ring hardware as a submission gate. The organizer update explicitly permits an Alexa+ Agent Skill or self-hosted MCP server and allows teams to simulate the Alexa+ experience with agentic tools they already use. The Ring track also permits APIs, SDKs, simulators, or devices without requiring physical hardware.
+
+For Ambient Guardian this means:
+
+- **Primary demo:** real self-hosted MCP runtime plus a truthfully labeled **SIMULATED ALEXA+ EXPERIENCE**.
+- **Ring demo:** `RingSimulatorAdapter` / Ring-compatible event fixture, labeled **SIMULATED** until an official developer account/test simulator or real device is bound.
+- **Physical Echo:** optional product validation, not required for `READY_FOR_SUBMISSION_DEMO`.
+- **Alexa+ MCP Toolkit:** optional upgrade path and still entitlement-gated until the owner account proves access.
+- **Custom Alexa Skill:** optional physical-device fallback using the same backend.
+
+Canonical judge instructions are in `docs/JUDGE_DEMO.md`.
