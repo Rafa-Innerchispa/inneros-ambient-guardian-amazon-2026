@@ -10,11 +10,12 @@ The simulated Alexa+ web experience is served by the same ASGI application as th
 
 ### Physical Alexa/Echo status
 
-Current physical-device status is **not linked**. The project is functional through the web simulation and official MCP runtime, but it does not claim that Rafael's physical Alexa/Echo is bound yet.
+There are now **two separate physical Alexa paths** and they must not be conflated.
 
-The official preferred path is Alexa+ MCP Toolkit when the owner account/device has access. Amazon's Alexa+ docs currently describe Category SDK and MCP Toolkit as available to select partners, so the physical-device test can only be marked PASS after the owner account/device can register the add-on and complete the owner-visible linking/test flow.
+1. **Home Assistant Alexa Devices path — verified in a real deployment.** Home Assistant's official Alexa Devices integration discovered real Amazon Echo/Fire endpoints and a safe speech call through a physical Echo completed successfully. Ambient Guardian now includes an optional Home Assistant bridge for read-only alarm context plus owner-authorized Alexa speech. Speech is not an MCP tool, is disabled by default, requires an allowlisted `notify.*` entity, and requires an owner token at the HTTP route.
+2. **Direct Alexa+ MCP Toolkit path — still not linked.** Amazon's Alexa+ MCP Toolkit remains an entitlement-dependent route. The project does not claim that a physical Echo is directly connected to the self-hosted MCP server through Alexa+.
 
-Fallback path, if Alexa+ MCP Toolkit is unavailable for the owner account or region: create an Alexa Skill/Agent Skill that calls the same Ambient Guardian backend. That fallback must preserve the same safety boundary: Alexa may ask, summarize, and prepare; Alexa must not receive a physical execution/approval tool.
+This distinction lets the product validate real-home voice output today without overstating Alexa+ partner access.
 
 ## AWS Builder mini challenge
 
@@ -71,3 +72,24 @@ For Ambient Guardian this means:
 - **Custom Alexa Skill:** optional physical-device fallback using the same backend.
 
 Canonical judge instructions are in `docs/JUDGE_DEMO.md`.
+
+
+## Home Assistant + Alexa Devices validation — 2026-09-21
+
+A real Home Assistant deployment was connected to Amazon through the official Alexa Devices integration.
+
+Verified deployment evidence:
+- real Echo/Fire endpoints discovered by Home Assistant;
+- connectivity and sensor entities created for supported Echo hardware;
+- Home Assistant created `notify.*_speak` and `notify.*_announce` entities;
+- a bounded Home Assistant `notify.send_message` call to a physical Echo returned success;
+- existing Alexa smart-home skills were left untouched to avoid duplicate devices.
+
+Ambient Guardian's public code now supports:
+- read-only Home Assistant alarm context through `HOME_ASSISTANT_URL` + `HOME_ASSISTANT_TOKEN`;
+- one selected alarm entity via `AMBIENT_GUARDIAN_HOME_ALARM_ENTITY`;
+- physical Alexa speech only through an explicit owner-only route;
+- `AMBIENT_GUARDIAN_ALEXA_SPEAK_ENABLED=1` plus a `notify.*` allowlist;
+- no Alexa speech or approval side-effect tool in MCP.
+
+Direct Alexa+ MCP Toolkit access remains a separate, unproven path and is not implied by this Home Assistant validation.
