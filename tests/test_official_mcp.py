@@ -22,6 +22,7 @@ def test_official_mcp_sdk_discovers_and_calls_guardian_tools():
                 "integration_status",
             } <= names
             assert "approve_action" not in names
+            assert not any("speak" in name for name in names)
 
             result = await client.call_tool("guardian_status", {})
             assert result.is_error is False

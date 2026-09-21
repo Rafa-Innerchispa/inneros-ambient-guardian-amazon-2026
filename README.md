@@ -30,7 +30,7 @@ The public hackathon build controls only a simulator. Private customer/device co
 - **No `approve_action` MCP tool**. A model can prepare an action but cannot approve its own request
 - Alexa+ web simulation with typed input, browser speech recognition, and spoken responses
 - Ring-compatible normalized event simulator for safe public testing
-- Honest physical-device readiness reporting: Alexa/Echo and Ring are marked pending until official account/device linking is proven
+- Optional **Home Assistant + Alexa Devices** bridge for real Echo/Fire endpoints, read-only alarm context, and owner-authorized speech; direct Alexa+ MCP Toolkit linking remains separate and unclaimed
 - Local Qwen/vLLM reasoning using an OpenAI-compatible endpoint
 - Deterministic local fallback if the LLM is unavailable
 - **AWS Strands Agents SDK** as a real read-only orchestration/synthesis layer against the local OpenAI-compatible Qwen endpoint
@@ -148,12 +148,13 @@ There is deliberately **no MCP execution/approval tool**.
 
 ## Physical Alexa and Ring readiness
 
-The public repo currently proves the local-first MCP/web path, not a physical Echo or Ring device binding. `integration_status` reports:
+The project now has two distinct Alexa surfaces and reports them separately:
 
-- physical Alexa/Echo: not linked until the owner account/device completes Alexa+ MCP Toolkit or Alexa Skill testing;
-- Ring: simulator-only until a Ring Developer OAuth/test-account/device binding is demonstrated.
+- **Real Echo/Fire via Home Assistant Alexa Devices:** supported through the optional Home Assistant bridge. In the author's deployment, Home Assistant discovered real Amazon endpoints and successfully delivered speech to a physical Echo through `notify.*_speak`.
+- **Direct Alexa+ MCP Toolkit binding:** still not linked and not claimed. The hackathon Alexa+ path remains the self-hosted MCP runtime plus the truth-labeled simulated Alexa+ experience unless partner entitlement is proven.
+- **Ring:** simulator-only until an official Ring API/SDK/simulator/device binding is demonstrated.
 
-This is intentional. The product should never imply real-home control or Ring access from a simulator-only proof.
+Alexa speech from Ambient Guardian is intentionally not an MCP tool. It requires a separate owner-authorized HTTP route, an explicit enable flag, and an allowlisted Home Assistant notify entity.
 
 ## Docker
 
@@ -176,6 +177,12 @@ See [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md) for production host/origin settin
 | `AMBIENT_GUARDIAN_STRANDS_PROVIDER` | `local-openai` | `local-openai` or explicit `bedrock` |
 | `AMBIENT_GUARDIAN_PUBLIC_HOST` | unset | Host allowlist for public MCP deployment |
 | `AMBIENT_GUARDIAN_PUBLIC_ORIGIN` | unset | Browser origin allowlist when needed |
+| `HOME_ASSISTANT_URL` | unset | Home Assistant base URL for the optional real-home bridge |
+| `HOME_ASSISTANT_TOKEN` | unset | Home Assistant bearer token; runtime secret, never commit |
+| `AMBIENT_GUARDIAN_HOME_ALARM_ENTITY` | unset | Selected read-only alarm entity for Guardian context |
+| `AMBIENT_GUARDIAN_ALEXA_SPEAK_ENABLED` | `0` | Enables the owner-only physical Alexa speech route |
+| `AMBIENT_GUARDIAN_ALEXA_NOTIFY_ALLOWLIST` | unset | Comma-separated allowlist of HA `notify.*` Alexa endpoints |
+| `AMBIENT_GUARDIAN_OWNER_TOKEN` | unset | Required owner token for the Alexa speech HTTP route |
 
 ## Testing and evidence
 

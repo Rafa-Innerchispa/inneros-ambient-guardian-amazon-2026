@@ -80,3 +80,29 @@ def test_integration_status_is_honest_about_ring_and_official_mcp():
     assert "simulator-only" in data["ring"]
     assert data["ring_device_verification"] == "pending_real_or_official_test_account"
     assert "not-linked" in data["physical_alexa"]
+
+
+def test_owner_authorization_requires_matching_header(monkeypatch):
+    from starlette.requests import Request
+
+    from ambient_guardian.official_server import _owner_authorized
+
+    monkeypatch.setenv("AMBIENT_GUARDIAN_OWNER_TOKEN", "owner-test-token")
+    good = Request(
+        {
+            "type": "http",
+            "method": "POST",
+            "path": "/api/home/alexa/speak",
+            "headers": [(b"x-owner-token", b"owner-test-token")],
+        }
+    )
+    bad = Request(
+        {
+            "type": "http",
+            "method": "POST",
+            "path": "/api/home/alexa/speak",
+            "headers": [(b"x-owner-token", b"wrong")],
+        }
+    )
+    assert _owner_authorized(good) is True
+    assert _owner_authorized(bad) is False

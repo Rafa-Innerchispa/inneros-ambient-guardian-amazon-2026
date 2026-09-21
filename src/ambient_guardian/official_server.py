@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import secrets
 from pathlib import Path
 from typing import Any
 
@@ -13,7 +14,7 @@ from . import aws_strands
 from .core import GuardianReasoner, GuardianState
 from .orchestration import simulated_alexa_turn
 
-APP_VERSION = "0.4.0"
+APP_VERSION = "0.5.0"
 STATE = GuardianState()
 REASONER = GuardianReasoner()
 STATIC_DIR = Path(__file__).parent / "static"
@@ -178,6 +179,40 @@ async def integrations(request: Request) -> Response:
             "aws_strands": aws_strands.status(),
         }
     )
+
+
+def _owner_authorized(request: Request) -> bool:
+    expected = os.getenv("AMBIENT_GUARDIAN_OWNER_TOKEN", "")
+    supplied = request.headers.get("x-owner-token", "")
+    return bool(expected and supplied and secrets.compare_digest(expected, supplied))
+
+
+@mcp.custom_route("/api/home/context", methods=["GET"])
+async def home_context(request: Request) -> Response:
+    """Read-only Home Assistant context for owner/demo inspection."""
+    del request
+    return JSONResponse(STATE.home_assistant.home_context())
+
+
+@mcp.custom_route("/api/home/alexa/speak", methods=["POST"])
+async def alexa_speak(request: Request) -> Response:
+    """Owner-only Alexa speech route. It is intentionally absent from MCP tools."""
+    if not _owner_authorized(request):
+        return JSONResponse({"detail": "owner authorization required"}, status_code=401)
+    try:
+        payload = await _read_object(request)
+        notify_entity = str(payload.get("notify_entity", "")).strip()
+        message = str(payload.get("message", "")).strip()
+        result = STATE.home_assistant.speak(notify_entity, message)
+    except PermissionError as exc:
+        return JSONResponse({"detail": str(exc)}, status_code=403)
+    except (RuntimeError, ValueError) as exc:
+        return JSONResponse({"detail": str(exc)}, status_code=400)
+    except Exception:
+        return JSONResponse(
+            {"detail": "Home Assistant Alexa speech failed"}, status_code=502
+        )
+    return JSONResponse(result)
 
 
 def _transport_security() -> TransportSecuritySettings | None:

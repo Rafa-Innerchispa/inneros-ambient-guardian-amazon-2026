@@ -10,6 +10,7 @@ from typing import Any
 
 import httpx
 
+from .home_assistant import HomeAssistantBridge
 from .ring import RingAdapterStatus, RingSimulatorAdapter
 
 
@@ -64,6 +65,7 @@ class GuardianState:
         self._ttl = action_ttl_seconds
         self.adapter = SimulatorAdapter()
         self.ring_adapter = RingSimulatorAdapter()
+        self.home_assistant = HomeAssistantBridge()
         self.events: list[dict[str, Any]] = []
         self.pending: dict[str, PendingAction] = {}
         self.evidence: list[dict[str, Any]] = []
@@ -151,6 +153,7 @@ class GuardianState:
             "recent_event_count": len(events),
             "device_state": device,
             "privacy_mode": "local-first",
+            "home_context": self.home_assistant.home_context(),
         }
 
     def prepare_action(self, action: str, reason: str = "") -> dict[str, Any]:
@@ -217,6 +220,7 @@ class GuardianState:
 
     def integration_status(self) -> dict[str, Any]:
         ring_status: RingAdapterStatus = self.ring_adapter.status()
+        home_status = self.home_assistant.status().as_dict()
         return {
             "mcp_protocol": "2026-07-28 (backward-compatible with 2025-11-25)",
             "mcp_transport": "official-streamable-http",
@@ -228,6 +232,13 @@ class GuardianState:
             "ring_device_verification": ring_status.device_verification,
             "local_llm": bool(os.getenv("INNEROS_LOCAL_LLM_URL")),
             "aws_strands_enabled": os.getenv("AWS_STRANDS_ENABLED", "0") == "1",
+            "home_assistant": home_status,
+            "alexa_devices": {
+                "mode": "home-assistant-alexa-devices",
+                "speech_route": "owner-only-http; not exposed as MCP",
+                "configured": home_status["configured"],
+                "speak_enabled": home_status["alexa_speak_enabled"],
+            },
         }
 
 
