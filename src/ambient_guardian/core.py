@@ -226,7 +226,7 @@ class GuardianState:
             "mcp_transport": "official-streamable-http",
             "mcp_sdk": "modelcontextprotocol/python-sdk-v2",
             "alexa_plus_demo": "web-simulation-over-official-mcp-runtime",
-            "physical_alexa": "not-linked; requires owner-visible Alexa+ MCP Toolkit or Alexa Skill account-linking test on the physical Echo",
+            "physical_alexa": "real Echo/Fire path verified via Home Assistant Alexa Devices; direct Alexa+ MCP Toolkit not-linked",
             "ring": ring_status.summary,
             "ring_official_path": ring_status.official_path,
             "ring_device_verification": ring_status.device_verification,
