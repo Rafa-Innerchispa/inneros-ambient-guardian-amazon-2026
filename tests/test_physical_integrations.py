@@ -6,6 +6,7 @@ def test_integration_status_is_honest_about_physical_alexa_and_ring():
     state = GuardianState()
     status = state.integration_status()
 
+    assert "Home Assistant Alexa Devices" in status["physical_alexa"]
     assert "not-linked" in status["physical_alexa"]
     assert "simulator-only" in status["ring"]
     assert status["ring_device_verification"] == "pending_real_or_official_test_account"
