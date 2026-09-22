@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import os
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Any
 
 import httpx
@@ -35,9 +36,61 @@ class HomeAssistantBridge:
     notify entity.
     """
 
+    @staticmethod
+    def _selected_shared_env(path_value: str) -> dict[str, str]:
+        """Read only Home Assistant keys from an optional shared env file.
+
+        Ambient Guardian must not inherit the platform's whole env file because
+        it contains unrelated credentials. This bounded parser extracts only
+        the HA URL/token aliases needed by this bridge.
+        """
+        path_value = path_value.strip()
+        if not path_value:
+            return {}
+        path = Path(path_value).expanduser()
+        try:
+            lines = path.read_text(encoding="utf-8").splitlines()
+        except OSError:
+            return {}
+        allowed = {
+            "HOME_ASSISTANT_URL",
+            "HA_URL",
+            "HOME_ASSISTANT_TOKEN",
+            "HA_TOKEN",
+        }
+        found: dict[str, str] = {}
+        for raw in lines:
+            line = raw.strip()
+            if not line or line.startswith("#") or "=" not in line:
+                continue
+            key, value = line.split("=", 1)
+            key = key.strip()
+            if key not in allowed:
+                continue
+            value = value.strip()
+            if len(value) >= 2 and value[0] == value[-1] and value[0] in {"'", '"'}:
+                value = value[1:-1]
+            found[key] = value
+        return found
+
     def __init__(self) -> None:
-        self.url = os.getenv("HOME_ASSISTANT_URL", "").rstrip("/")
-        self.token = os.getenv("HOME_ASSISTANT_TOKEN", "")
+        shared = self._selected_shared_env(
+            os.getenv("AMBIENT_GUARDIAN_SHARED_ENV_FILE", "")
+        )
+        self.url = (
+            os.getenv("HOME_ASSISTANT_URL")
+            or os.getenv("HA_URL")
+            or shared.get("HOME_ASSISTANT_URL")
+            or shared.get("HA_URL")
+            or ""
+        ).rstrip("/")
+        self.token = (
+            os.getenv("HOME_ASSISTANT_TOKEN")
+            or os.getenv("HA_TOKEN")
+            or shared.get("HOME_ASSISTANT_TOKEN")
+            or shared.get("HA_TOKEN")
+            or ""
+        ).strip()
         self.alarm_entity = os.getenv("AMBIENT_GUARDIAN_HOME_ALARM_ENTITY", "").strip()
         self.timeout = float(os.getenv("HOME_ASSISTANT_TIMEOUT", "2.0"))
         self.alexa_speak_enabled = os.getenv(
