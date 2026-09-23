@@ -21,6 +21,9 @@ def clear_bridge_env(monkeypatch):
         "AMBIENT_GUARDIAN_HOME_ALARM_ENTITY",
         "AMBIENT_GUARDIAN_ALEXA_SPEAK_ENABLED",
         "AMBIENT_GUARDIAN_ALEXA_NOTIFY_ALLOWLIST",
+        "AMBIENT_GUARDIAN_SHARED_ENV_FILE",
+        "HA_URL",
+        "HA_TOKEN",
     ):
         monkeypatch.delenv(key, raising=False)
 
@@ -65,6 +68,26 @@ def test_home_context_reads_only_selected_alarm(monkeypatch):
     assert context["reachable"] is True
     assert context["alarm"]["state"] == "armed_away"
     assert context["alarm"]["partition_name"] == "Panel Home Ralphi"
+
+
+def test_bridge_reads_only_ha_keys_from_shared_env(monkeypatch, tmp_path):
+    clear_bridge_env(monkeypatch)
+    monkeypatch.delenv("SMTP_PASSWORD", raising=False)
+    monkeypatch.delenv("GOOGLE_API_KEY", raising=False)
+    shared = tmp_path / "platform.env"
+    shared.write_text(
+        "SMTP_PASSWORD=must-not-be-imported\n"
+        "HA_URL=http://ha.shared:8123\n"
+        "HA_TOKEN=shared-test-token\n"
+        "GOOGLE_API_KEY=also-must-not-be-imported\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("AMBIENT_GUARDIAN_SHARED_ENV_FILE", str(shared))
+    bridge = HomeAssistantBridge()
+    assert bridge.url == "http://ha.shared:8123"
+    assert bridge.token == "shared-test-token"
+    assert os.getenv("SMTP_PASSWORD") is None
+    assert os.getenv("GOOGLE_API_KEY") is None
 
 
 def test_alexa_speak_requires_feature_flag_and_allowlist(monkeypatch):
