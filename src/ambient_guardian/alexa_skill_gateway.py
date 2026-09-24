@@ -50,6 +50,49 @@ def _speaker_context(payload: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def _capture_speaker_candidate(payload: dict[str, Any]) -> dict[str, Any] | None:
+    """Persist a recognized Alexa personId locally for explicit owner enrollment.
+
+    This never authorizes the person. It only records a candidate so the owner
+    can promote the exact personId through a separate local configuration step.
+    """
+    if os.getenv("AMBIENT_GUARDIAN_CAPTURE_PERSON_CANDIDATE", "0") != "1":
+        return None
+    context = _speaker_context(payload)
+    person_id = str(context.get("person_id") or "").strip()
+    if not person_id:
+        return None
+
+    candidate_path = Path(
+        os.getenv(
+            "AMBIENT_GUARDIAN_PERSON_CANDIDATE_FILE",
+            "/home/rlopez/data/ralfia/ambient_guardian/last_alexa_person.json",
+        )
+    ).expanduser()
+    candidate_path.parent.mkdir(parents=True, exist_ok=True)
+    record = {
+        "person_id": person_id,
+        "authentication_confidence": int(
+            context.get("authentication_confidence") or 0
+        ),
+        "captured_at": datetime.now(timezone.utc).isoformat(),
+        "application_id": _application_id(payload),
+        "authorized": False,
+    }
+    data = (json.dumps(record, indent=2) + "\n").encode("utf-8")
+    fd = os.open(
+        candidate_path,
+        os.O_WRONLY | os.O_CREAT | os.O_TRUNC,
+        0o600,
+    )
+    try:
+        os.write(fd, data)
+    finally:
+        os.close(fd)
+    os.chmod(candidate_path, 0o600)
+    return record
+
+
 def _backend_turn(query: str, speaker_context: dict[str, Any] | None = None) -> str:
     query = " ".join((query or "").split())
     if not query:
@@ -187,6 +230,7 @@ def _slot_value(request_payload: dict[str, Any], slot_name: str) -> str:
 
 
 def _dispatch(payload: dict[str, Any]) -> dict[str, Any]:
+    _capture_speaker_candidate(payload)
     request_payload = payload.get("request") or {}
     request_type = str(request_payload.get("type") or "")
     if request_type == "LaunchRequest":
