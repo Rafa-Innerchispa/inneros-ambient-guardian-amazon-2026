@@ -8,7 +8,7 @@ def _owner_file() -> Path:
     return Path(
         os.getenv(
             "AMBIENT_GUARDIAN_OWNER_PERSON_FILE",
-            "/home/rlopez/data/ralfia/ambient_guardian/owner_person_id",
+            str(Path.home() / "data/ralfia/ambient_guardian/owner_person_id"),
         )
     ).expanduser()
 

@@ -7,7 +7,7 @@ from pathlib import Path
 DEFAULT_SECRET_PATH = Path(
     os.getenv(
         "AMBIENT_GUARDIAN_ALEXA_GATEWAY_SECRET_FILE",
-        "/home/rlopez/data/ralfia/ambient_guardian/alexa_gateway_secret",
+        str(Path.home() / "data/ralfia/ambient_guardian/alexa_gateway_secret"),
     )
 ).expanduser()
 

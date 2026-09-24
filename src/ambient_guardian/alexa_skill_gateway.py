@@ -83,7 +83,7 @@ def _capture_speaker_candidate(payload: dict[str, Any]) -> dict[str, Any] | None
     candidate_path = Path(
         os.getenv(
             "AMBIENT_GUARDIAN_PERSON_CANDIDATE_FILE",
-            "/home/rlopez/data/ralfia/ambient_guardian/last_alexa_person.json",
+            str(Path.home() / "data/ralfia/ambient_guardian/last_alexa_person.json"),
         )
     ).expanduser()
     candidate_path.parent.mkdir(parents=True, exist_ok=True)
@@ -130,7 +130,7 @@ def _pending_dir() -> Path:
     return Path(
         os.getenv(
             "AMBIENT_GUARDIAN_PIN_PENDING_DIR",
-            "/home/rlopez/data/ralfia/ambient_guardian/pin_pending",
+            str(Path.home() / "data/ralfia/ambient_guardian/pin_pending"),
         )
     ).expanduser()
 
