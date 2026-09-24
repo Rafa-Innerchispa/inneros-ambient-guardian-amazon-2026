@@ -30,7 +30,8 @@ The public hackathon build controls only a simulator. Private customer/device co
 - **No `approve_action` MCP tool**. A model can prepare an action but cannot approve its own request
 - Alexa+ web simulation with typed input, browser speech recognition, and spoken responses
 - Ring-compatible normalized event simulator for safe public testing
-- Optional **Home Assistant + Alexa Devices** bridge for real Echo/Fire endpoints, read-only alarm context, and owner-authorized speech; direct Alexa+ MCP Toolkit linking remains separate and unclaimed
+- Optional **Home Assistant + Alexa Devices** bridge for real Echo/Fire endpoints, read-only alarm context, owner-authorized speech, and allowlisted reversible lighting; direct Alexa+ MCP Toolkit linking remains separate and unclaimed
+- **InnerOS DMX / Art-Net bridge** to the existing loopback-only lighting engine for allowlisted colors/scenes Alexa does not natively understand
 - Local Qwen/vLLM reasoning using an OpenAI-compatible endpoint
 - Deterministic local fallback if the LLM is unavailable
 - **AWS Strands Agents SDK** as a real read-only orchestration/synthesis layer against the local OpenAI-compatible Qwen endpoint
@@ -185,6 +186,10 @@ See [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md) for production host/origin settin
 | `AMBIENT_GUARDIAN_OWNER_TOKEN` | unset | Required owner token for owner-only Home Assistant routes |
 | `AMBIENT_GUARDIAN_LIGHT_CONTROL_ENABLED` | `0` | Enables bounded, reversible Home Assistant light control |
 | `AMBIENT_GUARDIAN_LIGHT_ALLOWLIST` | unset | Comma-separated allowlist of Home Assistant `light.*` entities |
+| `AMBIENT_GUARDIAN_DMX_URL` | unset | Loopback-only InnerOS DMX API base URL |
+| `AMBIENT_GUARDIAN_DMX_CONTROL_ENABLED` | `0` | Enables bounded DMX/Art-Net lighting control |
+| `AMBIENT_GUARDIAN_DMX_SCENE_ALLOWLIST` | unset | Comma-separated safe scene allowlist |
+| `AMBIENT_GUARDIAN_DMX_TARGET_ALLOWLIST` | unset | Comma-separated target allowlist such as `todas,tachos,beams,pulpos,bola_disco` |
 
 ## Testing and evidence
 
