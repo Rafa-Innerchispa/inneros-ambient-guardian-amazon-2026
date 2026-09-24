@@ -215,6 +215,33 @@ async def alexa_speak(request: Request) -> Response:
     return JSONResponse(result)
 
 
+@mcp.custom_route("/api/home/light", methods=["POST"])
+async def home_light_control(request: Request) -> Response:
+    """Owner-only, allowlisted Home Assistant light control with verification."""
+    if not _owner_authorized(request):
+        return JSONResponse({"detail": "owner authorization required"}, status_code=401)
+    try:
+        payload = await _read_object(request)
+        entity_id = str(payload.get("entity_id", "")).strip()
+        result = STATE.home_assistant.control_light(
+            entity_id,
+            turn_on=bool(payload.get("turn_on", True)),
+            brightness_pct=payload.get("brightness_pct"),
+            hs_color=payload.get("hs_color"),
+            rgb_color=payload.get("rgb_color"),
+            effect=payload.get("effect"),
+        )
+    except PermissionError as exc:
+        return JSONResponse({"detail": str(exc)}, status_code=403)
+    except (RuntimeError, ValueError, TypeError) as exc:
+        return JSONResponse({"detail": str(exc)}, status_code=400)
+    except Exception:
+        return JSONResponse(
+            {"detail": "Home Assistant light control failed"}, status_code=502
+        )
+    return JSONResponse(result)
+
+
 def _transport_security() -> TransportSecuritySettings | None:
     hostname = os.getenv("AMBIENT_GUARDIAN_PUBLIC_HOST", "").strip()
     origin = os.getenv("AMBIENT_GUARDIAN_PUBLIC_ORIGIN", "").strip()

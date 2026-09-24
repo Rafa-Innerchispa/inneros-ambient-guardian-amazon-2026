@@ -21,6 +21,8 @@ def clear_bridge_env(monkeypatch):
         "AMBIENT_GUARDIAN_HOME_ALARM_ENTITY",
         "AMBIENT_GUARDIAN_ALEXA_SPEAK_ENABLED",
         "AMBIENT_GUARDIAN_ALEXA_NOTIFY_ALLOWLIST",
+        "AMBIENT_GUARDIAN_LIGHT_CONTROL_ENABLED",
+        "AMBIENT_GUARDIAN_LIGHT_ALLOWLIST",
         "AMBIENT_GUARDIAN_SHARED_ENV_FILE",
         "HA_URL",
         "HA_TOKEN",
@@ -135,3 +137,74 @@ def test_alexa_speak_posts_only_to_allowlisted_notify_entity(monkeypatch):
         assert "allowlisted" in str(exc)
     else:
         raise AssertionError("non-allowlisted Alexa endpoint was accepted")
+
+
+
+def test_light_control_requires_feature_flag_and_allowlist(monkeypatch):
+    clear_bridge_env(monkeypatch)
+    monkeypatch.setenv("HOME_ASSISTANT_URL", "http://ha.local:8123")
+    monkeypatch.setenv("HOME_ASSISTANT_TOKEN", "test-token")
+    bridge = HomeAssistantBridge()
+
+    try:
+        bridge.control_light("light.cinta_mural", hs_color=[280, 100])
+    except PermissionError as exc:
+        assert "disabled" in str(exc)
+    else:
+        raise AssertionError("light executed while feature flag was disabled")
+
+
+def test_light_control_posts_and_verifies_allowlisted_color(monkeypatch):
+    clear_bridge_env(monkeypatch)
+    monkeypatch.setenv("HOME_ASSISTANT_URL", "http://ha.local:8123")
+    monkeypatch.setenv("HOME_ASSISTANT_TOKEN", "test-token")
+    monkeypatch.setenv("AMBIENT_GUARDIAN_LIGHT_CONTROL_ENABLED", "1")
+    monkeypatch.setenv(
+        "AMBIENT_GUARDIAN_LIGHT_ALLOWLIST",
+        "light.cinta_mural,light.cinta_escritorio",
+    )
+    calls = []
+
+    def fake_post(url, headers, json, timeout):
+        calls.append((url, headers, json, timeout))
+        return FakeResponse([])
+
+    def fake_get(url, headers, timeout):
+        assert url.endswith("/api/states/light.cinta_mural")
+        return FakeResponse(
+            {
+                "entity_id": "light.cinta_mural",
+                "state": "on",
+                "attributes": {
+                    "brightness": 178,
+                    "hs_color": [280.0, 100.0],
+                    "rgb_color": [170, 0, 255],
+                },
+                "last_updated": "2026-09-24T00:00:00+00:00",
+            }
+        )
+
+    monkeypatch.setattr("ambient_guardian.home_assistant.httpx.post", fake_post)
+    monkeypatch.setattr("ambient_guardian.home_assistant.httpx.get", fake_get)
+    bridge = HomeAssistantBridge()
+    result = bridge.control_light(
+        "light.cinta_mural",
+        brightness_pct=70,
+        hs_color=[280, 100],
+    )
+
+    assert result["status"] == "executed_and_verified"
+    assert result["verified"] is True
+    assert calls[0][0].endswith("/api/services/light/turn_on")
+    assert calls[0][2] == {
+        "entity_id": "light.cinta_mural",
+        "brightness_pct": 70,
+        "hs_color": [280.0, 100.0],
+    }
+
+    try:
+        bridge.control_light("light.not_allowlisted", hs_color=[0, 100])
+    except PermissionError as exc:
+        assert "allowlisted" in str(exc)
+    else:
+        raise AssertionError("non-allowlisted light was accepted")

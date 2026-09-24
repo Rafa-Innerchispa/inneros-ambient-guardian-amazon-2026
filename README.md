@@ -18,7 +18,7 @@ Ambient Guardian gives Alexa+ one safe orchestration surface through an official
 
 The core invariant is deliberately strict:
 
-> **No human approval, no physical action. No verification, no success claim.**
+> **No human approval, no consequential physical action. Low-risk reversible ambience commands are separately allowlisted. No verification, no success claim.**
 
 The public hackathon build controls only a simulator. Private customer/device configuration is not copied into this repository.
 
@@ -182,7 +182,9 @@ See [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md) for production host/origin settin
 | `AMBIENT_GUARDIAN_HOME_ALARM_ENTITY` | unset | Selected read-only alarm entity for Guardian context |
 | `AMBIENT_GUARDIAN_ALEXA_SPEAK_ENABLED` | `0` | Enables the owner-only physical Alexa speech route |
 | `AMBIENT_GUARDIAN_ALEXA_NOTIFY_ALLOWLIST` | unset | Comma-separated allowlist of HA `notify.*` Alexa endpoints |
-| `AMBIENT_GUARDIAN_OWNER_TOKEN` | unset | Required owner token for the Alexa speech HTTP route |
+| `AMBIENT_GUARDIAN_OWNER_TOKEN` | unset | Required owner token for owner-only Home Assistant routes |
+| `AMBIENT_GUARDIAN_LIGHT_CONTROL_ENABLED` | `0` | Enables bounded, reversible Home Assistant light control |
+| `AMBIENT_GUARDIAN_LIGHT_ALLOWLIST` | unset | Comma-separated allowlist of Home Assistant `light.*` entities |
 
 ## Testing and evidence
 
