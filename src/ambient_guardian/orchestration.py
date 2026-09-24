@@ -18,6 +18,103 @@ _DISABLE = re.compile(r"\b(?:disable|stop|turn\s+off)\b", re.I)
 _NEGATED_ENABLE = re.compile(r"\b(?:do\s+not|don't|dont|never)\b[^.]*\b(?:enable|start|turn\s+on)\b", re.I)
 _NEGATED_DISABLE = re.compile(r"\b(?:do\s+not|don't|dont|never)\b[^.]*\b(?:disable|stop|turn\s+off)\b", re.I)
 
+_LIGHT_COLORS: dict[str, tuple[float, float]] = {
+    "red": (0, 100),
+    "rojo": (0, 100),
+    "orange": (30, 100),
+    "naranja": (30, 100),
+    "yellow": (60, 100),
+    "amarillo": (60, 100),
+    "green": (120, 100),
+    "verde": (120, 100),
+    "cyan": (180, 100),
+    "turquoise": (180, 80),
+    "turquesa": (180, 80),
+    "blue": (240, 100),
+    "azul": (240, 100),
+    "purple": (280, 100),
+    "violet": (280, 100),
+    "violeta": (280, 100),
+    "morado": (280, 100),
+    "pink": (330, 75),
+    "rosa": (330, 75),
+    "white": (0, 0),
+    "blanco": (0, 0),
+}
+
+
+def _light_aliases(entity_ids: set[str]) -> dict[str, str]:
+    aliases: dict[str, str] = {}
+    last_tokens: dict[str, list[str]] = {}
+    for entity_id in entity_ids:
+        if not entity_id.startswith("light."):
+            continue
+        phrase = entity_id.split(".", 1)[1].replace("_", " ").lower()
+        aliases[phrase] = entity_id
+        last = phrase.split()[-1]
+        last_tokens.setdefault(last, []).append(entity_id)
+    for token, matches in last_tokens.items():
+        if len(matches) == 1 and len(token) >= 4:
+            aliases[token] = matches[0]
+    return aliases
+
+
+def parse_light_command(utterance: str, state: GuardianState) -> dict[str, Any] | None:
+    """Parse low-risk, reversible lighting commands against the HA allowlist."""
+    bridge = state.home_assistant
+    if not bridge.light_control_enabled or not bridge.light_allowlist:
+        return None
+
+    text = " ".join(utterance.lower().strip().split())
+    if not text:
+        return None
+
+    entity_id = None
+    matched_alias = None
+    for alias, candidate in sorted(
+        _light_aliases(bridge.light_allowlist).items(),
+        key=lambda item: len(item[0]),
+        reverse=True,
+    ):
+        if re.search(rf"\b{re.escape(alias)}\b", text):
+            entity_id = candidate
+            matched_alias = alias
+            break
+    if not entity_id:
+        return None
+
+    turn_off = bool(re.search(r"\b(?:turn off|switch off|apaga|apagar)\b", text))
+    turn_on = bool(re.search(r"\b(?:turn on|switch on|enciende|encender|prende|prender)\b", text))
+    color = None
+    for name, hs in _LIGHT_COLORS.items():
+        if re.search(rf"\b{re.escape(name)}\b", text):
+            color = hs
+            break
+
+    brightness_pct = None
+    brightness_match = re.search(
+        r"\b(?:brightness|brillo)?\s*(\d{1,3})\s*(?:%|percent|por ciento)\b",
+        text,
+    )
+    if brightness_match:
+        brightness_pct = int(brightness_match.group(1))
+        if not 1 <= brightness_pct <= 100:
+            return None
+
+    if not any((turn_off, turn_on, color is not None, brightness_pct is not None)):
+        return None
+
+    request: dict[str, Any] = {
+        "entity_id": entity_id,
+        "label": matched_alias,
+        "turn_on": not turn_off,
+    }
+    if not turn_off and color is not None:
+        request["hs_color"] = list(color)
+    if not turn_off and brightness_pct is not None:
+        request["brightness_pct"] = brightness_pct
+    return request
+
 
 def parse_requested_action(utterance: str) -> str | None:
     """Map explicit, non-negated demo phrases to an allowlisted action.
@@ -67,6 +164,45 @@ def simulated_alexa_turn(
 ) -> dict[str, Any]:
     status = state.guardian_status()
     events = state.recent_events(8)
+
+    light_request = parse_light_command(utterance, state)
+    if light_request is not None:
+        entity_id = str(light_request.pop("entity_id"))
+        label = str(light_request.pop("label"))
+        try:
+            light_result = state.home_assistant.control_light(
+                entity_id,
+                **light_request,
+            )
+            verified = bool(light_result.get("verified"))
+            verb = "changed and verified" if verified else "changed but could not fully verify"
+            answer = f"I {verb} {label} through Home Assistant."
+            return {
+                "utterance": utterance,
+                "response": {
+                    "answer": answer,
+                    "status": "all_clear" if verified else "attention_required",
+                    "reasoning_mode": "deterministic-home-assistant-lighting",
+                },
+                "prepared_action": None,
+                "home_assistant_light": light_result,
+                "evidence_count": len(state.evidence_snapshot()),
+            }
+        except Exception:
+            return {
+                "utterance": utterance,
+                "response": {
+                    "answer": (
+                        f"I could not safely control {label} through Home Assistant. "
+                        "No other physical action was taken."
+                    ),
+                    "status": "attention_required",
+                    "reasoning_mode": "deterministic-home-assistant-lighting",
+                },
+                "prepared_action": None,
+                "home_assistant_light": None,
+                "evidence_count": len(state.evidence_snapshot()),
+            }
 
     if aws_strands.is_enabled():
         # Strands is the single model-backed inference path in this mode.

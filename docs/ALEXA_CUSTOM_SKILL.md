@@ -89,3 +89,32 @@ would need an explicit identity/account-linking design.
 
 Use a dedicated Cloudflare hostname targeting only
 `http://127.0.0.1:8795`. Home Assistant itself stays private.
+
+
+## Allowlisted ambient lighting
+
+Ambient Guardian can optionally bridge explicit Alexa utterances to Home Assistant
+lights that Alexa does not natively understand. This path is intended for
+low-risk, reversible ambience controls such as color, brightness and on/off.
+
+Enable it only with an explicit allowlist:
+
+```bash
+export AMBIENT_GUARDIAN_LIGHT_CONTROL_ENABLED=1
+export AMBIENT_GUARDIAN_LIGHT_ALLOWLIST=light.cinta_mural,light.cinta_escritorio
+```
+
+Example utterances through the Custom Skill query lane:
+
+- `set the mural purple`
+- `turn off the mural`
+- `pon el mural azul al 60 percent`
+
+The parser is deterministic and can only resolve entities present in the
+allowlist. It never accepts an arbitrary Home Assistant entity ID from model
+output. After a service call, Ambient Guardian reads the entity state back and
+only describes the requested change as verified when the observed state matches.
+
+Security/access controls remain on the separate approval path. Ambient lighting
+does not grant Alexa authority to unlock doors, disarm alarms, bypass zones or
+execute other consequential physical actions.
