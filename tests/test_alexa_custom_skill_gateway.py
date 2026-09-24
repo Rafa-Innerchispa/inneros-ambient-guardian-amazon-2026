@@ -119,7 +119,7 @@ def test_guardian_intent_calls_local_backend(monkeypatch):
     monkeypatch.setattr(
         gateway,
         "_backend_turn",
-        lambda query: f"Guardian answer for: {query}",
+        lambda query, speaker_context=None: f"Guardian answer for: {query}",
     )
     response = gateway._dispatch(request_payload(intent_request()))
     assert "Guardian answer for: is everything okay at home" in response["response"]["outputSpeech"]["text"]

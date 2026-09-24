@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 import re
 from typing import Any
 
@@ -17,6 +18,53 @@ _ENABLE = re.compile(r"\b(?:enable|start|turn\s+on)\b", re.I)
 _DISABLE = re.compile(r"\b(?:disable|stop|turn\s+off)\b", re.I)
 _NEGATED_ENABLE = re.compile(r"\b(?:do\s+not|don't|dont|never)\b[^.]*\b(?:enable|start|turn\s+on)\b", re.I)
 _NEGATED_DISABLE = re.compile(r"\b(?:do\s+not|don't|dont|never)\b[^.]*\b(?:disable|stop|turn\s+off)\b", re.I)
+
+
+_ALARM_DISARM_ATTEMPT = re.compile(
+    r"\b(?:desactiva|desactivar|desarma|desarmar|disarm|turn\s+off)\b[^.]*\b(?:alarma|alarm|security)\b",
+    re.I,
+)
+_ALARM_ARM = re.compile(
+    r"\b(?:activa|activar|arma|armar|arm|activate|turn\s+on)\b[^.]*\b(?:alarma|alarm|security)\b"
+    r"|\b(?:alarma|alarm|security)\b[^.]*\b(?:activa|activar|arma|armar|arm|activate|turn\s+on)\b",
+    re.I,
+)
+
+
+def _owner_speaker_authorized(speaker_context: dict[str, Any] | None) -> tuple[bool, str]:
+    expected = os.getenv("AMBIENT_GUARDIAN_OWNER_PERSON_ID", "").strip()
+    if not expected:
+        return False, "owner_voice_not_enrolled"
+    if not isinstance(speaker_context, dict):
+        return False, "speaker_not_recognized"
+    person_id = str(speaker_context.get("person_id") or "").strip()
+    if not person_id:
+        return False, "speaker_not_recognized"
+    if person_id != expected:
+        return False, "speaker_not_owner"
+    return True, "owner_voice_recognized"
+
+
+def parse_alarm_arm_command(utterance: str, state: GuardianState) -> dict[str, Any] | None:
+    text = " ".join(utterance.strip().split())
+    if not text or _ALARM_DISARM_ATTEMPT.search(text):
+        return None
+    if not _ALARM_ARM.search(text):
+        return None
+    bridge = state.home_assistant
+    entity_id = bridge.alarm_entity
+    if (
+        not bridge.alarm_arm_enabled
+        or not entity_id
+        or entity_id not in bridge.alarm_arm_allowlist
+    ):
+        return None
+    return {"entity_id": entity_id}
+
+
+def is_alarm_disarm_attempt(utterance: str) -> bool:
+    return bool(_ALARM_DISARM_ATTEMPT.search(" ".join(utterance.strip().split())))
+
 
 _DMX_COLORS: dict[str, str] = {
     "red": "rojo",
@@ -289,9 +337,80 @@ def simulated_alexa_turn(
     utterance: str,
     state: GuardianState,
     reasoner: GuardianReasoner,
+    *,
+    speaker_context: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     status = state.guardian_status()
     events = state.recent_events(8)
+
+    if is_alarm_disarm_attempt(utterance):
+        return {
+            "utterance": utterance,
+            "response": {
+                "answer": "Disarming the Intelbras alarm by Alexa is disabled.",
+                "status": "attention_required",
+                "reasoning_mode": "deterministic-owner-alarm-policy",
+            },
+            "prepared_action": None,
+            "alarm": {"status": "disarm_disabled", "executed": False},
+            "evidence_count": len(state.evidence_snapshot()),
+        }
+
+    alarm_request = parse_alarm_arm_command(utterance, state)
+    if alarm_request is not None:
+        authorized, auth_reason = _owner_speaker_authorized(speaker_context)
+        if not authorized:
+            return {
+                "utterance": utterance,
+                "response": {
+                    "answer": (
+                        "I will not arm the Intelbras alarm because the owner voice "
+                        "was not securely recognized. No alarm action was taken."
+                    ),
+                    "status": "attention_required",
+                    "reasoning_mode": "deterministic-owner-alarm-policy",
+                },
+                "prepared_action": None,
+                "alarm": {
+                    "status": "speaker_authorization_failed",
+                    "reason": auth_reason,
+                    "executed": False,
+                },
+                "evidence_count": len(state.evidence_snapshot()),
+            }
+        try:
+            alarm_result = state.home_assistant.arm_alarm_away(
+                str(alarm_request["entity_id"])
+            )
+            if alarm_result.get("verified"):
+                answer = "The Intelbras alarm is armed away and Home Assistant verified it."
+            elif alarm_result.get("accepted"):
+                answer = "I started arming the Intelbras alarm. The panel currently reports arming."
+            else:
+                answer = "The alarm command was sent, but I could not verify that arming started."
+            return {
+                "utterance": utterance,
+                "response": {
+                    "answer": answer,
+                    "status": "all_clear" if alarm_result.get("accepted") else "attention_required",
+                    "reasoning_mode": "deterministic-owner-alarm-policy",
+                },
+                "prepared_action": None,
+                "alarm": alarm_result,
+                "evidence_count": len(state.evidence_snapshot()),
+            }
+        except Exception:
+            return {
+                "utterance": utterance,
+                "response": {
+                    "answer": "I could not safely arm the Intelbras alarm. No other action was taken.",
+                    "status": "attention_required",
+                    "reasoning_mode": "deterministic-owner-alarm-policy",
+                },
+                "prepared_action": None,
+                "alarm": {"status": "arm_failed", "executed": False},
+                "evidence_count": len(state.evidence_snapshot()),
+            }
 
     dmx_request = parse_dmx_command(utterance, state)
     if dmx_request is not None:

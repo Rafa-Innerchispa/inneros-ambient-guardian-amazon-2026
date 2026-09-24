@@ -41,7 +41,16 @@ def _backend_url() -> str:
     return url
 
 
-def _backend_turn(query: str) -> str:
+def _speaker_context(payload: dict[str, Any]) -> dict[str, Any]:
+    person = (((payload.get("context") or {}).get("System") or {}).get("person") or {})
+    confidence = person.get("authenticationConfidenceLevel") or {}
+    return {
+        "person_id": str(person.get("personId") or "").strip(),
+        "authentication_confidence": int(confidence.get("level") or 0),
+    }
+
+
+def _backend_turn(query: str, speaker_context: dict[str, Any] | None = None) -> str:
     query = " ".join((query or "").split())
     if not query:
         raise ValueError("query is required")
@@ -49,7 +58,7 @@ def _backend_turn(query: str) -> str:
         raise ValueError("query is too long")
     response = httpx.post(
         _backend_url(),
-        json={"utterance": query},
+        json={"utterance": query, "speaker_context": speaker_context or {}},
         timeout=float(os.getenv("AMBIENT_GUARDIAN_SKILL_TIMEOUT", "12")),
     )
     response.raise_for_status()
@@ -198,7 +207,7 @@ def _dispatch(payload: dict[str, Any]) -> dict[str, Any]:
     if intent_name == "AskGuardianIntent":
         query = _slot_value(request_payload, "query")
         try:
-            speech = _backend_turn(query)
+            speech = _backend_turn(query, _speaker_context(payload))
         except ValueError:
             speech = "Please ask a specific question about the home."
         except Exception:

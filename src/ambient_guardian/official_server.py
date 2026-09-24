@@ -149,7 +149,17 @@ async def simulated_alexa(request: Request) -> Response:
             raise ValueError("utterance is too long")
     except ValueError as exc:
         return JSONResponse({"detail": str(exc)}, status_code=400)
-    return JSONResponse(simulated_alexa_turn(utterance, STATE, REASONER))
+    speaker_context = payload.get("speaker_context")
+    if not isinstance(speaker_context, dict):
+        speaker_context = {}
+    return JSONResponse(
+        simulated_alexa_turn(
+            utterance,
+            STATE,
+            REASONER,
+            speaker_context=speaker_context,
+        )
+    )
 
 
 @mcp.custom_route("/api/actions/{token}/approve", methods=["POST"])
