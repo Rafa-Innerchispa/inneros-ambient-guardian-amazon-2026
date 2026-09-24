@@ -10,6 +10,7 @@ from typing import Any
 
 import httpx
 
+from .dmx import DMXBridge
 from .home_assistant import HomeAssistantBridge
 from .ring import RingAdapterStatus, RingSimulatorAdapter
 
@@ -66,6 +67,7 @@ class GuardianState:
         self.adapter = SimulatorAdapter()
         self.ring_adapter = RingSimulatorAdapter()
         self.home_assistant = HomeAssistantBridge()
+        self.dmx = DMXBridge()
         self.events: list[dict[str, Any]] = []
         self.pending: dict[str, PendingAction] = {}
         self.evidence: list[dict[str, Any]] = []
@@ -221,6 +223,7 @@ class GuardianState:
     def integration_status(self) -> dict[str, Any]:
         ring_status: RingAdapterStatus = self.ring_adapter.status()
         home_status = self.home_assistant.status().as_dict()
+        dmx_status = self.dmx.status().as_dict()
         return {
             "mcp_protocol": "2026-07-28 (backward-compatible with 2025-11-25)",
             "mcp_transport": "official-streamable-http",
@@ -233,6 +236,7 @@ class GuardianState:
             "local_llm": bool(os.getenv("INNEROS_LOCAL_LLM_URL")),
             "aws_strands_enabled": os.getenv("AWS_STRANDS_ENABLED", "0") == "1",
             "home_assistant": home_status,
+            "dmx_artnet": dmx_status,
             "alexa_devices": {
                 "mode": "home-assistant-alexa-devices",
                 "speech_route": "owner-only-http; not exposed as MCP",

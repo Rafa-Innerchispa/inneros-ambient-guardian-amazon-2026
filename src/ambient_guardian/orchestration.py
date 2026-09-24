@@ -18,6 +18,134 @@ _DISABLE = re.compile(r"\b(?:disable|stop|turn\s+off)\b", re.I)
 _NEGATED_ENABLE = re.compile(r"\b(?:do\s+not|don't|dont|never)\b[^.]*\b(?:enable|start|turn\s+on)\b", re.I)
 _NEGATED_DISABLE = re.compile(r"\b(?:do\s+not|don't|dont|never)\b[^.]*\b(?:disable|stop|turn\s+off)\b", re.I)
 
+_DMX_COLORS: dict[str, str] = {
+    "red": "rojo",
+    "rojo": "rojo",
+    "rojos": "rojo",
+    "rojas": "rojo",
+    "green": "verde",
+    "verde": "verde",
+    "verdes": "verde",
+    "blue": "azul",
+    "azul": "azul",
+    "azules": "azul",
+    "yellow": "amarillo",
+    "amarillo": "amarillo",
+    "amarillos": "amarillo",
+    "amarillas": "amarillo",
+    "orange": "naranja",
+    "naranja": "naranja",
+    "naranjas": "naranja",
+    "cyan": "cian",
+    "cian": "cian",
+    "cianes": "cian",
+    "turquoise": "turquesa",
+    "turquesa": "turquesa",
+    "turquesas": "turquesa",
+    "purple": "morado",
+    "violet": "morado",
+    "violeta": "morado",
+    "morado": "morado",
+    "morados": "morado",
+    "moradas": "morado",
+    "pink": "rosa",
+    "rosa": "rosa",
+    "rosas": "rosa",
+    "white": "blanco",
+    "blanco": "blanco",
+    "blancos": "blanco",
+    "blancas": "blanco",
+}
+
+_DMX_TARGETS: dict[str, str] = {
+    "dmx": "todas",
+    "all dmx": "todas",
+    "todas": "todas",
+    "all lights": "todas",
+    "tachos": "tachos",
+    "tacho": "tachos",
+    "pars": "tachos",
+    "par": "tachos",
+    "beams": "beams",
+    "beam": "beams",
+    "pulpos": "pulpos",
+    "pulpo": "pulpos",
+    "bola disco": "bola_disco",
+    "disco ball": "bola_disco",
+}
+
+_DMX_SCENES: dict[str, str] = {
+    "rainbow": "rainbow",
+    "arcoiris": "rainbow",
+    "arco iris": "rainbow",
+    "chill lounge": "chill_lounge",
+    "chill": "chill_lounge",
+    "lounge": "chill_lounge",
+    "relax": "chill_lounge",
+    "morado uv": "morado_uv",
+    "purple uv": "morado_uv",
+    "rojo sangre": "rojo_sangre",
+    "blackout": "blackout",
+}
+
+
+def parse_dmx_command(utterance: str, state: GuardianState) -> dict[str, Any] | None:
+    """Parse bounded DMX commands without giving a model arbitrary Art-Net access."""
+    bridge = state.dmx
+    if not bridge.enabled:
+        return None
+
+    text = " ".join(utterance.lower().strip().split())
+    if not text:
+        return None
+
+    explicit_verb = bool(
+        re.search(
+            r"\b(?:pon|poner|activa|activar|enciende|encender|apaga|apagar|set|turn on|turn off|activate|start)\b",
+            text,
+        )
+    )
+    if not explicit_verb:
+        return None
+
+    for alias, scene in sorted(_DMX_SCENES.items(), key=lambda item: len(item[0]), reverse=True):
+        if re.search(rf"\b{re.escape(alias)}\b", text) and scene in bridge.scene_allowlist:
+            return {"kind": "scene", "scene": scene}
+
+    target = None
+    for alias, candidate in sorted(_DMX_TARGETS.items(), key=lambda item: len(item[0]), reverse=True):
+        if re.search(rf"\b{re.escape(alias)}\b", text) and candidate in bridge.target_allowlist:
+            target = candidate
+            break
+    if target is None:
+        return None
+
+    color = None
+    for alias, candidate in _DMX_COLORS.items():
+        if re.search(rf"\b{re.escape(alias)}\b", text):
+            color = candidate
+            break
+    if color is None:
+        if re.search(r"\b(?:apaga|apagar|turn off|blackout)\b", text) and "blackout" in bridge.scene_allowlist:
+            return {"kind": "scene", "scene": "blackout"}
+        return None
+
+    brightness = 255
+    match = re.search(r"\b(\d{1,3})\s*(?:%|percent|por ciento)\b", text)
+    if match:
+        pct = int(match.group(1))
+        if not 1 <= pct <= 100:
+            return None
+        brightness = round(pct * 255 / 100)
+
+    return {
+        "kind": "color",
+        "color": color,
+        "target": target,
+        "brightness": brightness,
+    }
+
+
 _LIGHT_COLORS: dict[str, tuple[float, float]] = {
     "red": (0, 100),
     "rojo": (0, 100),
@@ -164,6 +292,49 @@ def simulated_alexa_turn(
 ) -> dict[str, Any]:
     status = state.guardian_status()
     events = state.recent_events(8)
+
+    dmx_request = parse_dmx_command(utterance, state)
+    if dmx_request is not None:
+        try:
+            if dmx_request["kind"] == "scene":
+                dmx_result = state.dmx.apply_scene(str(dmx_request["scene"]))
+                subject = str(dmx_request["scene"]).replace("_", " ")
+            else:
+                dmx_result = state.dmx.apply_color(
+                    str(dmx_request["color"]),
+                    target=str(dmx_request["target"]),
+                    brightness=int(dmx_request["brightness"]),
+                )
+                subject = f'{dmx_request["target"]} {dmx_request["color"]}'
+            return {
+                "utterance": utterance,
+                "response": {
+                    "answer": (
+                        f"The local DMX engine accepted {subject}. "
+                        "The command was sent through Art-Net; fixture light output is not sensor-verified."
+                    ),
+                    "status": "all_clear",
+                    "reasoning_mode": "deterministic-local-dmx",
+                },
+                "prepared_action": None,
+                "dmx": dmx_result,
+                "evidence_count": len(state.evidence_snapshot()),
+            }
+        except Exception:
+            return {
+                "utterance": utterance,
+                "response": {
+                    "answer": (
+                        "I could not safely send that DMX command. "
+                        "No other physical action was taken."
+                    ),
+                    "status": "attention_required",
+                    "reasoning_mode": "deterministic-local-dmx",
+                },
+                "prepared_action": None,
+                "dmx": None,
+                "evidence_count": len(state.evidence_snapshot()),
+            }
 
     light_request = parse_light_command(utterance, state)
     if light_request is not None:
