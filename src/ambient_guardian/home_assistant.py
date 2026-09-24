@@ -17,8 +17,12 @@ class HomeAssistantStatus:
     alexa_notify_allowlist: list[str]
     light_control_enabled: bool
     light_allowlist: list[str]
+    switch_control_enabled: bool
+    switch_allowlist: list[str]
     alarm_arm_enabled: bool
     alarm_arm_allowlist: list[str]
+    alarm_disarm_enabled: bool
+    alarm_disarm_allowlist: list[str]
     detail: str
 
     def as_dict(self) -> dict[str, Any]:
@@ -30,8 +34,12 @@ class HomeAssistantStatus:
             "alexa_notify_allowlist": list(self.alexa_notify_allowlist),
             "light_control_enabled": self.light_control_enabled,
             "light_allowlist": list(self.light_allowlist),
+            "switch_control_enabled": self.switch_control_enabled,
+            "switch_allowlist": list(self.switch_allowlist),
             "alarm_arm_enabled": self.alarm_arm_enabled,
             "alarm_arm_allowlist": list(self.alarm_arm_allowlist),
+            "alarm_disarm_enabled": self.alarm_disarm_enabled,
+            "alarm_disarm_allowlist": list(self.alarm_disarm_allowlist),
             "detail": self.detail,
         }
 
@@ -115,12 +123,30 @@ class HomeAssistantBridge:
         self.light_allowlist = {
             item.strip() for item in raw_light_allowlist.split(",") if item.strip()
         }
+        self.switch_control_enabled = os.getenv(
+            "AMBIENT_GUARDIAN_SWITCH_CONTROL_ENABLED", "0"
+        ) == "1"
+        raw_switch_allowlist = os.getenv(
+            "AMBIENT_GUARDIAN_SWITCH_ALLOWLIST", ""
+        )
+        self.switch_allowlist = {
+            item.strip() for item in raw_switch_allowlist.split(",") if item.strip()
+        }
         self.alarm_arm_enabled = os.getenv(
             "AMBIENT_GUARDIAN_ALARM_ARM_ENABLED", "0"
         ) == "1"
         raw_alarm_allowlist = os.getenv("AMBIENT_GUARDIAN_ALARM_ARM_ALLOWLIST", "")
         self.alarm_arm_allowlist = {
             item.strip() for item in raw_alarm_allowlist.split(",") if item.strip()
+        }
+        self.alarm_disarm_enabled = os.getenv(
+            "AMBIENT_GUARDIAN_ALARM_DISARM_ENABLED", "0"
+        ) == "1"
+        raw_disarm_allowlist = os.getenv(
+            "AMBIENT_GUARDIAN_ALARM_DISARM_ALLOWLIST", ""
+        )
+        self.alarm_disarm_allowlist = {
+            item.strip() for item in raw_disarm_allowlist.split(",") if item.strip()
         }
 
     @property
@@ -199,8 +225,12 @@ class HomeAssistantBridge:
             alexa_notify_allowlist=sorted(self.alexa_notify_allowlist),
             light_control_enabled=self.light_control_enabled,
             light_allowlist=sorted(self.light_allowlist),
+            switch_control_enabled=self.switch_control_enabled,
+            switch_allowlist=sorted(self.switch_allowlist),
             alarm_arm_enabled=self.alarm_arm_enabled,
             alarm_arm_allowlist=sorted(self.alarm_arm_allowlist),
+            alarm_disarm_enabled=self.alarm_disarm_enabled,
+            alarm_disarm_allowlist=sorted(self.alarm_disarm_allowlist),
             detail=str(context.get("detail", "")),
         )
 
@@ -348,8 +378,41 @@ class HomeAssistantBridge:
         }
 
 
+    def control_switch(self, entity_id: str, *, turn_on: bool = True) -> dict[str, Any]:
+        """Control one explicitly allowlisted switch and verify the observed state."""
+        entity_id = entity_id.strip()
+        if not self.configured:
+            raise RuntimeError("Home Assistant bridge is not configured")
+        if not self.switch_control_enabled:
+            raise PermissionError("Home Assistant switch control is disabled")
+        if entity_id not in self.switch_allowlist:
+            raise PermissionError("Home Assistant switch entity is not allowlisted")
+        if not entity_id.startswith("switch."):
+            raise ValueError("entity_id must be a Home Assistant switch entity")
+
+        service = "turn_on" if turn_on else "turn_off"
+        response = httpx.post(
+            f"{self.url}/api/services/switch/{service}",
+            headers=self._headers(),
+            json={"entity_id": entity_id},
+            timeout=self.timeout,
+        )
+        response.raise_for_status()
+        observed = self.get_entity_state(entity_id)
+        expected = "on" if turn_on else "off"
+        verified = str(observed.get("state") or "") == expected
+        return {
+            "status": "executed_and_verified" if verified else "executed_unverified",
+            "entity_id": entity_id,
+            "service": service,
+            "accepted": verified,
+            "verified": verified,
+            "observed": observed,
+        }
+
+
     def arm_alarm_away(self, entity_id: str) -> dict[str, Any]:
-        """Arm one explicitly allowlisted alarm panel. No disarm method exists here."""
+        """Arm one explicitly allowlisted alarm panel after upstream step-up auth."""
         entity_id = entity_id.strip()
         if not self.configured:
             raise RuntimeError("Home Assistant bridge is not configured")
@@ -391,6 +454,46 @@ class HomeAssistantBridge:
             ),
             "entity_id": entity_id,
             "accepted": accepted,
+            "verified": verified,
+            "observed": observed,
+        }
+
+
+    def disarm_alarm(self, entity_id: str) -> dict[str, Any]:
+        """Disarm one explicitly allowlisted panel after upstream voice+PIN verification."""
+        entity_id = entity_id.strip()
+        if not self.configured:
+            raise RuntimeError("Home Assistant bridge is not configured")
+        if not self.alarm_disarm_enabled:
+            raise PermissionError("Alarm disarming is disabled")
+        if entity_id not in self.alarm_disarm_allowlist:
+            raise PermissionError("Alarm entity is not allowlisted for disarming")
+        if not entity_id.startswith("alarm_control_panel."):
+            raise ValueError("entity_id must be a Home Assistant alarm panel")
+
+        before = self.get_entity_state(entity_id)
+        if before.get("state") == "disarmed":
+            return {
+                "status": "already_disarmed",
+                "entity_id": entity_id,
+                "accepted": True,
+                "verified": True,
+                "observed": before,
+            }
+
+        response = httpx.post(
+            f"{self.url}/api/services/alarm_control_panel/alarm_disarm",
+            headers=self._headers(),
+            json={"entity_id": entity_id},
+            timeout=self.timeout,
+        )
+        response.raise_for_status()
+        observed = self.get_entity_state(entity_id)
+        verified = str(observed.get("state") or "") == "disarmed"
+        return {
+            "status": "disarmed_and_verified" if verified else "executed_unverified",
+            "entity_id": entity_id,
+            "accepted": verified,
             "verified": verified,
             "observed": observed,
         }

@@ -11,6 +11,7 @@ from starlette.requests import Request
 from starlette.responses import HTMLResponse, JSONResponse, Response
 
 from . import aws_strands
+from .alexa_gateway_auth import verify_shared_secret
 from .core import GuardianReasoner, GuardianState
 from .orchestration import simulated_alexa_turn
 
@@ -152,12 +153,16 @@ async def simulated_alexa(request: Request) -> Response:
     speaker_context = payload.get("speaker_context")
     if not isinstance(speaker_context, dict):
         speaker_context = {}
+    trusted_gateway = verify_shared_secret(
+        request.headers.get("x-ambient-alexa-gateway", "")
+    )
     return JSONResponse(
         simulated_alexa_turn(
             utterance,
             STATE,
             REASONER,
             speaker_context=speaker_context,
+            trusted_gateway=trusted_gateway,
         )
     )
 

@@ -23,6 +23,12 @@ def clear_bridge_env(monkeypatch):
         "AMBIENT_GUARDIAN_ALEXA_NOTIFY_ALLOWLIST",
         "AMBIENT_GUARDIAN_LIGHT_CONTROL_ENABLED",
         "AMBIENT_GUARDIAN_LIGHT_ALLOWLIST",
+        "AMBIENT_GUARDIAN_SWITCH_CONTROL_ENABLED",
+        "AMBIENT_GUARDIAN_SWITCH_ALLOWLIST",
+        "AMBIENT_GUARDIAN_ALARM_ARM_ENABLED",
+        "AMBIENT_GUARDIAN_ALARM_ARM_ALLOWLIST",
+        "AMBIENT_GUARDIAN_ALARM_DISARM_ENABLED",
+        "AMBIENT_GUARDIAN_ALARM_DISARM_ALLOWLIST",
         "AMBIENT_GUARDIAN_SHARED_ENV_FILE",
         "HA_URL",
         "HA_TOKEN",
@@ -208,3 +214,72 @@ def test_light_control_posts_and_verifies_allowlisted_color(monkeypatch):
         assert "allowlisted" in str(exc)
     else:
         raise AssertionError("non-allowlisted light was accepted")
+
+
+def test_switch_control_posts_and_verifies_allowlisted_power(monkeypatch):
+    clear_bridge_env(monkeypatch)
+    monkeypatch.setenv("HOME_ASSISTANT_URL", "http://ha.local:8123")
+    monkeypatch.setenv("HOME_ASSISTANT_TOKEN", "test-token")
+    monkeypatch.setenv("AMBIENT_GUARDIAN_SWITCH_CONTROL_ENABLED", "1")
+    monkeypatch.setenv(
+        "AMBIENT_GUARDIAN_SWITCH_ALLOWLIST",
+        "switch.tomacorriente_doble_pecera_socket_1",
+    )
+    calls = []
+
+    def fake_post(url, headers, json, timeout):
+        calls.append((url, json))
+        return FakeResponse([])
+
+    def fake_get(url, headers, timeout):
+        return FakeResponse(
+            {
+                "entity_id": "switch.tomacorriente_doble_pecera_socket_1",
+                "state": "on",
+                "attributes": {},
+                "last_updated": "2026-09-24T00:00:00+00:00",
+            }
+        )
+
+    monkeypatch.setattr("ambient_guardian.home_assistant.httpx.post", fake_post)
+    monkeypatch.setattr("ambient_guardian.home_assistant.httpx.get", fake_get)
+    bridge = HomeAssistantBridge()
+    result = bridge.control_switch(
+        "switch.tomacorriente_doble_pecera_socket_1",
+        turn_on=True,
+    )
+    assert result["verified"] is True
+    assert calls[0][0].endswith("/api/services/switch/turn_on")
+
+
+def test_alarm_disarm_requires_explicit_enable_allowlist_and_verifies(monkeypatch):
+    clear_bridge_env(monkeypatch)
+    entity = "alarm_control_panel.panel_home_ralphi_panel_home_ralphi"
+    monkeypatch.setenv("HOME_ASSISTANT_URL", "http://ha.local:8123")
+    monkeypatch.setenv("HOME_ASSISTANT_TOKEN", "test-token")
+    monkeypatch.setenv("AMBIENT_GUARDIAN_ALARM_DISARM_ENABLED", "1")
+    monkeypatch.setenv("AMBIENT_GUARDIAN_ALARM_DISARM_ALLOWLIST", entity)
+    states = iter(["armed_away", "disarmed"])
+    calls = []
+
+    def fake_get(url, headers, timeout):
+        return FakeResponse(
+            {
+                "entity_id": entity,
+                "state": next(states),
+                "attributes": {},
+                "last_updated": "2026-09-24T00:00:00+00:00",
+            }
+        )
+
+    def fake_post(url, headers, json, timeout):
+        calls.append((url, json))
+        return FakeResponse([])
+
+    monkeypatch.setattr("ambient_guardian.home_assistant.httpx.get", fake_get)
+    monkeypatch.setattr("ambient_guardian.home_assistant.httpx.post", fake_post)
+    bridge = HomeAssistantBridge()
+    result = bridge.disarm_alarm(entity)
+    assert result["verified"] is True
+    assert result["observed"]["state"] == "disarmed"
+    assert calls[0][0].endswith("/api/services/alarm_control_panel/alarm_disarm")
