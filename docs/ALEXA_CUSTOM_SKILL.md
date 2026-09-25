@@ -12,7 +12,7 @@ Alexa app / Echo
 Alexa cloud
       | signed HTTPS request
       v
-alexa-guardian.pcdoctor.ai
+voz.pcdoctor.ai
       |
 dedicated Alexa gateway :8795
       | Signature-256 + certificate chain + timestamp + Skill ID
@@ -66,22 +66,28 @@ Create a **Custom** skill:
 - Invocation: `ambient guardian`
 - Interaction model: `docs/alexa-custom-skill-en-US.json`
 - Endpoint type: HTTPS
-- Default endpoint: `https://alexa-guardian.pcdoctor.ai/alexa/skill`
+- Default endpoint: `https://voz.pcdoctor.ai/alexa/skill`
 - SSL certificate: trusted certificate
 
 The development skill can be tested in the Alexa simulator and in the Alexa
 mobile app signed into the same developer account using en-US.
 
-No account linking is needed for the first owner-only development test. The
-signed Alexa request reaches Ambient Guardian, whose Home Assistant integration
-remains private behind the local backend. Production multi-user distribution
-would need an explicit identity/account-linking design.
+For owner security actions, enable **Skills Personalization** and **PIN Confirmation**
+in Developer Console. The owner must have Voice ID, Personalize skills, and a
+profile PIN configured in the Alexa app. Ambient Guardian never receives or stores
+the PIN digits; Alexa performs verification and resumes the skill with authentication
+confidence level 400 when Voice ID + PIN succeed.
+
+Account linking is recommended by Amazon and may be added when the owner MCP is
+published, but the local Intelbras authorization additionally requires the exact
+enrolled Alexa personId before any alarm action can execute.
 
 ## Safety
 
-- Alexa can ask questions and request preparation of an allowlisted action.
-- Alexa cannot approve or execute a physical action.
-- The human approval route remains outside this gateway.
+- Read-only questions remain deterministic and local-first.
+- Intelbras arm/disarm actions require the enrolled owner personId plus Alexa
+  Voice ID + profile PIN verification (confidence level 400).
+- Lighting/DMX use separate explicit allowlists and verification policies.
 - Home Assistant credentials never cross the Alexa gateway.
 - The public hostname must route only to :8795, never :8794, :8123, or vLLM.
 
@@ -118,3 +124,20 @@ only describes the requested change as verified when the observed state matches.
 Security/access controls remain on the separate approval path. Ambient lighting
 does not grant Alexa authority to unlock doors, disarm alarms, bypass zones or
 execute other consequential physical actions.
+
+
+## Owner test phrases
+
+The Custom Skill must be invoked explicitly until name-free interaction is added:
+
+- `Alexa, open Ambient Guardian`
+- then: `arm the alarm`
+- or one-shot: `Alexa, ask Ambient Guardian to arm the alarm`
+
+For disarm:
+
+- `Alexa, ask Ambient Guardian to disarm the alarm`
+
+Alexa should then ask for the **Alexa profile PIN**. That PIN belongs to the
+owner's Alexa profile; it is not an Intelbras code and is never stored by
+Ambient Guardian.

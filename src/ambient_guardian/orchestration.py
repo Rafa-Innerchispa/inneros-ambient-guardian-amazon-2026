@@ -29,6 +29,14 @@ _ALARM_ARM = re.compile(
     r"|\b(?:alarma|alarm|security)\b[^.]*\b(?:activa|activar|arma|armar|arm|activate|turn\s+on)\b",
     re.I,
 )
+_ALARM_STATUS_QUERY = re.compile(
+    r"\b(?:estado|status)\b[^.]*\b(?:alarma|alarm|security)\b"
+    r"|\b(?:como|cómo)\s+(?:esta|está)\b[^.]*\b(?:alarma|alarm)\b"
+    r"|\b(?:esta|está|is)\b[^.]*\b(?:activa|activada|armada|armed|desarmada|disarmed)\b[^.]*\b(?:alarma|alarm)\b"
+    r"|\b(?:esta|está|is)\b[^.]*\b(?:alarma|alarm)\b[^.]*\b(?:activa|activada|armada|armed|desarmada|disarmed)\b"
+    r"|\b(?:alarma|alarm)\b[^.]*\b(?:esta|está|is)\b[^.]*\b(?:activa|activada|armada|armed|desarmada|disarmed)\b",
+    re.I,
+)
 
 
 def _owner_speaker_authorized(
@@ -86,6 +94,44 @@ def parse_alarm_disarm_command(utterance: str, state: GuardianState) -> dict[str
 
 def is_alarm_disarm_attempt(utterance: str) -> bool:
     return bool(_ALARM_DISARM_ATTEMPT.search(" ".join(utterance.strip().split())))
+
+
+def _alarm_status_response(status: dict[str, Any]) -> dict[str, Any]:
+    home = status.get("home_context") or {}
+    alarm = home.get("alarm") or {}
+    state = str(alarm.get("state") or "")
+    confirmed = bool(alarm.get("confirmed_current"))
+    age = alarm.get("age_seconds")
+
+    labels = {
+        "disarmed": "desarmada",
+        "arming": "armándose",
+        "armed_away": "armada en modo fuera de casa",
+        "armed_home": "armada en modo casa",
+        "armed_night": "armada en modo noche",
+        "triggered": "disparada",
+        "pending": "pendiente",
+    }
+
+    if not confirmed:
+        observed = labels.get(state, state or "desconocido")
+        return {
+            "answer": (
+                f"Home Assistant reporta la alarma como {observed}, "
+                "pero no puedo confirmar que esa lectura sea actual y consistente. "
+                "No voy a presentarla como estado real."
+            ),
+            "status": "attention_required",
+            "reasoning_mode": "deterministic-fresh-alarm-status",
+        }
+
+    label = labels.get(state, state)
+    freshness = f" hace {int(age)} segundos" if isinstance(age, (int, float)) else ""
+    return {
+        "answer": f"La alarma Intelbras está {label}. Lectura verificada{freshness}.",
+        "status": "all_clear" if state == "disarmed" else "attention_required",
+        "reasoning_mode": "deterministic-fresh-alarm-status",
+    }
 
 
 _DMX_COLORS: dict[str, str] = {
@@ -364,6 +410,16 @@ def simulated_alexa_turn(
 ) -> dict[str, Any]:
     status = state.guardian_status()
     events = state.recent_events(8)
+
+    normalized_utterance = " ".join(utterance.strip().split())
+    if _ALARM_STATUS_QUERY.search(normalized_utterance):
+        return {
+            "utterance": utterance,
+            "response": _alarm_status_response(status),
+            "prepared_action": None,
+            "alarm": (status.get("home_context") or {}).get("alarm"),
+            "evidence_count": len(state.evidence_snapshot()),
+        }
 
     disarm_request = parse_alarm_disarm_command(utterance, state)
     if is_alarm_disarm_attempt(utterance):
