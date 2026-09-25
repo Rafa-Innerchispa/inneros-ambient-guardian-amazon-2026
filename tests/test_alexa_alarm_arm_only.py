@@ -15,7 +15,15 @@ class StubAlarmBridge:
         return {
             "configured": True,
             "reachable": True,
-            "alarm": {"state": "disarmed"},
+            "alarm": {
+                "state": "disarmed",
+                "raw_status": "disarmed",
+                "arm_mode": "disarmed",
+                "fresh": True,
+                "consistent": True,
+                "confirmed_current": True,
+                "age_seconds": 1.0,
+            },
             "detail": "stub",
         }
 
@@ -107,3 +115,51 @@ def test_wrong_or_unrecognized_speaker_cannot_arm_or_disarm(monkeypatch):
             speaker_context={"person_id": "person-other", "authentication_confidence": 400},
         )
         assert wrong["alarm"]["status"] == "speaker_authorization_failed"
+
+
+def test_alarm_status_question_is_read_only_and_uses_fresh_state(monkeypatch):
+    monkeypatch.setenv("AMBIENT_GUARDIAN_OWNER_PERSON_ID", "person-owner")
+    result = simulated_alexa_turn(
+        "¿está activada la alarma?",
+        _state(),
+        GuardianReasoner(),
+        speaker_context={"person_id": "person-owner", "authentication_confidence": 300},
+    )
+    assert result["alarm"]["state"] == "disarmed"
+    assert result["response"]["reasoning_mode"] == "deterministic-fresh-alarm-status"
+    assert "desarmada" in result["response"]["answer"].lower()
+
+
+def test_alarm_status_question_does_not_arm(monkeypatch):
+    monkeypatch.setenv("AMBIENT_GUARDIAN_OWNER_PERSON_ID", "person-owner")
+
+    class ArmedBridge(StubAlarmBridge):
+        def home_context(self):
+            return {
+                "configured": True,
+                "reachable": True,
+                "alarm": {
+                    "state": "armed_away",
+                    "raw_status": "armed_away",
+                    "arm_mode": "armed_away",
+                    "fresh": True,
+                    "consistent": True,
+                    "confirmed_current": True,
+                    "age_seconds": 2.0,
+                },
+                "detail": "fresh consistent Home Assistant alarm context",
+            }
+
+        def arm_alarm_away(self, entity_id):
+            raise AssertionError("status question must never arm the alarm")
+
+    state = _state()
+    state.home_assistant = ArmedBridge()
+    result = simulated_alexa_turn(
+        "¿la alarma está armada?",
+        state,
+        GuardianReasoner(),
+        speaker_context={"person_id": "person-owner", "authentication_confidence": 300},
+    )
+    assert "armada" in result["response"]["answer"].lower()
+    assert result["alarm"]["state"] == "armed_away"

@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import os
 from dataclasses import dataclass
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
@@ -210,19 +211,60 @@ class HomeAssistantBridge:
                 "alarm": None,
                 "detail": "Home Assistant request failed",
             }
+        attributes = alarm["attributes"] or {}
+        state = str(alarm.get("state") or "").strip()
+        raw_status = str(attributes.get("raw_status") or "").strip()
+        arm_mode = str(attributes.get("arm_mode") or "").strip()
+        connection_unavailable = bool(attributes.get("connection_unavailable"))
+        last_updated = str(alarm.get("last_updated") or "").strip()
+
+        age_seconds = None
+        fresh = False
+        if last_updated:
+            try:
+                observed_at = datetime.fromisoformat(last_updated.replace("Z", "+00:00"))
+                if observed_at.tzinfo is None:
+                    observed_at = observed_at.replace(tzinfo=timezone.utc)
+                age_seconds = max(
+                    0.0,
+                    (datetime.now(timezone.utc) - observed_at.astimezone(timezone.utc)).total_seconds(),
+                )
+                max_age = float(os.getenv("AMBIENT_GUARDIAN_ALARM_MAX_STATE_AGE_SECONDS", "90"))
+                fresh = age_seconds <= max_age
+            except ValueError:
+                fresh = False
+
+        comparable = [value for value in (state, raw_status, arm_mode) if value]
+        consistent = bool(comparable) and len(set(comparable)) == 1
+        confirmed_current = bool(
+            not connection_unavailable
+            and fresh
+            and consistent
+            and state not in {"unknown", "unavailable", ""}
+        )
+
         return {
             "configured": True,
             "reachable": True,
             "alarm": {
                 "entity_id": alarm["entity_id"],
-                "state": alarm["state"],
-                "is_in_alarm": bool(alarm["attributes"].get("is_in_alarm")),
-                "connection_unavailable": bool(
-                    alarm["attributes"].get("connection_unavailable")
-                ),
-                "partition_name": alarm["attributes"].get("partition_name"),
+                "state": state,
+                "raw_status": raw_status or None,
+                "arm_mode": arm_mode or None,
+                "is_in_alarm": bool(attributes.get("is_in_alarm")),
+                "connection_unavailable": connection_unavailable,
+                "partition_name": attributes.get("partition_name"),
+                "last_updated": last_updated or None,
+                "age_seconds": round(age_seconds, 1) if age_seconds is not None else None,
+                "fresh": fresh,
+                "consistent": consistent,
+                "confirmed_current": confirmed_current,
             },
-            "detail": "read-only Home Assistant context",
+            "detail": (
+                "fresh consistent Home Assistant alarm context"
+                if confirmed_current
+                else "alarm state present but not safe to claim as current"
+            ),
         }
 
     def status(self) -> HomeAssistantStatus:

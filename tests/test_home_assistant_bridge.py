@@ -1,4 +1,5 @@
 import os
+from datetime import datetime, timedelta, timezone
 
 from ambient_guardian.home_assistant import HomeAssistantBridge
 
@@ -59,8 +60,10 @@ def test_home_context_reads_only_selected_alarm(monkeypatch):
                     "is_in_alarm": False,
                     "connection_unavailable": False,
                     "partition_name": "Panel Home Ralphi",
+                    "raw_status": "armed_away",
+                    "arm_mode": "armed_away",
                 },
-                "last_updated": "2026-09-21T00:00:00+00:00",
+                "last_updated": datetime.now(timezone.utc).isoformat(),
             }
         )
 
@@ -70,6 +73,9 @@ def test_home_context_reads_only_selected_alarm(monkeypatch):
     assert context["reachable"] is True
     assert context["alarm"]["state"] == "armed_away"
     assert context["alarm"]["partition_name"] == "Panel Home Ralphi"
+    assert context["alarm"]["confirmed_current"] is True
+    assert context["alarm"]["fresh"] is True
+    assert context["alarm"]["consistent"] is True
 
 
 def test_bridge_reads_only_ha_keys_from_shared_env(monkeypatch, tmp_path):
@@ -208,3 +214,37 @@ def test_light_control_posts_and_verifies_allowlisted_color(monkeypatch):
         assert "allowlisted" in str(exc)
     else:
         raise AssertionError("non-allowlisted light was accepted")
+
+
+def test_alarm_context_refuses_stale_or_inconsistent_state(monkeypatch):
+    clear_bridge_env(monkeypatch)
+    monkeypatch.setenv("HOME_ASSISTANT_URL", "http://ha.local:8123")
+    monkeypatch.setenv("HOME_ASSISTANT_TOKEN", "test-token")
+    monkeypatch.setenv(
+        "AMBIENT_GUARDIAN_HOME_ALARM_ENTITY",
+        "alarm_control_panel.panel_home_ralphi",
+    )
+
+    stale = (datetime.now(timezone.utc) - timedelta(minutes=10)).isoformat()
+
+    def fake_get(url, headers, timeout):
+        return FakeResponse(
+            {
+                "entity_id": "alarm_control_panel.panel_home_ralphi",
+                "state": "disarmed",
+                "attributes": {
+                    "raw_status": "armed_away",
+                    "arm_mode": "armed_away",
+                    "connection_unavailable": False,
+                    "is_in_alarm": False,
+                },
+                "last_updated": stale,
+            }
+        )
+
+    monkeypatch.setattr("ambient_guardian.home_assistant.httpx.get", fake_get)
+    context = HomeAssistantBridge().home_context()
+    assert context["alarm"]["fresh"] is False
+    assert context["alarm"]["consistent"] is False
+    assert context["alarm"]["confirmed_current"] is False
+    assert "not safe to claim" in context["detail"]
