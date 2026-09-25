@@ -492,44 +492,52 @@ def simulated_alexa_turn(
 
     dmx_request = parse_dmx_command(utterance, state)
     if dmx_request is not None:
+        power_result = None
         try:
             if dmx_request["kind"] == "scene":
-                dmx_result = state.dmx.apply_scene(str(dmx_request["scene"]))
-                subject = str(dmx_request["scene"]).replace("_", " ")
+                scene_name = str(dmx_request["scene"])
+                if scene_name != "blackout":
+                    power_result = state.home_assistant.ensure_dmx_power("todas")
+                dmx_result = state.dmx.apply_scene(scene_name)
+                subject = scene_name.replace("_", " ")
             else:
+                target = str(dmx_request["target"])
+                power_result = state.home_assistant.ensure_dmx_power(target)
                 dmx_result = state.dmx.apply_color(
                     str(dmx_request["color"]),
-                    target=str(dmx_request["target"]),
+                    target=target,
                     brightness=int(dmx_request["brightness"]),
                 )
-                subject = f'{dmx_request["target"]} {dmx_request["color"]}'
+                subject = f'{target} {dmx_request["color"]}'
             return {
                 "utterance": utterance,
                 "response": {
                     "answer": (
-                        f"The local DMX engine accepted {subject}. "
+                        f"The local DMX engine accepted {subject} after the fixture power preflight. "
                         "The command was sent through Art-Net; fixture light output is not sensor-verified."
                     ),
                     "status": "all_clear",
                     "reasoning_mode": "deterministic-local-dmx",
                 },
                 "prepared_action": None,
+                "dmx_power": power_result,
                 "dmx": dmx_result,
                 "evidence_count": len(state.evidence_snapshot()),
             }
-        except Exception:
+        except Exception as exc:
             return {
                 "utterance": utterance,
                 "response": {
                     "answer": (
-                        "I could not safely send that DMX command. "
-                        "No other physical action was taken."
+                        "I could not safely verify fixture power, so I did not send the DMX command."
                     ),
                     "status": "attention_required",
                     "reasoning_mode": "deterministic-local-dmx",
                 },
                 "prepared_action": None,
+                "dmx_power": power_result,
                 "dmx": None,
+                "dmx_error": type(exc).__name__,
                 "evidence_count": len(state.evidence_snapshot()),
             }
 
