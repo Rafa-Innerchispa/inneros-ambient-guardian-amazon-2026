@@ -12,7 +12,15 @@ from ambient_guardian import alexa_skill_gateway as gateway
 SKILL_ID = "amzn1.ask.skill.test-ambient-guardian"
 
 
-def request_payload(request):
+def request_payload(request, *, person=None):
+    system = {
+        "application": {"applicationId": SKILL_ID},
+        "user": {"userId": "test-user"},
+        "device": {"deviceId": "test-device", "supportedInterfaces": {}},
+        "apiEndpoint": "https://api.amazonalexa.com",
+    }
+    if person is not None:
+        system["person"] = person
     return {
         "version": "1.0",
         "session": {
@@ -21,14 +29,7 @@ def request_payload(request):
             "application": {"applicationId": SKILL_ID},
             "user": {"userId": "test-user"},
         },
-        "context": {
-            "System": {
-                "application": {"applicationId": SKILL_ID},
-                "user": {"userId": "test-user"},
-                "device": {"deviceId": "test-device", "supportedInterfaces": {}},
-                "apiEndpoint": "https://api.amazonalexa.com",
-            }
-        },
+        "context": {"System": system},
         "request": request,
     }
 
@@ -58,6 +59,24 @@ def intent_request(query="is everything okay at home"):
                     "confirmationStatus": "NONE",
                 }
             },
+        },
+    }
+
+
+def resumed_request(token, *, status="ACHIEVED", reason=None):
+    result = {"status": status}
+    if reason:
+        result["reason"] = reason
+    return {
+        "type": "SessionResumedRequest",
+        "requestId": "resume-1",
+        "timestamp": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
+        "locale": "en-US",
+        "cause": {
+            "type": "ConnectionCompleted",
+            "token": token,
+            "status": {"code": "200", "message": "done"},
+            "result": result,
         },
     }
 
@@ -124,6 +143,69 @@ def test_guardian_intent_calls_local_backend(monkeypatch):
     response = gateway._dispatch(request_payload(intent_request()))
     assert "Guardian answer for: is everything okay at home" in response["response"]["outputSpeech"]["text"]
     assert response["response"]["shouldEndSession"] is False
+
+
+def test_alarm_intent_requests_voice_pin_before_backend(monkeypatch):
+    called = []
+    monkeypatch.setattr(
+        gateway,
+        "_backend_turn",
+        lambda query, speaker_context=None: called.append(query) or "should not happen",
+    )
+    payload = request_payload(
+        intent_request("activa la alarma"),
+        person={
+            "personId": "person-owner",
+            "authenticationConfidenceLevel": {"level": 300},
+        },
+    )
+    response = gateway._dispatch(payload)
+    directive = response["response"]["directives"][0]
+    assert directive["uri"] == "connection://AMAZON.VerifyPerson/2"
+    assert directive["input"]["requestedAuthenticationConfidenceLevel"]["level"] == 400
+    assert directive["input"]["requestedAuthenticationConfidenceLevel"]["customPolicy"]["policyName"] == "VOICE_PIN"
+    assert called == []
+
+
+def test_successful_pin_resume_executes_bound_alarm_request(monkeypatch):
+    calls = []
+    monkeypatch.setattr(
+        gateway,
+        "_backend_turn",
+        lambda query, speaker_context=None: calls.append((query, speaker_context)) or "Alarm changed safely.",
+    )
+    token = gateway._pin_token("desactiva la alarma")
+    payload = request_payload(
+        resumed_request(token),
+        person={
+            "personId": "person-owner",
+            "authenticationConfidenceLevel": {"level": 400},
+        },
+    )
+    response = gateway._dispatch(payload)
+    assert response["response"]["outputSpeech"]["text"] == "Alarm changed safely."
+    assert calls[0][0] == "desactiva la alarma"
+    assert calls[0][1]["authentication_confidence"] == 400
+
+
+def test_failed_pin_resume_never_calls_backend(monkeypatch):
+    calls = []
+    monkeypatch.setattr(
+        gateway,
+        "_backend_turn",
+        lambda query, speaker_context=None: calls.append(query) or "unsafe",
+    )
+    token = gateway._pin_token("desactiva la alarma")
+    payload = request_payload(
+        resumed_request(token, status="NOT_ACHIEVED", reason="NOT_MATCH"),
+        person={
+            "personId": "person-owner",
+            "authenticationConfidenceLevel": {"level": 300},
+        },
+    )
+    response = gateway._dispatch(payload)
+    assert "no pude" in response["response"]["outputSpeech"]["text"].lower()
+    assert calls == []
 
 
 def test_backend_url_must_stay_loopback(monkeypatch):

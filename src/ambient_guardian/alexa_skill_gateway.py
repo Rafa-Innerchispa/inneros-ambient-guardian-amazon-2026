@@ -209,6 +209,91 @@ def _verify_request(headers: dict[str, str], body: bytes) -> dict[str, Any]:
     return payload
 
 
+def _alarm_query(query: str) -> bool:
+    text = " ".join((query or "").lower().split())
+    return bool(
+        re.search(
+            r"\b(?:alarma|alarm|security)\b.*\b(?:arma|armar|activa|activar|desarma|desarmar|desactiva|desactivar|arm|disarm|activate|deactivate)\b"
+            r"|\b(?:arma|armar|activa|activar|desarma|desarmar|desactiva|desactivar|arm|disarm|activate|deactivate)\b.*\b(?:alarma|alarm|security)\b",
+            text,
+        )
+    )
+
+
+def _pin_token(query: str) -> str:
+    raw = json.dumps({"query": query}, separators=(",", ":"), ensure_ascii=False).encode("utf-8")
+    return base64.urlsafe_b64encode(raw).decode("ascii").rstrip("=")
+
+
+def _query_from_pin_token(token: str) -> str:
+    token = (token or "").strip()
+    if not token or len(token) > 1200:
+        raise ValueError("invalid PIN continuation token")
+    padded = token + "=" * (-len(token) % 4)
+    payload = json.loads(base64.urlsafe_b64decode(padded.encode("ascii")).decode("utf-8"))
+    query = str(payload.get("query") or "").strip() if isinstance(payload, dict) else ""
+    if not query or len(query) > MAX_QUERY_CHARS or not _alarm_query(query):
+        raise ValueError("invalid alarm continuation")
+    return query
+
+
+def _pin_confirmation_response(query: str) -> dict[str, Any]:
+    return {
+        "version": "1.0",
+        "response": {
+            "directives": [
+                {
+                    "type": "Connections.StartConnection",
+                    "uri": "connection://AMAZON.VerifyPerson/2",
+                    "input": {
+                        "requestedAuthenticationConfidenceLevel": {
+                            "level": 400,
+                            "customPolicy": {"policyName": "VOICE_PIN"},
+                        }
+                    },
+                    "token": _pin_token(query),
+                }
+            ]
+        },
+    }
+
+
+def _resume_after_pin(payload: dict[str, Any]) -> dict[str, Any]:
+    request_payload = payload.get("request") or {}
+    cause = request_payload.get("cause") or {}
+    status = cause.get("status") or {}
+    result = cause.get("result") or {}
+    speaker = _speaker_context(payload)
+
+    if str(status.get("code") or "") != "200":
+        return _plain_response(
+            "No pude verificar tu identidad. No se realizó ninguna acción sobre la alarma.",
+            end_session=True,
+        )
+    if str(result.get("status") or "") != "ACHIEVED":
+        reason = str(result.get("reason") or "")
+        if reason in {"VERIFICATION_METHOD_NOT_SETUP", "PREREQUISITE_NOT_SETUP_ERROR"}:
+            speech = "No tienes configurado el PIN de perfil necesario para controlar la alarma."
+        elif reason == "METHOD_LOCKOUT":
+            speech = "La verificación por PIN está bloqueada temporalmente por demasiados intentos fallidos."
+        else:
+            speech = "No pude confirmar Voice ID y PIN. La alarma no cambió."
+        return _plain_response(speech, end_session=True)
+
+    if int(speaker.get("authentication_confidence") or 0) != 400:
+        return _plain_response(
+            "La verificación no alcanzó el nivel de seguridad requerido. La alarma no cambió.",
+            end_session=True,
+        )
+
+    try:
+        query = _query_from_pin_token(str(cause.get("token") or ""))
+        speech = _backend_turn(query, speaker)
+    except Exception:
+        speech = "La verificación terminó, pero no pude ejecutar de forma segura la solicitud de alarma."
+    return _plain_response(speech, end_session=True)
+
+
 def _plain_response(
     speech: str, *, reprompt: str | None = None, end_session: bool = False
 ) -> dict[str, Any]:
@@ -241,6 +326,8 @@ def _dispatch(payload: dict[str, Any]) -> dict[str, Any]:
         )
     if request_type == "SessionEndedRequest":
         return _plain_response("", end_session=True)
+    if request_type == "SessionResumedRequest":
+        return _resume_after_pin(payload)
     if request_type != "IntentRequest":
         return _plain_response(
             "I cannot handle that Alexa request. No action was taken.",
@@ -250,8 +337,11 @@ def _dispatch(payload: dict[str, Any]) -> dict[str, Any]:
     intent_name = str(((request_payload.get("intent") or {}).get("name") or ""))
     if intent_name == "AskGuardianIntent":
         query = _slot_value(request_payload, "query")
+        speaker = _speaker_context(payload)
+        if _alarm_query(query) and int(speaker.get("authentication_confidence") or 0) < 400:
+            return _pin_confirmation_response(query)
         try:
-            speech = _backend_turn(query, _speaker_context(payload))
+            speech = _backend_turn(query, speaker)
         except ValueError:
             speech = "Please ask a specific question about the home."
         except Exception:
