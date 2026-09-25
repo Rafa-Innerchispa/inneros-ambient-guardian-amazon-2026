@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import os
 from dataclasses import dataclass
 from pathlib import Path
@@ -135,6 +136,28 @@ class HomeAssistantBridge:
         self.alarm_disarm_allowlist = {
             item.strip() for item in raw_disarm_allowlist.split(",") if item.strip()
         }
+        self.dmx_power_preflight_enabled = os.getenv(
+            "AMBIENT_GUARDIAN_DMX_POWER_PREFLIGHT_ENABLED", "0"
+        ) == "1"
+        raw_power_map = os.getenv("AMBIENT_GUARDIAN_DMX_POWER_MAP", "").strip()
+        self.dmx_power_map: dict[str, list[str]] = {}
+        if raw_power_map:
+            try:
+                parsed = json.loads(raw_power_map)
+            except json.JSONDecodeError as exc:
+                raise ValueError("AMBIENT_GUARDIAN_DMX_POWER_MAP must be valid JSON") from exc
+            if not isinstance(parsed, dict):
+                raise ValueError("AMBIENT_GUARDIAN_DMX_POWER_MAP must be an object")
+            for target, entities in parsed.items():
+                if not isinstance(target, str) or not isinstance(entities, list):
+                    raise ValueError("DMX power map entries must be target -> list")
+                normalized = []
+                for entity_id in entities:
+                    entity_id = str(entity_id).strip()
+                    if not entity_id.startswith("switch."):
+                        raise ValueError("DMX power entities must be Home Assistant switches")
+                    normalized.append(entity_id)
+                self.dmx_power_map[target.strip()] = normalized
 
     @property
     def configured(self) -> bool:
@@ -448,4 +471,59 @@ class HomeAssistantBridge:
             "accepted": verified,
             "verified": verified,
             "observed": observed,
+        }
+
+
+    def ensure_dmx_power(self, target: str) -> dict[str, Any]:
+        """Verify and, when needed, energize mapped DMX fixture power before Art-Net."""
+        target = (target or "").strip()
+        if not self.dmx_power_preflight_enabled:
+            return {
+                "ok": True,
+                "enabled": False,
+                "target": target,
+                "status": "preflight_disabled",
+                "entities": [],
+            }
+
+        entities = list(self.dmx_power_map.get(target) or [])
+        if not entities and target != "todas":
+            entities = list(self.dmx_power_map.get("todas") or [])
+        if not entities:
+            raise PermissionError(f"DMX power mapping missing for target: {target}")
+
+        results = []
+        for entity_id in entities:
+            before = self.get_entity_state(entity_id)
+            before_state = str(before.get("state") or "")
+            if before_state in {"unavailable", "unknown", ""}:
+                raise RuntimeError(f"DMX power entity unavailable: {entity_id}")
+            changed = False
+            if before_state != "on":
+                response = httpx.post(
+                    f"{self.url}/api/services/switch/turn_on",
+                    headers=self._headers(),
+                    json={"entity_id": entity_id},
+                    timeout=self.timeout,
+                )
+                response.raise_for_status()
+                changed = True
+            after = self.get_entity_state(entity_id)
+            if str(after.get("state") or "") != "on":
+                raise RuntimeError(f"DMX power could not be verified on: {entity_id}")
+            results.append(
+                {
+                    "entity_id": entity_id,
+                    "before": before_state,
+                    "changed": changed,
+                    "after": "on",
+                    "verified": True,
+                }
+            )
+        return {
+            "ok": True,
+            "enabled": True,
+            "target": target,
+            "status": "power_verified",
+            "entities": results,
         }

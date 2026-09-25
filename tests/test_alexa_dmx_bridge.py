@@ -53,6 +53,15 @@ class StubHA:
     def home_context(self):
         return {"configured": True, "reachable": True, "alarm": None, "detail": "stub"}
 
+    def ensure_dmx_power(self, target):
+        return {
+            "ok": True,
+            "enabled": False,
+            "target": target,
+            "status": "preflight_disabled",
+            "entities": [],
+        }
+
 
 class StubDMX:
     enabled = True
@@ -105,4 +114,30 @@ def test_alexa_turn_executes_dmx_without_claiming_physical_verification():
     assert result["prepared_action"] is None
     assert result["dmx"]["engine_accepted"] is True
     assert result["dmx"]["physical_verification"] is False
+    assert result["dmx_power"]["target"] == "beams"
     assert "accepted" in result["response"]["answer"].lower()
+
+
+def test_dmx_power_preflight_blocks_artnet_when_power_unverified():
+    class FailingHA(StubHA):
+        def ensure_dmx_power(self, target):
+            raise RuntimeError("fixture power unavailable")
+
+    state = _state()
+    state.home_assistant = FailingHA()
+    result = simulated_alexa_turn("pon los tachos rojos", state, GuardianReasoner())
+    assert result["dmx"] is None
+    assert result["dmx_error"] == "RuntimeError"
+    assert "did not send" in result["response"]["answer"].lower()
+
+
+def test_blackout_does_not_power_on_fixtures():
+    class NoPowerHA(StubHA):
+        def ensure_dmx_power(self, target):
+            raise AssertionError("blackout must not energize fixture power")
+
+    state = _state()
+    state.home_assistant = NoPowerHA()
+    result = simulated_alexa_turn("activa blackout", state, GuardianReasoner())
+    assert result["dmx"]["scene"] == "blackout"
+    assert result["dmx_power"] is None
