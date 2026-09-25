@@ -31,7 +31,11 @@ _ALARM_ARM = re.compile(
 )
 
 
-def _owner_speaker_authorized(speaker_context: dict[str, Any] | None) -> tuple[bool, str]:
+def _owner_speaker_authorized(
+    speaker_context: dict[str, Any] | None,
+    *,
+    require_pin: bool = True,
+) -> tuple[bool, str]:
     expected = os.getenv("AMBIENT_GUARDIAN_OWNER_PERSON_ID", "").strip()
     if not expected:
         return False, "owner_voice_not_enrolled"
@@ -42,7 +46,10 @@ def _owner_speaker_authorized(speaker_context: dict[str, Any] | None) -> tuple[b
         return False, "speaker_not_recognized"
     if person_id != expected:
         return False, "speaker_not_owner"
-    return True, "owner_voice_recognized"
+    confidence = int(speaker_context.get("authentication_confidence") or 0)
+    if require_pin and confidence != 400:
+        return False, "voice_pin_level_400_required"
+    return True, "owner_voice_and_pin_verified" if require_pin else "owner_voice_recognized"
 
 
 def parse_alarm_arm_command(utterance: str, state: GuardianState) -> dict[str, Any] | None:
@@ -57,6 +64,21 @@ def parse_alarm_arm_command(utterance: str, state: GuardianState) -> dict[str, A
         not bridge.alarm_arm_enabled
         or not entity_id
         or entity_id not in bridge.alarm_arm_allowlist
+    ):
+        return None
+    return {"entity_id": entity_id}
+
+
+def parse_alarm_disarm_command(utterance: str, state: GuardianState) -> dict[str, Any] | None:
+    text = " ".join(utterance.strip().split())
+    if not text or not _ALARM_DISARM_ATTEMPT.search(text):
+        return None
+    bridge = state.home_assistant
+    entity_id = bridge.alarm_entity
+    if (
+        not bridge.alarm_disarm_enabled
+        or not entity_id
+        or entity_id not in bridge.alarm_disarm_allowlist
     ):
         return None
     return {"entity_id": entity_id}
@@ -343,29 +365,85 @@ def simulated_alexa_turn(
     status = state.guardian_status()
     events = state.recent_events(8)
 
+    disarm_request = parse_alarm_disarm_command(utterance, state)
     if is_alarm_disarm_attempt(utterance):
-        return {
-            "utterance": utterance,
-            "response": {
-                "answer": "Disarming the Intelbras alarm by Alexa is disabled.",
-                "status": "attention_required",
-                "reasoning_mode": "deterministic-owner-alarm-policy",
-            },
-            "prepared_action": None,
-            "alarm": {"status": "disarm_disabled", "executed": False},
-            "evidence_count": len(state.evidence_snapshot()),
-        }
+        if disarm_request is None:
+            return {
+                "utterance": utterance,
+                "response": {
+                    "answer": "Disarming the Intelbras alarm is not enabled for this panel.",
+                    "status": "attention_required",
+                    "reasoning_mode": "deterministic-owner-alarm-policy",
+                },
+                "prepared_action": None,
+                "alarm": {"status": "disarm_disabled", "executed": False},
+                "evidence_count": len(state.evidence_snapshot()),
+            }
+        authorized, auth_reason = _owner_speaker_authorized(
+            speaker_context,
+            require_pin=True,
+        )
+        if not authorized:
+            return {
+                "utterance": utterance,
+                "response": {
+                    "answer": "I will not disarm the Intelbras alarm without the enrolled owner Voice ID and profile PIN.",
+                    "status": "attention_required",
+                    "reasoning_mode": "deterministic-owner-alarm-policy",
+                },
+                "prepared_action": None,
+                "alarm": {
+                    "status": "speaker_authorization_failed",
+                    "reason": auth_reason,
+                    "executed": False,
+                },
+                "evidence_count": len(state.evidence_snapshot()),
+            }
+        try:
+            alarm_result = state.home_assistant.disarm_alarm(
+                str(disarm_request["entity_id"])
+            )
+            return {
+                "utterance": utterance,
+                "response": {
+                    "answer": (
+                        "The Intelbras alarm is disarmed and Home Assistant verified it."
+                        if alarm_result.get("verified")
+                        else "The disarm request was sent, but I could not verify the final state."
+                    ),
+                    "status": "all_clear" if alarm_result.get("verified") else "attention_required",
+                    "reasoning_mode": "deterministic-owner-alarm-policy",
+                },
+                "prepared_action": None,
+                "alarm": alarm_result,
+                "evidence_count": len(state.evidence_snapshot()),
+            }
+        except Exception:
+            return {
+                "utterance": utterance,
+                "response": {
+                    "answer": "I could not safely disarm the Intelbras alarm.",
+                    "status": "attention_required",
+                    "reasoning_mode": "deterministic-owner-alarm-policy",
+                },
+                "prepared_action": None,
+                "alarm": {"status": "disarm_failed", "executed": False},
+                "evidence_count": len(state.evidence_snapshot()),
+            }
 
     alarm_request = parse_alarm_arm_command(utterance, state)
     if alarm_request is not None:
-        authorized, auth_reason = _owner_speaker_authorized(speaker_context)
+        authorized, auth_reason = _owner_speaker_authorized(
+            speaker_context,
+            require_pin=True,
+        )
         if not authorized:
             return {
                 "utterance": utterance,
                 "response": {
                     "answer": (
-                        "I will not arm the Intelbras alarm because the owner voice "
-                        "was not securely recognized. No alarm action was taken."
+                        "I will not arm the Intelbras alarm without the enrolled owner Voice ID and profile PIN. "
+                        "No alarm action was taken."
                     ),
                     "status": "attention_required",
                     "reasoning_mode": "deterministic-owner-alarm-policy",

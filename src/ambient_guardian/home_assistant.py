@@ -19,6 +19,8 @@ class HomeAssistantStatus:
     light_allowlist: list[str]
     alarm_arm_enabled: bool
     alarm_arm_allowlist: list[str]
+    alarm_disarm_enabled: bool
+    alarm_disarm_allowlist: list[str]
     detail: str
 
     def as_dict(self) -> dict[str, Any]:
@@ -32,6 +34,8 @@ class HomeAssistantStatus:
             "light_allowlist": list(self.light_allowlist),
             "alarm_arm_enabled": self.alarm_arm_enabled,
             "alarm_arm_allowlist": list(self.alarm_arm_allowlist),
+            "alarm_disarm_enabled": self.alarm_disarm_enabled,
+            "alarm_disarm_allowlist": list(self.alarm_disarm_allowlist),
             "detail": self.detail,
         }
 
@@ -122,6 +126,15 @@ class HomeAssistantBridge:
         self.alarm_arm_allowlist = {
             item.strip() for item in raw_alarm_allowlist.split(",") if item.strip()
         }
+        self.alarm_disarm_enabled = os.getenv(
+            "AMBIENT_GUARDIAN_ALARM_DISARM_ENABLED", "0"
+        ) == "1"
+        raw_disarm_allowlist = os.getenv(
+            "AMBIENT_GUARDIAN_ALARM_DISARM_ALLOWLIST", ""
+        )
+        self.alarm_disarm_allowlist = {
+            item.strip() for item in raw_disarm_allowlist.split(",") if item.strip()
+        }
 
     @property
     def configured(self) -> bool:
@@ -201,6 +214,8 @@ class HomeAssistantBridge:
             light_allowlist=sorted(self.light_allowlist),
             alarm_arm_enabled=self.alarm_arm_enabled,
             alarm_arm_allowlist=sorted(self.alarm_arm_allowlist),
+            alarm_disarm_enabled=self.alarm_disarm_enabled,
+            alarm_disarm_allowlist=sorted(self.alarm_disarm_allowlist),
             detail=str(context.get("detail", "")),
         )
 
@@ -391,6 +406,46 @@ class HomeAssistantBridge:
             ),
             "entity_id": entity_id,
             "accepted": accepted,
+            "verified": verified,
+            "observed": observed,
+        }
+
+
+    def disarm_alarm(self, entity_id: str) -> dict[str, Any]:
+        """Disarm one explicitly allowlisted alarm panel after upstream level-400 verification."""
+        entity_id = entity_id.strip()
+        if not self.configured:
+            raise RuntimeError("Home Assistant bridge is not configured")
+        if not self.alarm_disarm_enabled:
+            raise PermissionError("Alarm disarming is disabled")
+        if entity_id not in self.alarm_disarm_allowlist:
+            raise PermissionError("Alarm entity is not allowlisted for disarming")
+        if not entity_id.startswith("alarm_control_panel."):
+            raise ValueError("entity_id must be a Home Assistant alarm panel")
+
+        before = self.get_entity_state(entity_id)
+        if before.get("state") == "disarmed":
+            return {
+                "status": "already_disarmed",
+                "entity_id": entity_id,
+                "accepted": True,
+                "verified": True,
+                "observed": before,
+            }
+
+        response = httpx.post(
+            f"{self.url}/api/services/alarm_control_panel/alarm_disarm",
+            headers=self._headers(),
+            json={"entity_id": entity_id},
+            timeout=self.timeout,
+        )
+        response.raise_for_status()
+        observed = self.get_entity_state(entity_id)
+        verified = observed.get("state") == "disarmed"
+        return {
+            "status": "disarmed_and_verified" if verified else "executed_unverified",
+            "entity_id": entity_id,
+            "accepted": verified,
             "verified": verified,
             "observed": observed,
         }

@@ -1,13 +1,13 @@
-import os
-
 from ambient_guardian.core import GuardianReasoner, GuardianState
 from ambient_guardian.orchestration import simulated_alexa_turn
 
 
 class StubAlarmBridge:
     alarm_arm_enabled = True
+    alarm_disarm_enabled = True
     alarm_entity = "alarm_control_panel.panel_home_ralphi_panel_home_ralphi"
     alarm_arm_allowlist = {alarm_entity}
+    alarm_disarm_allowlist = {alarm_entity}
     light_control_enabled = False
     light_allowlist = set()
 
@@ -29,6 +29,16 @@ class StubAlarmBridge:
             "observed": {"state": "arming"},
         }
 
+    def disarm_alarm(self, entity_id):
+        assert entity_id == self.alarm_entity
+        return {
+            "status": "disarmed_and_verified",
+            "entity_id": entity_id,
+            "accepted": True,
+            "verified": True,
+            "observed": {"state": "disarmed"},
+        }
+
 
 class StubDMX:
     enabled = False
@@ -43,7 +53,7 @@ def _state():
     return state
 
 
-def test_owner_voice_can_arm_but_not_disarm(monkeypatch):
+def test_owner_voice_without_pin_cannot_arm(monkeypatch):
     monkeypatch.setenv("AMBIENT_GUARDIAN_OWNER_PERSON_ID", "person-owner")
     result = simulated_alexa_turn(
         "activa la alarma",
@@ -51,34 +61,49 @@ def test_owner_voice_can_arm_but_not_disarm(monkeypatch):
         GuardianReasoner(),
         speaker_context={"person_id": "person-owner", "authentication_confidence": 300},
     )
-    assert result["alarm"]["accepted"] is True
-    assert result["alarm"]["observed"]["state"] == "arming"
+    assert result["alarm"]["status"] == "speaker_authorization_failed"
+    assert result["alarm"]["reason"] == "voice_pin_level_400_required"
 
-    blocked = simulated_alexa_turn(
+
+def test_owner_voice_and_pin_can_arm_and_disarm(monkeypatch):
+    monkeypatch.setenv("AMBIENT_GUARDIAN_OWNER_PERSON_ID", "person-owner")
+    speaker = {"person_id": "person-owner", "authentication_confidence": 400}
+
+    armed = simulated_alexa_turn(
+        "activa la alarma",
+        _state(),
+        GuardianReasoner(),
+        speaker_context=speaker,
+    )
+    assert armed["alarm"]["accepted"] is True
+    assert armed["alarm"]["observed"]["state"] == "arming"
+
+    disarmed = simulated_alexa_turn(
         "desactiva la alarma",
         _state(),
         GuardianReasoner(),
-        speaker_context={"person_id": "person-owner", "authentication_confidence": 400},
+        speaker_context=speaker,
     )
-    assert blocked["alarm"]["status"] == "disarm_disabled"
-    assert blocked["alarm"]["executed"] is False
+    assert disarmed["alarm"]["verified"] is True
+    assert disarmed["alarm"]["observed"]["state"] == "disarmed"
 
 
-def test_unrecognized_or_wrong_speaker_cannot_arm(monkeypatch):
+def test_wrong_or_unrecognized_speaker_cannot_arm_or_disarm(monkeypatch):
     monkeypatch.setenv("AMBIENT_GUARDIAN_OWNER_PERSON_ID", "person-owner")
 
-    missing = simulated_alexa_turn(
-        "arm the alarm",
-        _state(),
-        GuardianReasoner(),
-        speaker_context={},
-    )
-    assert missing["alarm"]["status"] == "speaker_authorization_failed"
+    for utterance in ("arm the alarm", "disarm the alarm"):
+        missing = simulated_alexa_turn(
+            utterance,
+            _state(),
+            GuardianReasoner(),
+            speaker_context={},
+        )
+        assert missing["alarm"]["status"] == "speaker_authorization_failed"
 
-    wrong = simulated_alexa_turn(
-        "arm the alarm",
-        _state(),
-        GuardianReasoner(),
-        speaker_context={"person_id": "person-other", "authentication_confidence": 300},
-    )
-    assert wrong["alarm"]["status"] == "speaker_authorization_failed"
+        wrong = simulated_alexa_turn(
+            utterance,
+            _state(),
+            GuardianReasoner(),
+            speaker_context={"person_id": "person-other", "authentication_confidence": 400},
+        )
+        assert wrong["alarm"]["status"] == "speaker_authorization_failed"
