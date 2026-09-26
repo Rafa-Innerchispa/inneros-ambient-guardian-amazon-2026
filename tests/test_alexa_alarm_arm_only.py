@@ -10,6 +10,9 @@ class StubAlarmBridge:
     alarm_disarm_allowlist = {alarm_entity}
     light_control_enabled = False
     light_allowlist = set()
+    panic_enabled = True
+    panic_audible_button = "button.panel_home_ralphi_panico_audivel"
+    panic_stop_button = "button.panel_home_ralphi_desligar_sirene"
 
     def home_context(self):
         return {
@@ -45,6 +48,24 @@ class StubAlarmBridge:
             "accepted": True,
             "verified": True,
             "observed": {"state": "disarmed"},
+        }
+
+    def trigger_audible_panic(self):
+        return {
+            "status": "panic_triggered_and_verified",
+            "button_entity": self.panic_audible_button,
+            "accepted": True,
+            "verified": True,
+            "observed": {"state": "triggered", "triggered": True},
+        }
+
+    def stop_audible_siren(self):
+        return {
+            "status": "siren_stopped_and_verified",
+            "button_entity": self.panic_stop_button,
+            "accepted": True,
+            "verified": True,
+            "observed": {"state": "disarmed", "triggered": False},
         }
 
 
@@ -163,3 +184,39 @@ def test_alarm_status_question_does_not_arm(monkeypatch):
     )
     assert "armada" in result["response"]["answer"].lower()
     assert result["alarm"]["state"] == "armed_away"
+
+
+def test_siren_requires_owner_voice_and_pin(monkeypatch):
+    monkeypatch.setenv("AMBIENT_GUARDIAN_OWNER_PERSON_ID", "person-owner")
+    result = simulated_alexa_turn(
+        "activa la sirena",
+        _state(),
+        GuardianReasoner(),
+        speaker_context={"person_id": "person-owner", "authentication_confidence": 300},
+    )
+    assert result["panic"]["status"] == "speaker_authorization_failed"
+    assert result["panic"]["executed"] is False
+
+
+def test_owner_voice_and_pin_can_activate_and_stop_siren(monkeypatch):
+    monkeypatch.setenv("AMBIENT_GUARDIAN_OWNER_PERSON_ID", "person-owner")
+    speaker = {"person_id": "person-owner", "authentication_confidence": 400}
+
+    activated = simulated_alexa_turn(
+        "activa la sirena",
+        _state(),
+        GuardianReasoner(),
+        speaker_context=speaker,
+    )
+    assert activated["panic"]["verified"] is True
+    assert activated["panic"]["button_entity"].endswith("panico_audivel")
+    assert "activada" in activated["response"]["answer"].lower()
+
+    stopped = simulated_alexa_turn(
+        "apaga la sirena",
+        _state(),
+        GuardianReasoner(),
+        speaker_context=speaker,
+    )
+    assert stopped["panic"]["verified"] is True
+    assert stopped["panic"]["button_entity"].endswith("desligar_sirene")

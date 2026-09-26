@@ -141,3 +141,33 @@ For disarm:
 Alexa should then ask for the **Alexa profile PIN**. That PIN belongs to the
 owner's Alexa profile; it is not an Intelbras code and is never stored by
 Ambient Guardian.
+
+
+## Intelbras audible panic siren
+
+Ambient Guardian supports a dedicated owner-only panic action using the real
+Home Assistant Intelbras button:
+
+- audible panic: `button.panel_home_ralphi_panico_audivel`
+- stop siren: `button.panel_home_ralphi_desligar_sirene`
+
+The silent panic button is intentionally **not** connected to conversational
+Alexa commands.
+
+Supported owner phrases inside the skill include:
+
+- `activa la sirena`
+- `dispara la sirena`
+- `apaga la sirena`
+
+Every siren action follows the same security gate as Intelbras arm/disarm:
+
+1. recognized enrolled owner `personId`
+2. Alexa Voice ID
+3. Alexa profile PIN / authentication confidence level 400
+4. exact Home Assistant button allowlist
+5. post-action verification against the Intelbras alarm panel
+   (`is_in_alarm`, `is_triggered`, and panel state)
+
+A successful Home Assistant HTTP response alone is never described as a
+verified physical siren activation.

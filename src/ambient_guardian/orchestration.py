@@ -29,6 +29,17 @@ _ALARM_ARM = re.compile(
     r"|\b(?:alarma|alarm|security)\b[^.]*\b(?:activa|activar|arma|armar|arm|activate|turn\s+on)\b",
     re.I,
 )
+_SIREN_ACTIVATE = re.compile(
+    r"\b(?:activa|activar|enciende|encender|dispara|disparar|trigger|start)\b[^.]*\b(?:sirena|siren|pánico audible|panico audible|panic alarm)\b"
+    r"|\b(?:sirena|siren|pánico audible|panico audible|panic alarm)\b[^.]*\b(?:activa|activar|enciende|encender|dispara|disparar|trigger|start)\b",
+    re.I,
+)
+_SIREN_STOP = re.compile(
+    r"\b(?:apaga|apagar|deten|detener|silencia|silenciar|stop|turn off)\b[^.]*\b(?:sirena|siren)\b"
+    r"|\b(?:sirena|siren)\b[^.]*\b(?:apaga|apagar|deten|detener|silencia|silenciar|stop|turn off)\b",
+    re.I,
+)
+
 _ALARM_STATUS_QUERY = re.compile(
     r"\b(?:estado|status)\b[^.]*\b(?:alarma|alarm|security)\b"
     r"|\b(?:como|cómo)\s+(?:esta|está)\b[^.]*\b(?:alarma|alarm)\b"
@@ -75,6 +86,17 @@ def parse_alarm_arm_command(utterance: str, state: GuardianState) -> dict[str, A
     ):
         return None
     return {"entity_id": entity_id}
+
+
+def parse_siren_command(utterance: str) -> dict[str, str] | None:
+    text = " ".join(utterance.strip().split())
+    if not text:
+        return None
+    if _SIREN_STOP.search(text):
+        return {"kind": "stop"}
+    if _SIREN_ACTIVATE.search(text):
+        return {"kind": "activate"}
+    return None
 
 
 def parse_alarm_disarm_command(utterance: str, state: GuardianState) -> dict[str, Any] | None:
@@ -412,6 +434,71 @@ def simulated_alexa_turn(
     events = state.recent_events(8)
 
     normalized_utterance = " ".join(utterance.strip().split())
+
+    siren_request = parse_siren_command(normalized_utterance)
+    if siren_request is not None:
+        authorized, auth_reason = _owner_speaker_authorized(
+            speaker_context,
+            require_pin=True,
+        )
+        if not authorized:
+            return {
+                "utterance": utterance,
+                "response": {
+                    "answer": (
+                        "No ejecutaré la sirena sin el Voice ID del propietario "
+                        "y el PIN de perfil de Alexa."
+                    ),
+                    "status": "attention_required",
+                    "reasoning_mode": "deterministic-owner-panic-policy",
+                },
+                "prepared_action": None,
+                "panic": {
+                    "status": "speaker_authorization_failed",
+                    "reason": auth_reason,
+                    "executed": False,
+                },
+                "evidence_count": len(state.evidence_snapshot()),
+            }
+        try:
+            if siren_request["kind"] == "activate":
+                panic_result = state.home_assistant.trigger_audible_panic()
+                answer = (
+                    "La sirena Intelbras fue activada y el panel confirmó el estado de alarma."
+                    if panic_result.get("verified")
+                    else "Envié la orden de pánico audible, pero el panel no confirmó el disparo."
+                )
+            else:
+                panic_result = state.home_assistant.stop_audible_siren()
+                answer = (
+                    "La sirena Intelbras fue detenida y el panel confirmó que ya no está disparada."
+                    if panic_result.get("verified")
+                    else "Envié la orden para detener la sirena, pero no pude verificar el estado final."
+                )
+            return {
+                "utterance": utterance,
+                "response": {
+                    "answer": answer,
+                    "status": "all_clear" if panic_result.get("verified") else "attention_required",
+                    "reasoning_mode": "deterministic-owner-panic-policy",
+                },
+                "prepared_action": None,
+                "panic": panic_result,
+                "evidence_count": len(state.evidence_snapshot()),
+            }
+        except Exception:
+            return {
+                "utterance": utterance,
+                "response": {
+                    "answer": "No pude ejecutar de forma segura la acción de sirena.",
+                    "status": "attention_required",
+                    "reasoning_mode": "deterministic-owner-panic-policy",
+                },
+                "prepared_action": None,
+                "panic": {"status": "panic_action_failed", "executed": False},
+                "evidence_count": len(state.evidence_snapshot()),
+            }
+
     if _ALARM_STATUS_QUERY.search(normalized_utterance):
         return {
             "utterance": utterance,

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import os
+import time
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
@@ -23,6 +24,9 @@ class HomeAssistantStatus:
     alarm_arm_allowlist: list[str]
     alarm_disarm_enabled: bool
     alarm_disarm_allowlist: list[str]
+    panic_enabled: bool
+    panic_audible_button: str | None
+    panic_stop_button: str | None
     detail: str
 
     def as_dict(self) -> dict[str, Any]:
@@ -38,6 +42,9 @@ class HomeAssistantStatus:
             "alarm_arm_allowlist": list(self.alarm_arm_allowlist),
             "alarm_disarm_enabled": self.alarm_disarm_enabled,
             "alarm_disarm_allowlist": list(self.alarm_disarm_allowlist),
+            "panic_enabled": self.panic_enabled,
+            "panic_audible_button": self.panic_audible_button,
+            "panic_stop_button": self.panic_stop_button,
             "detail": self.detail,
         }
 
@@ -137,6 +144,17 @@ class HomeAssistantBridge:
         self.alarm_disarm_allowlist = {
             item.strip() for item in raw_disarm_allowlist.split(",") if item.strip()
         }
+        self.panic_enabled = os.getenv(
+            "AMBIENT_GUARDIAN_PANIC_ENABLED", "0"
+        ) == "1"
+        self.panic_audible_button = (
+            os.getenv("AMBIENT_GUARDIAN_PANIC_AUDIBLE_BUTTON", "").strip()
+            or None
+        )
+        self.panic_stop_button = (
+            os.getenv("AMBIENT_GUARDIAN_PANIC_STOP_BUTTON", "").strip()
+            or None
+        )
         self.dmx_power_preflight_enabled = os.getenv(
             "AMBIENT_GUARDIAN_DMX_POWER_PREFLIGHT_ENABLED", "0"
         ) == "1"
@@ -281,6 +299,9 @@ class HomeAssistantBridge:
             alarm_arm_allowlist=sorted(self.alarm_arm_allowlist),
             alarm_disarm_enabled=self.alarm_disarm_enabled,
             alarm_disarm_allowlist=sorted(self.alarm_disarm_allowlist),
+            panic_enabled=self.panic_enabled,
+            panic_audible_button=self.panic_audible_button,
+            panic_stop_button=self.panic_stop_button,
             detail=str(context.get("detail", "")),
         )
 
@@ -568,4 +589,108 @@ class HomeAssistantBridge:
             "target": target,
             "status": "power_verified",
             "entities": results,
+        }
+
+
+    def _press_button(self, entity_id: str) -> None:
+        entity_id = entity_id.strip()
+        if not entity_id.startswith("button."):
+            raise ValueError("panic action entity must be a Home Assistant button")
+        response = httpx.post(
+            f"{self.url}/api/services/button/press",
+            headers=self._headers(),
+            json={"entity_id": entity_id},
+            timeout=self.timeout,
+        )
+        response.raise_for_status()
+
+    def _alarm_trigger_snapshot(self) -> dict[str, Any]:
+        if not self.alarm_entity:
+            raise RuntimeError("alarm entity is not configured")
+        observed = self.get_entity_state(self.alarm_entity)
+        attributes = observed.get("attributes") or {}
+        triggered = bool(
+            observed.get("state") == "triggered"
+            or attributes.get("is_in_alarm")
+            or attributes.get("is_triggered")
+        )
+        return {
+            "entity_id": observed.get("entity_id"),
+            "state": observed.get("state"),
+            "triggered": triggered,
+            "is_in_alarm": bool(attributes.get("is_in_alarm")),
+            "is_triggered": bool(attributes.get("is_triggered")),
+            "last_trigger_time": attributes.get("last_trigger_time"),
+            "last_trigger_zone": attributes.get("last_trigger_zone"),
+            "last_trigger_zones": attributes.get("last_trigger_zones") or [],
+            "raw_status": attributes.get("raw_status"),
+            "arm_mode": attributes.get("arm_mode"),
+        }
+
+    def trigger_audible_panic(self) -> dict[str, Any]:
+        """Trigger only the explicitly configured audible Intelbras panic button."""
+        if not self.configured:
+            raise RuntimeError("Home Assistant bridge is not configured")
+        if not self.panic_enabled:
+            raise PermissionError("Audible panic control is disabled")
+        if not self.panic_audible_button:
+            raise PermissionError("Audible panic button is not configured")
+
+        before = self._alarm_trigger_snapshot()
+        self._press_button(self.panic_audible_button)
+
+        observed = before
+        verified = False
+        for _ in range(4):
+            time.sleep(0.35)
+            observed = self._alarm_trigger_snapshot()
+            if observed.get("triggered"):
+                verified = True
+                break
+
+        return {
+            "status": (
+                "panic_triggered_and_verified"
+                if verified
+                else "panic_command_sent_unverified"
+            ),
+            "button_entity": self.panic_audible_button,
+            "accepted": True,
+            "verified": verified,
+            "before": before,
+            "observed": observed,
+        }
+
+    def stop_audible_siren(self) -> dict[str, Any]:
+        """Stop the local Intelbras siren using only the configured stop button."""
+        if not self.configured:
+            raise RuntimeError("Home Assistant bridge is not configured")
+        if not self.panic_enabled:
+            raise PermissionError("Audible panic control is disabled")
+        if not self.panic_stop_button:
+            raise PermissionError("Siren stop button is not configured")
+
+        before = self._alarm_trigger_snapshot()
+        self._press_button(self.panic_stop_button)
+
+        observed = before
+        verified = False
+        for _ in range(4):
+            time.sleep(0.35)
+            observed = self._alarm_trigger_snapshot()
+            if not observed.get("triggered"):
+                verified = True
+                break
+
+        return {
+            "status": (
+                "siren_stopped_and_verified"
+                if verified
+                else "siren_stop_sent_unverified"
+            ),
+            "button_entity": self.panic_stop_button,
+            "accepted": True,
+            "verified": verified,
+            "before": before,
+            "observed": observed,
         }

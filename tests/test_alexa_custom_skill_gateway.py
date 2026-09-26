@@ -215,3 +215,45 @@ def test_backend_url_must_stay_loopback(monkeypatch):
     )
     with pytest.raises(RuntimeError, match="loopback-only"):
         gateway._backend_url()
+
+
+def test_siren_intent_requests_voice_pin_before_backend(monkeypatch):
+    called = []
+    monkeypatch.setattr(
+        gateway,
+        "_backend_turn",
+        lambda query, speaker_context=None: called.append(query) or "unsafe",
+    )
+    payload = request_payload(
+        intent_request("activa la sirena"),
+        person={
+            "personId": "person-owner",
+            "authenticationConfidenceLevel": {"level": 300},
+        },
+    )
+    response = gateway._dispatch(payload)
+    directive = response["response"]["directives"][0]
+    assert directive["uri"] == "connection://AMAZON.VerifyPerson/2"
+    assert directive["input"]["requestedAuthenticationConfidenceLevel"]["level"] == 400
+    assert called == []
+
+
+def test_successful_pin_resume_executes_bound_siren_request(monkeypatch):
+    calls = []
+    monkeypatch.setattr(
+        gateway,
+        "_backend_turn",
+        lambda query, speaker_context=None: calls.append((query, speaker_context)) or "Siren changed safely.",
+    )
+    token = gateway._pin_token("activa la sirena")
+    payload = request_payload(
+        resumed_request(token),
+        person={
+            "personId": "person-owner",
+            "authenticationConfidenceLevel": {"level": 400},
+        },
+    )
+    response = gateway._dispatch(payload)
+    assert response["response"]["outputSpeech"]["text"] == "Siren changed safely."
+    assert calls[0][0] == "activa la sirena"
+    assert calls[0][1]["authentication_confidence"] == 400
