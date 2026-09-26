@@ -24,6 +24,9 @@ def clear_bridge_env(monkeypatch):
         "AMBIENT_GUARDIAN_ALEXA_NOTIFY_ALLOWLIST",
         "AMBIENT_GUARDIAN_LIGHT_CONTROL_ENABLED",
         "AMBIENT_GUARDIAN_LIGHT_ALLOWLIST",
+        "AMBIENT_GUARDIAN_PANIC_ENABLED",
+        "AMBIENT_GUARDIAN_PANIC_AUDIBLE_BUTTON",
+        "AMBIENT_GUARDIAN_PANIC_STOP_BUTTON",
         "AMBIENT_GUARDIAN_SHARED_ENV_FILE",
         "HA_URL",
         "HA_TOKEN",
@@ -248,3 +251,139 @@ def test_alarm_context_refuses_stale_or_inconsistent_state(monkeypatch):
     assert context["alarm"]["consistent"] is False
     assert context["alarm"]["confirmed_current"] is False
     assert "not safe to claim" in context["detail"]
+
+
+def test_audible_panic_requires_explicit_feature_flag(monkeypatch):
+    clear_bridge_env(monkeypatch)
+    monkeypatch.setenv("HOME_ASSISTANT_URL", "http://ha.local:8123")
+    monkeypatch.setenv("HOME_ASSISTANT_TOKEN", "test-token")
+    monkeypatch.setenv(
+        "AMBIENT_GUARDIAN_HOME_ALARM_ENTITY",
+        "alarm_control_panel.panel_home_ralphi",
+    )
+    monkeypatch.setenv(
+        "AMBIENT_GUARDIAN_PANIC_AUDIBLE_BUTTON",
+        "button.panel_home_ralphi_panico_audivel",
+    )
+    bridge = HomeAssistantBridge()
+    try:
+        bridge.trigger_audible_panic()
+    except PermissionError as exc:
+        assert "disabled" in str(exc)
+    else:
+        raise AssertionError("panic executed while feature flag disabled")
+
+
+def test_audible_panic_presses_only_audible_button_and_verifies_panel(monkeypatch):
+    clear_bridge_env(monkeypatch)
+    monkeypatch.setenv("HOME_ASSISTANT_URL", "http://ha.local:8123")
+    monkeypatch.setenv("HOME_ASSISTANT_TOKEN", "test-token")
+    monkeypatch.setenv(
+        "AMBIENT_GUARDIAN_HOME_ALARM_ENTITY",
+        "alarm_control_panel.panel_home_ralphi",
+    )
+    monkeypatch.setenv("AMBIENT_GUARDIAN_PANIC_ENABLED", "1")
+    monkeypatch.setenv(
+        "AMBIENT_GUARDIAN_PANIC_AUDIBLE_BUTTON",
+        "button.panel_home_ralphi_panico_audivel",
+    )
+    monkeypatch.setenv(
+        "AMBIENT_GUARDIAN_PANIC_STOP_BUTTON",
+        "button.panel_home_ralphi_desligar_sirene",
+    )
+    calls = []
+    snapshots = [
+        {
+            "entity_id": "alarm_control_panel.panel_home_ralphi",
+            "state": "disarmed",
+            "attributes": {
+                "is_in_alarm": False,
+                "is_triggered": False,
+                "raw_status": "disarmed",
+                "arm_mode": "disarmed",
+            },
+            "last_updated": datetime.now(timezone.utc).isoformat(),
+        },
+        {
+            "entity_id": "alarm_control_panel.panel_home_ralphi",
+            "state": "triggered",
+            "attributes": {
+                "is_in_alarm": True,
+                "is_triggered": True,
+                "raw_status": "triggered",
+                "arm_mode": "disarmed",
+                "last_trigger_time": datetime.now(timezone.utc).isoformat(),
+            },
+            "last_updated": datetime.now(timezone.utc).isoformat(),
+        },
+    ]
+
+    def fake_get(url, headers, timeout):
+        return FakeResponse(snapshots.pop(0))
+
+    def fake_post(url, headers, json, timeout):
+        calls.append((url, json))
+        return FakeResponse({})
+
+    monkeypatch.setattr("ambient_guardian.home_assistant.httpx.get", fake_get)
+    monkeypatch.setattr("ambient_guardian.home_assistant.httpx.post", fake_post)
+    monkeypatch.setattr("ambient_guardian.home_assistant.time.sleep", lambda _: None)
+
+    result = HomeAssistantBridge().trigger_audible_panic()
+    assert result["verified"] is True
+    assert calls == [
+        (
+            "http://ha.local:8123/api/services/button/press",
+            {"entity_id": "button.panel_home_ralphi_panico_audivel"},
+        )
+    ]
+    assert result["observed"]["triggered"] is True
+
+
+def test_stop_siren_uses_only_stop_button(monkeypatch):
+    clear_bridge_env(monkeypatch)
+    monkeypatch.setenv("HOME_ASSISTANT_URL", "http://ha.local:8123")
+    monkeypatch.setenv("HOME_ASSISTANT_TOKEN", "test-token")
+    monkeypatch.setenv(
+        "AMBIENT_GUARDIAN_HOME_ALARM_ENTITY",
+        "alarm_control_panel.panel_home_ralphi",
+    )
+    monkeypatch.setenv("AMBIENT_GUARDIAN_PANIC_ENABLED", "1")
+    monkeypatch.setenv(
+        "AMBIENT_GUARDIAN_PANIC_AUDIBLE_BUTTON",
+        "button.panel_home_ralphi_panico_audivel",
+    )
+    monkeypatch.setenv(
+        "AMBIENT_GUARDIAN_PANIC_STOP_BUTTON",
+        "button.panel_home_ralphi_desligar_sirene",
+    )
+    calls = []
+    snapshots = [
+        {
+            "entity_id": "alarm_control_panel.panel_home_ralphi",
+            "state": "triggered",
+            "attributes": {"is_in_alarm": True, "is_triggered": True},
+            "last_updated": datetime.now(timezone.utc).isoformat(),
+        },
+        {
+            "entity_id": "alarm_control_panel.panel_home_ralphi",
+            "state": "disarmed",
+            "attributes": {"is_in_alarm": False, "is_triggered": False},
+            "last_updated": datetime.now(timezone.utc).isoformat(),
+        },
+    ]
+
+    def fake_get(url, headers, timeout):
+        return FakeResponse(snapshots.pop(0))
+
+    def fake_post(url, headers, json, timeout):
+        calls.append((url, json))
+        return FakeResponse({})
+
+    monkeypatch.setattr("ambient_guardian.home_assistant.httpx.get", fake_get)
+    monkeypatch.setattr("ambient_guardian.home_assistant.httpx.post", fake_post)
+    monkeypatch.setattr("ambient_guardian.home_assistant.time.sleep", lambda _: None)
+
+    result = HomeAssistantBridge().stop_audible_siren()
+    assert result["verified"] is True
+    assert calls[0][1]["entity_id"] == "button.panel_home_ralphi_desligar_sirene"

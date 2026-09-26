@@ -214,7 +214,9 @@ def _alarm_query(query: str) -> bool:
     return bool(
         re.search(
             r"\b(?:alarma|alarm|security)\b.*\b(?:arma|armar|activa|activar|desarma|desarmar|desactiva|desactivar|arm|disarm|activate|deactivate)\b"
-            r"|\b(?:arma|armar|activa|activar|desarma|desarmar|desactiva|desactivar|arm|disarm|activate|deactivate)\b.*\b(?:alarma|alarm|security)\b",
+            r"|\b(?:arma|armar|activa|activar|desarma|desarmar|desactiva|desactivar|arm|disarm|activate|deactivate)\b.*\b(?:alarma|alarm|security)\b"
+            r"|\b(?:sirena|siren|pánico audible|panico audible|panic alarm)\b.*\b(?:activa|activar|enciende|encender|dispara|disparar|apaga|apagar|deten|detener|silencia|silenciar|trigger|start|stop|turn off)\b"
+            r"|\b(?:activa|activar|enciende|encender|dispara|disparar|apaga|apagar|deten|detener|silencia|silenciar|trigger|start|stop|turn off)\b.*\b(?:sirena|siren|pánico audible|panico audible|panic alarm)\b",
             text,
         )
     )
