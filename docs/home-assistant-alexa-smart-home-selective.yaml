@@ -1,0 +1,12 @@
+# Copy only after the Smart Home add-on and account linking are ready.
+# Pick the locale that matches the Echo device language.
+alexa:
+  smart_home:
+    locale: es-US
+    filter:
+      include_entities:
+        - alarm_control_panel.panel_home_ralphi_panel_home_ralphi
+    entity_config:
+      alarm_control_panel.panel_home_ralphi_panel_home_ralphi:
+        name: "Casa"
+        description: "Sistema de seguridad Intelbras de la casa"
