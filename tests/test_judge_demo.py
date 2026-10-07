@@ -16,7 +16,7 @@ def test_judge_ui_declares_truth_boundaries_and_three_scenarios():
     assert "SIMULATED: Alexa+ voice experience" in html
     assert "SIMULATED: Ring-compatible event source" in html
     assert "1. Home status" in html
-    assert "2. Front-door event" in html
+    assert "2. What happened at 3 AM?" in html
     assert "3. Prepare lock" in html
     assert "model cannot approve or execute" in html
 
@@ -50,6 +50,46 @@ def test_scenario_two_ring_compatible_event_flows_into_context(monkeypatch):
     assert response.status_code == 200
     answer = response.json()["response"]["answer"].lower()
     assert "unknown person" in answer
+    assert STATE.evidence_snapshot() == []
+
+
+def test_scenario_two_temporal_ring_demo_reconstructs_3am_incident(monkeypatch):
+    monkeypatch.setenv("AWS_STRANDS_ENABLED", "0")
+    for payload in (
+        {
+            "event_type": "motion",
+            "timestamp": "2026-10-06T03:04:00-05:00",
+            "summary": "Ring demo detected motion at the front door.",
+            "severity": "info",
+        },
+        {
+            "event_type": "person_detected",
+            "timestamp": "2026-10-06T03:07:00-05:00",
+            "summary": "Ring demo detected a person at the front door.",
+            "severity": "warning",
+        },
+        {
+            "event_type": "door_secured",
+            "timestamp": "2026-10-06T03:11:00-05:00",
+            "summary": "The front door remained secured after the event.",
+            "severity": "info",
+        },
+    ):
+        response = client.post("/api/simulate/ring", json=payload)
+        assert response.status_code == 200
+        assert response.json()["truth"]["ring_edge"] == "SIMULATED"
+
+    response = client.post(
+        "/api/alexa",
+        json={"utterance": "Alexa, what happened at 3 AM?"},
+    )
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["prepared_action"] is None
+    assert payload["incident"]["event_count"] == 3
+    assert payload["incident"]["truth"]["analysis"] == "REAL"
+    assert payload["incident"]["truth"]["ring_edge"] == "SIMULATED"
+    assert "03:07" in payload["response"]["answer"]
     assert STATE.evidence_snapshot() == []
 
 
