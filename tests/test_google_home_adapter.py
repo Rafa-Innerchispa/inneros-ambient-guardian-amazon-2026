@@ -4,15 +4,27 @@ import pytest
 from starlette.testclient import TestClient
 
 from ambient_guardian.core import GuardianState
-from ambient_guardian.google_home import GoogleHomeBridge, GoogleHomeStatus
+from ambient_guardian.google_home import GoogleCastBridge, GoogleHomeMCPClient, GoogleIntegrationStatus
 from ambient_guardian.official_server import app
 
 
-def test_google_home_bridge_status_and_discovery():
-    bridge = GoogleHomeBridge()
+def test_google_home_mcp_client_reports_unconfigured():
+    client = GoogleHomeMCPClient()
+    assert client.is_configured() is False
+    res = client.test_connection()
+    assert res["configured"] is False
+    assert res["reachable"] is False
+    assert "GOOGLE_HOME_MCP_URL" in res["detail"]
+
+    with pytest.raises(RuntimeError, match="not configured"):
+        client.call_tool("list_homes", {})
+
+
+def test_google_cast_bridge_status_and_discovery():
+    bridge = GoogleCastBridge()
     status = bridge.status()
 
-    assert isinstance(status, GoogleHomeStatus)
+    assert isinstance(status, GoogleIntegrationStatus)
     assert status.home_name == "Ralphi Home - Ambient Guardian"
     assert status.speakers_count >= 4
     speaker_entities = {s["entity_id"] for s in status.speakers}
@@ -21,21 +33,23 @@ def test_google_home_bridge_status_and_discovery():
     assert "media_player.chromecast_estudio" in speaker_entities
     assert "broadcast_announcement" in status.command_definitions
     assert status.tts_engine == "tts.google_translate_en_com"
+    assert status.mcp_configured is False
+    assert status.active_mode in {"google_cast_local_bridge", "simulator"}
 
 
-def test_google_home_list_resources_and_states():
-    bridge = GoogleHomeBridge()
+def test_google_cast_list_resources_and_states():
+    bridge = GoogleCastBridge()
     resources = bridge.list_resources()
     assert len(resources["resources"]) >= 4
     assert resources["tts_engine"] == "tts.google_translate_en_com"
 
     states = bridge.list_states()
-    assert states["home_id"] == "home-ralphi-01"
+    assert states["home_id"] == "home-ralphi-local"
     assert "media_player.dormitorio" in states["states"]
 
 
-def test_google_home_speak_dry_run_and_validation():
-    bridge = GoogleHomeBridge()
+def test_google_cast_speak_dry_run_and_validation():
+    bridge = GoogleCastBridge()
 
     # Valid dry run
     res = bridge.speak("media_player.dormitorio", "Attention: perimeter secured.", dry_run=True)

@@ -7,18 +7,37 @@ import pytest
 from starlette.testclient import TestClient
 
 from ambient_guardian.core import GuardianState
-from ambient_guardian.official_server import app
+from ambient_guardian.official_server import STATE, app
 from ambient_guardian.ring import RingOfficialAdapter, RingSimulatorAdapter
 
 
-def test_ring_official_adapter_normalization_and_truth_labels():
-    adapter = RingOfficialAdapter(token="test-token-123")
-    assert adapter.is_configured() is True
-    status = adapter.status()
-    assert status.mode == "official_ring_edge"
-    assert status.device_verification == "verified_official_api"
+def test_ring_official_adapter_status_and_device_verification_states():
+    # 1. Completely unconfigured
+    unconfigured = RingOfficialAdapter()
+    assert unconfigured.is_configured() is False
+    status_unconf = unconfigured.status()
+    assert status_unconf.mode == "official_ring_pending"
+    assert status_unconf.device_verification == "pending_real_or_official_test_account"
 
-    # Test doorbell ding event normalization
+    # 2. Token present but offline / unverified
+    token_adapter = RingOfficialAdapter(token="unverified-test-token")
+    assert token_adapter.is_configured() is True
+    status_token = token_adapter.status()
+    assert status_token.mode == "official_ring_pending"
+    assert status_token.device_verification == "unverified_token"
+
+    # 3. Webhook secret configured
+    secret_adapter = RingOfficialAdapter(webhook_secret="secure-webhook-secret-123")
+    assert secret_adapter.is_configured() is True
+    status_secret = secret_adapter.status()
+    assert status_secret.mode == "official_ring_edge"
+    assert status_secret.device_verification == "verified_webhook_signer"
+
+
+def test_ring_official_adapter_normalization_and_truth_labels():
+    adapter = RingOfficialAdapter(webhook_secret="secret")
+
+    # Verified event gets REAL
     ding_event = adapter.normalize_event(
         {
             "kind": "ding",
@@ -26,7 +45,8 @@ def test_ring_official_adapter_normalization_and_truth_labels():
             "zone": "front_porch",
             "ding_id": "ding-778899",
             "snapshot_url": "https://ring.internal/snapshots/ding-778899.jpg",
-        }
+        },
+        verified=True,
     )
     assert ding_event["source"] == "ring-official-edge"
     assert ding_event["type"] == "doorbell_pressed"
@@ -34,38 +54,45 @@ def test_ring_official_adapter_normalization_and_truth_labels():
     assert ding_event["ring_event_id"] == "ding-778899"
     assert ding_event["recording_ref"] == "https://ring.internal/snapshots/ding-778899.jpg"
 
-    # Test motion event normalization
-    motion_event = adapter.normalize_event(
+    # Unverified event gets UNVERIFIED
+    unverified_event = adapter.normalize_event(
         {
             "kind": "motion",
-            "device_name": "Backyard Floodlight Cam",
-            "zone": "backyard",
-        }
+            "device_name": "Porch Cam",
+        },
+        verified=False,
     )
-    assert motion_event["type"] == "motion"
-    assert motion_event["truth"] == "REAL"
+    assert unverified_event["source"] == "ring-unverified-ingress"
+    assert unverified_event["type"] == "motion"
+    assert unverified_event["truth"] == "UNVERIFIED"
 
 
-def test_ring_official_webhook_hmac_signature_verification():
+def test_ring_official_webhook_hmac_fail_closed_security():
     secret = "my-super-secret-key"
     adapter = RingOfficialAdapter(webhook_secret=secret)
 
     payload_data = {"kind": "person_detected", "device_name": "Porch Cam"}
     raw_payload = json.dumps(payload_data).encode("utf-8")
-
     correct_sig = hmac.new(secret.encode("utf-8"), raw_payload, hashlib.sha256).hexdigest()
+
+    # 1. Valid signature passes
     assert adapter.verify_webhook_signature(raw_payload, correct_sig) is True
     assert adapter.verify_webhook_signature(raw_payload, f"sha256={correct_sig}") is True
 
-    # Bad signature
+    # 2. Bad signature fails closed
     assert adapter.verify_webhook_signature(raw_payload, "invalid_signature") is False
+
+    # 3. Missing header fails closed
     assert adapter.verify_webhook_signature(raw_payload, None) is False
+    assert adapter.verify_webhook_signature(raw_payload, "") is False
+
+    # 4. Unconfigured webhook secret fails closed unconditionally
+    no_secret_adapter = RingOfficialAdapter()
+    assert no_secret_adapter.verify_webhook_signature(raw_payload, correct_sig) is False
 
 
-def test_ring_official_webhook_http_endpoint():
+def test_ring_official_webhook_http_endpoint_security():
     client = TestClient(app)
-
-    # Ingest official ring event
     webhook_payload = {
         "kind": "doorbell_pressed",
         "device_name": "Front Porch Doorbell Pro",
@@ -73,7 +100,30 @@ def test_ring_official_webhook_http_endpoint():
         "timestamp": "2026-10-06T03:04:30-05:00",
         "ding_id": "official-ding-12345",
     }
-    resp = client.post("/api/ring/webhook", json=webhook_payload)
+    raw_bytes = json.dumps(webhook_payload).encode("utf-8")
+
+    # 1. Unauthenticated request without secret configured -> HTTP 401
+    STATE.ring_official.webhook_secret = ""
+    resp = client.post("/api/ring/webhook", content=raw_bytes)
+    assert resp.status_code == 401
+    assert "invalid" in resp.json()["detail"]
+
+    # 2. Request with secret configured but invalid signature -> HTTP 401
+    STATE.ring_official.webhook_secret = "test-secret-456"
+    resp = client.post(
+        "/api/ring/webhook",
+        content=raw_bytes,
+        headers={"x-ring-signature": "sha256=invalid_signature_hash"},
+    )
+    assert resp.status_code == 401
+
+    # 3. Request with secret configured and valid signature -> HTTP 200 + REAL truth
+    valid_sig = hmac.new(b"test-secret-456", raw_bytes, hashlib.sha256).hexdigest()
+    resp = client.post(
+        "/api/ring/webhook",
+        content=raw_bytes,
+        headers={"x-ring-signature": f"sha256={valid_sig}"},
+    )
     assert resp.status_code == 200
     data = resp.json()
     assert data["status"] == "received"
@@ -87,7 +137,7 @@ def test_incident_summary_distinguishes_real_vs_simulated_ring():
     state.reset_demo()
     state.events = []
 
-    # Inject official ring event
+    # Inject official verified ring event
     state.add_ring_official_event(
         {
             "kind": "person_detected",
@@ -96,6 +146,7 @@ def test_incident_summary_distinguishes_real_vs_simulated_ring():
             "summary": "Real person detected by Ring camera.",
         },
         timestamp="2026-10-06T03:05:00-05:00",
+        verified=True,
     )
 
     incident = state.incident_summary("2026-10-06T03:00:00-05:00", 15)

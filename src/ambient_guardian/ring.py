@@ -7,6 +7,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Protocol
 
+import httpx
+
 
 @dataclass(frozen=True, slots=True)
 class RingAdapterStatus:
@@ -22,7 +24,7 @@ class RingEventAdapter(Protocol):
     def status(self) -> RingAdapterStatus:
         """Return honest readiness without implying a real device is connected."""
 
-    def normalize_event(self, payload: dict[str, Any]) -> dict[str, Any]:
+    def normalize_event(self, payload: dict[str, Any], *, verified: bool = False) -> dict[str, Any]:
         """Convert provider payloads into Ambient Guardian event shape."""
 
 
@@ -40,7 +42,8 @@ class RingSimulatorAdapter:
             mode="simulator",
         )
 
-    def normalize_event(self, payload: dict[str, Any]) -> dict[str, Any]:
+    def normalize_event(self, payload: dict[str, Any], *, verified: bool = False) -> dict[str, Any]:
+        del verified
         event_type = str(payload.get("type") or payload.get("event_type") or "").strip()
         if not event_type:
             raise ValueError("Ring simulator payload requires type or event_type")
@@ -62,10 +65,13 @@ class RingSimulatorAdapter:
 class RingOfficialAdapter:
     """Official Ring Appstore & Developer Webhook Adapter.
 
-    Validates HMAC webhook signatures, normalizes official Ring event schemas
-    (doorbell rings, motion alerts, person and package detection), and tags them
-    truth-labeled as REAL.
+    Validates HMAC webhook signatures (failing closed when secret is absent),
+    normalizes official Ring event schemas, and tags events with strict truth labels:
+    REAL only when cryptographically verified or backed by live provider session,
+    otherwise UNVERIFIED/PENDING.
     """
+
+    RING_API_BASE = "https://api.ring.com/clients_api"
 
     @staticmethod
     def _selected_shared_env(path_value: str) -> dict[str, str]:
@@ -104,6 +110,7 @@ class RingOfficialAdapter:
         token: str | None = None,
         webhook_secret: str | None = None,
         device_id: str | None = None,
+        timeout: float = 4.0,
     ) -> None:
         shared = self._selected_shared_env(
             os.getenv("AMBIENT_GUARDIAN_SHARED_ENV_FILE", "")
@@ -128,20 +135,65 @@ class RingOfficialAdapter:
             or shared.get("RING_DEVICE_ID")
             or ""
         ).strip()
+        self.timeout = timeout
 
     def is_configured(self) -> bool:
         return bool(self.token or self.webhook_secret)
 
+    def verify_session(self) -> dict[str, Any]:
+        """Test authentication against official Ring REST API."""
+        if not self.token:
+            return {
+                "authenticated": False,
+                "detail": "No Ring OAuth or refresh token configured (RING_TOKEN).",
+            }
+        try:
+            with httpx.Client(timeout=self.timeout) as client:
+                resp = client.get(
+                    f"{self.RING_API_BASE}/ring_devices",
+                    headers={"Authorization": f"Bearer {self.token}"},
+                )
+                if resp.status_code == 200:
+                    return {
+                        "authenticated": True,
+                        "detail": "Official Ring session verified via Ring Clients API.",
+                        "devices": resp.json(),
+                    }
+                return {
+                    "authenticated": False,
+                    "detail": f"Ring API returned HTTP {resp.status_code}: {resp.text[:100]}",
+                }
+        except Exception as exc:
+            return {
+                "authenticated": False,
+                "detail": f"Ring API connection failed: {type(exc).__name__}: {exc}",
+            }
+
     def status(self) -> RingAdapterStatus:
-        if self.is_configured():
+        if self.webhook_secret:
             return RingAdapterStatus(
-                summary="Official Ring Developer adapter active with webhook signature validation and real event pipeline",
+                summary="Official Ring Developer Webhook adapter active with HMAC-SHA256 signature verification",
                 official_path=(
-                    "Ring Developer Appstore / Webhook API: Inbound push events, device verification, "
+                    "Ring Developer Appstore / Webhook API: Inbound push events, HMAC validation, "
                     "evidence snapshot referencing"
                 ),
-                device_verification="verified_official_api" if self.token else "verified_webhook_signer",
+                device_verification="verified_webhook_signer",
                 mode="official_ring_edge",
+            )
+        if self.token:
+            session_check = self.verify_session()
+            if session_check.get("authenticated"):
+                return RingAdapterStatus(
+                    summary="Official Ring API adapter active and verified with Ring Client API",
+                    official_path="Ring Developer API: Live device status & history verified",
+                    device_verification="verified_official_api",
+                    mode="official_ring_edge",
+                )
+            return RingAdapterStatus(
+                summary="Ring token present but unverified against live Ring API; fallback to simulator active",
+                official_path="Ring Developer API: Awaiting valid OAuth/test account authentication",
+                device_verification="unverified_token",
+                mode="official_ring_pending",
             )
         return RingAdapterStatus(
             summary="Official Ring adapter ready for token/webhook binding; simulator active as safe fallback",
@@ -154,10 +206,13 @@ class RingOfficialAdapter:
         )
 
     def verify_webhook_signature(self, payload_bytes: bytes, signature_header: str | None) -> bool:
-        """Verify HMAC-SHA256 signature from Ring webhook headers."""
+        """Verify HMAC-SHA256 signature from Ring webhook headers.
+
+        CRITICAL SECURITY INVARIANT: Must fail closed (return False) if
+        RING_WEBHOOK_SECRET is not configured or signature is missing/invalid.
+        """
         if not self.webhook_secret:
-            # If no secret configured, allow unauthenticated local verification in testing
-            return True
+            return False
         if not signature_header:
             return False
         expected = hmac.new(
@@ -165,12 +220,14 @@ class RingOfficialAdapter:
             payload_bytes,
             hashlib.sha256,
         ).hexdigest()
-        # Accept 'sha256=...' prefix or raw hex
         clean_sig = signature_header.removeprefix("sha256=").strip()
         return hmac.compare_digest(expected, clean_sig)
 
-    def normalize_event(self, payload: dict[str, Any]) -> dict[str, Any]:
-        """Convert official Ring webhook/API payload to Ambient Guardian event."""
+    def normalize_event(self, payload: dict[str, Any], *, verified: bool = False) -> dict[str, Any]:
+        """Convert official Ring webhook/API payload to Ambient Guardian event.
+
+        Truth label is stamped as REAL only when verified=True, otherwise UNVERIFIED.
+        """
         raw_kind = str(
             payload.get("kind")
             or payload.get("event_type")
@@ -214,11 +271,11 @@ class RingOfficialAdapter:
         )
 
         normalized = {
-            "source": "ring-official-edge",
+            "source": "ring-official-edge" if verified else "ring-unverified-ingress",
             "type": guardian_type,
             "summary": summary,
             "severity": severity,
-            "truth": "REAL",
+            "truth": "REAL" if verified else "UNVERIFIED",
             "device_name": payload.get("device_name") or payload.get("doorbot_description") or "Ring Video Doorbell",
             "zone": payload.get("zone") or "front_door",
         }

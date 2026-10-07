@@ -183,16 +183,18 @@ class GuardianState:
         event_payload: dict[str, Any],
         *,
         timestamp: str | None = None,
+        verified: bool = True,
     ) -> dict[str, Any]:
         """Inject a verified, truth-labeled real event from Ring official webhook/API."""
-        normalized = self.ring_official.normalize_event(event_payload)
+        normalized = self.ring_official.normalize_event(event_payload, verified=verified)
+        truth = normalized.get("truth", "REAL" if verified else "UNVERIFIED")
         event = self.add_event(
             str(normalized["type"]),
             str(normalized["source"]),
             timestamp=timestamp,
             metadata={
                 "provider": "ring_official",
-                "truth": "REAL",
+                "truth": truth,
                 "device_name": normalized.get("device_name", "Ring Video Doorbell"),
                 "zone": normalized.get("zone", "front_door"),
                 "ring_event_id": normalized.get("ring_event_id"),

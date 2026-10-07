@@ -1,11 +1,9 @@
 from __future__ import annotations
 
-import hmac
 import hashlib
 import json
 import os
-import re
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
@@ -22,43 +20,106 @@ def iso_now() -> str:
 
 
 @dataclass(slots=True)
-class GoogleHomeStatus:
-    configured: bool
-    reachable: bool
-    mode: str
+class GoogleIntegrationStatus:
+    active_mode: str
+    mcp_configured: bool
+    mcp_reachable: bool
+    mcp_detail: str
+    cast_configured: bool
+    cast_reachable: bool
+    cast_detail: str
     home_name: str
     speakers_count: int
     speakers: list[dict[str, Any]]
     command_definitions: list[str]
     tts_engine: str | None
     history_available: bool
-    detail: str
 
     def as_dict(self) -> dict[str, Any]:
         return {
-            "configured": self.configured,
-            "reachable": self.reachable,
-            "mode": self.mode,
+            "active_mode": self.active_mode,
+            "mcp_configured": self.mcp_configured,
+            "mcp_reachable": self.mcp_reachable,
+            "mcp_detail": self.mcp_detail,
+            "cast_configured": self.cast_configured,
+            "cast_reachable": self.cast_reachable,
+            "cast_detail": self.cast_detail,
             "home_name": self.home_name,
             "speakers_count": self.speakers_count,
             "speakers": list(self.speakers),
             "command_definitions": list(self.command_definitions),
             "tts_engine": self.tts_engine,
             "history_available": self.history_available,
-            "detail": self.detail,
         }
 
 
-class GoogleHomeBridge:
-    """Bounded Google Home MCP & Cast Speaker Adapter for InnerOS Ambient Guardian.
+# For backward compatibility with existing status dicts
+GoogleHomeStatus = GoogleIntegrationStatus
 
-    Provides read-only discovery of Google Home structures, Google Home Mini / Cast
-    speakers, states, and history. Write commands (TTS / announcements) are
-    strictly bounded to an allowlist, rate-limited, and require explicit dry-run
-    or verified safe execution.
+
+class GoogleHomeMCPClient:
+    """Official Google Home MCP Client.
+
+    Connects to an upstream Google Home MCP Server over Streamable HTTP or JSON-RPC
+    when GOOGLE_HOME_MCP_URL is configured and OAuth/early access entitlement is active.
+    Fails closed and reports truthful unconfigured/blocked status otherwise.
     """
 
-    DEFAULT_SPEAKER_ALLOWLIST = {
+    def __init__(self, mcp_url: str = "", timeout: float = 4.0) -> None:
+        self.mcp_url = mcp_url.rstrip("/")
+        self.timeout = timeout
+
+    def is_configured(self) -> bool:
+        return bool(self.mcp_url)
+
+    def test_connection(self) -> dict[str, Any]:
+        if not self.mcp_url:
+            return {
+                "configured": False,
+                "reachable": False,
+                "detail": (
+                    "Google Home MCP URL is not configured (GOOGLE_HOME_MCP_URL). "
+                    "Google Cloud Home APIs require project entitlement and OAuth Web Client."
+                ),
+            }
+        try:
+            with httpx.Client(timeout=self.timeout) as client:
+                resp = client.get(f"{self.mcp_url}/health")
+                if resp.status_code == 200:
+                    return {"configured": True, "reachable": True, "detail": "Google Home MCP endpoint reachable."}
+                return {
+                    "configured": True,
+                    "reachable": False,
+                    "detail": f"Google Home MCP returned HTTP {resp.status_code}",
+                }
+        except Exception as exc:
+            return {
+                "configured": True,
+                "reachable": False,
+                "detail": f"Google Home MCP unreachable: {type(exc).__name__}: {exc}",
+            }
+
+    def call_tool(self, tool_name: str, arguments: dict[str, Any]) -> dict[str, Any]:
+        if not self.mcp_url:
+            raise RuntimeError("Google Home MCP client is not configured (missing GOOGLE_HOME_MCP_URL)")
+        with httpx.Client(timeout=self.timeout) as client:
+            resp = client.post(
+                f"{self.mcp_url}/mcp/tools/{tool_name}",
+                json=arguments,
+            )
+            resp.raise_for_status()
+            return resp.json()
+
+
+class GoogleCastBridge:
+    """Local Google Cast & Home Assistant Speaker Engine.
+
+    Discovers real on-site Google Home Mini speakers, Chromecast players, and TTS engines
+    dynamically from the live Home Assistant instance. Enforces bounded speech and safe
+    reversible operations.
+    """
+
+    KNOWN_SPEAKER_ENTITIES = {
         "media_player.dormitorio",
         "media_player.disco",
         "media_player.chromecast_estudio",
@@ -90,7 +151,6 @@ class GoogleHomeBridge:
             "HA_TOKEN",
             "GOOGLE_HOME_MCP_URL",
             "GOOGLE_HOME_PROJECT_ID",
-            "GOOGLE_HOME_OAUTH_CLIENT_ID",
             "GOOGLE_HOME_TTS_ENTITY",
             "GOOGLE_HOME_SPEAK_ENABLED",
         }
@@ -147,13 +207,15 @@ class GoogleHomeBridge:
             or shared.get("GOOGLE_HOME_SPEAK_ENABLED", "0") == "1"
         )
         self.timeout = float(os.getenv("GOOGLE_HOME_TIMEOUT", "4.0"))
+        self.mcp_client = GoogleHomeMCPClient(self.google_mcp_url, timeout=self.timeout)
         self._history_cache: list[dict[str, Any]] = []
 
-    def status(self) -> GoogleHomeStatus:
-        """Inspect and return readiness of Google Home MCP and Cast speakers."""
-        speakers = self._discover_known_speakers()
-        is_configured = bool(self.ha_token or self.google_mcp_url)
-        is_reachable = False
+    def status(self) -> GoogleIntegrationStatus:
+        """Truthful readiness report for both Google Home MCP and local Google Cast bridge."""
+        mcp_test = self.mcp_client.test_connection()
+        cast_configured = bool(self.ha_token)
+        cast_reachable = False
+        discovered_speakers = self.discover_speakers()
 
         if self.ha_token:
             try:
@@ -163,31 +225,80 @@ class GoogleHomeBridge:
                         headers={"Authorization": f"Bearer {self.ha_token}"},
                     )
                     if resp.status_code == 200:
-                        is_reachable = True
+                        cast_reachable = True
             except Exception:
-                is_reachable = False
+                cast_reachable = False
 
-        mode = "official_google_home_mcp" if self.google_mcp_url else "home_assistant_cast"
-        if not is_reachable and not is_configured:
-            mode = "simulator"
+        if mcp_test.get("reachable"):
+            active_mode = "official_google_home_mcp"
+        elif cast_reachable:
+            active_mode = "google_cast_local_bridge"
+        else:
+            active_mode = "simulator"
 
-        return GoogleHomeStatus(
-            configured=is_configured,
-            reachable=is_reachable,
-            mode=mode,
+        return GoogleIntegrationStatus(
+            active_mode=active_mode,
+            mcp_configured=mcp_test.get("configured", False),
+            mcp_reachable=mcp_test.get("reachable", False),
+            mcp_detail=mcp_test.get("detail", ""),
+            cast_configured=cast_configured,
+            cast_reachable=cast_reachable,
+            cast_detail=(
+                "Google Home Mini & Cast audio path verified via Home Assistant Cast and Google Translate TTS."
+                if cast_reachable
+                else "Home Assistant Cast unreachable or not configured."
+            ),
             home_name="Ralphi Home - Ambient Guardian",
-            speakers_count=len(speakers),
-            speakers=speakers,
+            speakers_count=len(discovered_speakers),
+            speakers=discovered_speakers,
             command_definitions=sorted(list(self.ALLOWED_COMMANDS)),
             tts_engine=self.tts_entity,
             history_available=True,
-            detail=(
-                "Google Home Mini & Cast audio path verified via Home Assistant Cast and Google Translate TTS. "
-                "Google Cloud Home MCP adapter ready with bounded safe speech allowlist."
-            ),
         )
 
-    def _discover_known_speakers(self) -> list[dict[str, Any]]:
+    def discover_speakers(self) -> list[dict[str, Any]]:
+        """Dynamically query Home Assistant API to discover live Google Cast / Home speakers."""
+        if not self.ha_token:
+            return self._fallback_known_speakers(truth="SIMULATED")
+
+        try:
+            with httpx.Client(timeout=self.timeout) as client:
+                resp = client.get(
+                    f"{self.ha_url}/api/states",
+                    headers={"Authorization": f"Bearer {self.ha_token}"},
+                )
+                if resp.status_code == 200:
+                    entities = resp.json()
+                    cast_speakers: list[dict[str, Any]] = []
+                    for ent in entities:
+                        eid = ent.get("entity_id", "")
+                        attrs = ent.get("attributes", {})
+                        is_cast = (
+                            eid in self.KNOWN_SPEAKER_ENTITIES
+                            or attrs.get("app_name") == "Google Cast"
+                            or "chromecast" in eid.lower()
+                            or "google" in eid.lower()
+                        )
+                        if eid.startswith("media_player.") and is_cast:
+                            cast_speakers.append(
+                                {
+                                    "entity_id": eid,
+                                    "name": attrs.get("friendly_name", eid),
+                                    "state": ent.get("state", "unknown"),
+                                    "volume_level": attrs.get("volume_level", 0.5),
+                                    "is_volume_muted": attrs.get("is_volume_muted", False),
+                                    "app_name": attrs.get("app_name", "Google Cast"),
+                                    "truth": "REAL",
+                                }
+                            )
+                    if cast_speakers:
+                        return cast_speakers
+        except Exception:
+            pass
+
+        return self._fallback_known_speakers(truth="SIMULATED")
+
+    def _fallback_known_speakers(self, truth: str = "SIMULATED") -> list[dict[str, Any]]:
         return [
             {
                 "entity_id": "media_player.dormitorio",
@@ -197,7 +308,7 @@ class GoogleHomeBridge:
                 "manufacturer": "Google Inc.",
                 "model": "Google Home Mini",
                 "state": "idle",
-                "truth": "REAL",
+                "truth": truth,
             },
             {
                 "entity_id": "media_player.disco",
@@ -207,7 +318,7 @@ class GoogleHomeBridge:
                 "manufacturer": "Google Inc.",
                 "model": "Google Home Mini",
                 "state": "idle",
-                "truth": "REAL",
+                "truth": truth,
             },
             {
                 "entity_id": "media_player.chromecast_estudio",
@@ -217,7 +328,7 @@ class GoogleHomeBridge:
                 "manufacturer": "Google Inc.",
                 "model": "Chromecast",
                 "state": "idle",
-                "truth": "REAL",
+                "truth": truth,
             },
             {
                 "entity_id": "media_player.proyector",
@@ -227,76 +338,68 @@ class GoogleHomeBridge:
                 "manufacturer": "onn",
                 "model": "onn. Streaming Device",
                 "state": "idle",
-                "truth": "REAL",
+                "truth": truth,
             },
         ]
 
     def list_homes(self) -> dict[str, Any]:
-        """Return registered Google Home structures."""
+        """Return registered structure details truthfully."""
+        if self.mcp_client.is_configured():
+            try:
+                return self.mcp_client.call_tool("list_homes", {})
+            except Exception as exc:
+                return {
+                    "error": "upstream_google_home_mcp_failed",
+                    "detail": str(exc),
+                    "mode": "official_google_home_mcp",
+                }
+
+        speakers = self.discover_speakers()
+        is_live = any(s.get("truth") == "REAL" for s in speakers)
         return {
             "homes": [
                 {
-                    "home_id": "home-ralphi-01",
+                    "home_id": "home-ralphi-local",
                     "name": "Ralphi Home - Ambient Guardian",
                     "rooms": ["bedroom", "disco_pb", "estudio", "living_room", "kitchen"],
                     "project_id": self.project_id,
-                    "truth": "REAL",
+                    "truth": "REAL" if is_live else "SIMULATED",
                 }
             ],
-            "mode": "google_home_adapter",
+            "mode": "google_cast_local_bridge" if is_live else "simulator",
         }
 
     def list_resources(self) -> dict[str, Any]:
-        """Return Google Home speakers, displays, and cast media targets."""
+        """Return discovered Google Home and Cast speakers and TTS engines."""
+        speakers = self.discover_speakers()
         return {
-            "resources": self._discover_known_speakers(),
+            "resources": speakers,
             "tts_engine": self.tts_entity,
             "project_id": self.project_id,
+            "mode": self.status().active_mode,
         }
 
     def list_states(self) -> dict[str, Any]:
-        """Query live states of Google Cast & Home speakers."""
-        speakers = self._discover_known_speakers()
+        """Query live states of discovered Google Cast & Home speakers from Home Assistant."""
+        speakers = self.discover_speakers()
         states: dict[str, Any] = {}
-        if self.ha_token:
-            try:
-                with httpx.Client(timeout=self.timeout) as client:
-                    for spk in speakers:
-                        eid = spk["entity_id"]
-                        resp = client.get(
-                            f"{self.ha_url}/api/states/{eid}",
-                            headers={"Authorization": f"Bearer {self.ha_token}"},
-                        )
-                        if resp.status_code == 200:
-                            data = resp.json()
-                            states[eid] = {
-                                "state": data.get("state"),
-                                "attributes": data.get("attributes", {}),
-                                "last_updated": data.get("last_updated"),
-                                "truth": "REAL",
-                            }
-                        else:
-                            states[eid] = {"state": "unknown", "truth": "SIMULATED"}
-            except Exception:
-                pass
-
-        if not states:
-            for spk in speakers:
-                states[spk["entity_id"]] = {
-                    "state": "idle",
-                    "attributes": {"volume_level": 0.5, "app_name": "Google Cast"},
-                    "last_updated": iso_now(),
-                    "truth": "SIMULATED",
-                }
-
+        for spk in speakers:
+            eid = spk["entity_id"]
+            states[eid] = {
+                "state": spk.get("state", "unknown"),
+                "volume_level": spk.get("volume_level"),
+                "is_volume_muted": spk.get("is_volume_muted"),
+                "app_name": spk.get("app_name", "Google Cast"),
+                "truth": spk.get("truth", "SIMULATED"),
+            }
         return {
-            "home_id": "home-ralphi-01",
+            "home_id": "home-ralphi-local",
             "states": states,
             "queried_at": iso_now(),
         }
 
     def list_history(self, at_iso: str, window_minutes: int = 15) -> list[dict[str, Any]]:
-        """Fetch Google Home history and broadcast events in the target window."""
+        """Fetch recorded speaker events and announcements in the target window."""
         try:
             target = datetime.fromisoformat(str(at_iso).replace("Z", "+00:00"))
         except ValueError as exc:
@@ -332,7 +435,7 @@ class GoogleHomeBridge:
     ) -> dict[str, Any]:
         event = {
             "id": f"gh-evt-{hashlib.sha256(f'{event_type}{summary}{timestamp}'.encode()).hexdigest()[:8]}",
-            "source": "google-home-mcp",
+            "source": "google-cast-local-bridge",
             "type": event_type,
             "summary": summary,
             "speaker_id": speaker_id,
@@ -360,9 +463,12 @@ class GoogleHomeBridge:
         Dry-run mode is enforced by default.
         """
         speaker_id = speaker_id.strip()
-        if speaker_id not in self.DEFAULT_SPEAKER_ALLOWLIST:
+        discovered = {s["entity_id"] for s in self.discover_speakers()}
+        allowed_speakers = self.KNOWN_SPEAKER_ENTITIES | discovered
+
+        if speaker_id not in allowed_speakers:
             raise ValueError(
-                f"Speaker '{speaker_id}' is not in the allowlisted Google speakers: {sorted(self.DEFAULT_SPEAKER_ALLOWLIST)}"
+                f"Speaker '{speaker_id}' is not in the allowlisted Google speakers: {sorted(allowed_speakers)}"
             )
         if command not in self.ALLOWED_COMMANDS:
             raise ValueError(f"Command '{command}' is not in allowlisted commands: {sorted(self.ALLOWED_COMMANDS)}")
@@ -411,7 +517,6 @@ class GoogleHomeBridge:
                     json={"media_player_entity_id": speaker_id, "message": cleaned_msg},
                 )
                 if resp.status_code != 200:
-                    # Fallback to tts.google_translate_say
                     resp = client.post(
                         f"{self.ha_url}/api/services/tts/google_translate_say",
                         headers={"Authorization": f"Bearer {self.ha_token}"},
@@ -429,3 +534,7 @@ class GoogleHomeBridge:
             action_result["executed"] = False
             action_result["verified"] = False
             return action_result
+
+
+# Canonical class alias
+GoogleHomeBridge = GoogleCastBridge
