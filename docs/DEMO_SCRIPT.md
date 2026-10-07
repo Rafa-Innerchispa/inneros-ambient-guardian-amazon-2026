@@ -1,97 +1,89 @@
 # Demo video script — under 3 minutes
 
-Canonical recording path for the Amazon Developer Hackathon. The video should be public on YouTube or Vimeo and in English.
+Canonical recording path for the Amazon Developer Hackathon. The video must be public on YouTube or Vimeo and in English.
 
 ## Truth shown on screen
 
-Start with the badges already present in Judge Mode:
+- **REAL:** self-hosted MCP Python SDK v2 / Streamable HTTP
+- **REAL:** Ambient Guardian policy, normalized event pipeline, temporal correlation and evidence
+- **REAL:** AWS Strands orchestration with local Qwen/vLLM when enabled
+- **SIMULATED:** Alexa+ browser interaction
+- **SIMULATED:** Ring-compatible demo edge until an official Ring developer path is bound
+- **SAFE:** the model cannot approve or execute its own consequential action
 
-- **REAL:** MCP Streamable HTTP runtime
-- **REAL:** Ambient Guardian local-first policy/runtime
-- **SIMULATED:** Alexa+ browser voice experience
-- **SIMULATED:** Ring-compatible event source
-- **SAFE:** the model cannot approve or execute
+## 0:00–0:22 — Problem and promise
 
-Physical Echo and Ring hardware are optional product-validation paths and are not required for this hackathon demo.
+“Smart homes are full of devices but still make the homeowner reconstruct incidents manually. InnerOS Ambient Guardian gives the home one local-first intelligence layer that can answer what happened, recommend what to do next, keep the human in control, and prove the result.”
 
-## 0:00–0:20 — Problem
+Show the main screen, not a terminal.
 
-“Premium smart homes already have cameras, access control, sensors, Alexa and devices such as Ring, but they still live in separate apps. InnerOS Ambient Guardian gives those systems one local-first intelligence layer that understands context, prepares bounded actions, requires human approval, verifies the result and returns evidence.”
+## 0:22–0:45 — Required Amazon technology
 
-## 0:20–0:40 — Architecture
+Show the architecture strip and say:
 
-Show the truth badges and pipeline:
+“This is a self-hosted MCP server over Streamable HTTP, using the official MCP Python SDK. AWS Strands can synthesize context through our local Qwen/vLLM node. Physical consequences remain behind deterministic policy and a separate human approval channel.”
 
-- official MCP Python SDK v2 / Streamable HTTP
-- local-first reasoning with Qwen/vLLM when configured
-- AWS Strands SDK integration
-- deterministic action policy
-- separate human approval boundary
-- verification evidence
+Briefly show the MCP tool list, including `incident_summary`. Do not linger on code.
 
-Key line:
+## 0:45–1:32 — Standout scenario: What happened at 3 AM?
 
-“The Amazon-facing edge is simulated for the hackathon; the MCP backend and safety policy are real.”
+Click **2. What happened at 3 AM?**
 
-## 0:40–1:05 — Scenario 1: Home status
+The demo injects three truth-labeled Ring-compatible demo events:
+- 03:04 motion at the front door
+- 03:07 person detected
+- 03:11 front door remained secured
 
-Click **1. Home status**.
+Then the interface asks:
 
-The UI asks: **“Alexa, is everything okay at home?”**
+**“Alexa, what happened at 3 AM?”**
 
-Point out that the flow is read-only and creates no action or evidence receipt.
-
-## 1:05–1:35 — Scenario 2: Front-door event
-
-Click **2. Front-door event**.
-
-The UI inserts a truth-labeled Ring-compatible simulated event and then asks: **“Alexa, what happened at the front door?”**
-
-Show `attention_required` and the contextual response.
+Point to the time-ordered answer, event IDs and sources.
 
 Key line:
 
-“We do not pretend this is a bound Ring device. The event edge is simulated; the normalized Guardian event pipeline is real.”
+“The Ring edge in this demo is simulated and labeled as such. The normalized event pipeline, time-window correlation and MCP tool are real. That same read-only pattern is designed to accept official Ring, camera, alarm and access-control events.”
 
-## 1:35–2:15 — Scenario 3: Prepare lock
+## 1:32–2:12 — Human-controlled action
 
 Click **3. Prepare lock**.
 
-Point out:
-
-- the action is prepared;
-- `executed=false`;
-- no verification evidence exists yet;
-- the model has no approval or execution tool.
+Show:
+- proposal created
+- `executed=false`
+- no evidence receipt yet
+- no MCP approval or execution tool
 
 Then click the separate **Approve simulated bounded action** button.
 
-Show the Evidence Receipt and verified state.
+Show the resulting verified Evidence Receipt.
 
 Key line:
 
-“No human approval, no physical action. No verification, no success claim.”
+“No human approval, no consequential action. No verification, no success claim.”
 
-## 2:15–2:35 — Fail-closed proof
+## 2:12–2:32 — Real-home proof
 
-Type **“Alexa, unlock the front door”** or **“Do not lock the front door.”**
+Very briefly show the integration truth panel and mention that the product has separately validated:
+- real Echo/Fire speech through Home Assistant Alexa Devices
+- Intelbras alarm state and bounded owner-authenticated controls
+- allowlisted Home Assistant lighting
+- local DMX/Art-Net control
 
-Show that no action is prepared. Mention that replaying a consumed approval token is rejected.
+Do not imply those private-home integrations are part of the public simulator.
 
-## 2:35–2:50 — Engineering proof
+## 2:32–2:50 — Engineering proof
 
-Briefly show:
-
-- public GitHub repository
-- MIT license
-- tests/CI
-- official MCP HTTP smoke
-- Docker packaging
-- security/architecture documentation
+Flash:
+- public GitHub repository + MIT license
+- GitHub Actions PASS
+- **84 automated tests PASS**
+- real Streamable HTTP MCP smoke PASS
+- Docker build PASS
 - friction log
 
 ## 2:50–3:00 — Close
 
-“Your smart home should not only react. It should understand what is happening, help decide what should happen next, and prove what actually happened.”
+“Alerts tell you that something happened. Ambient Guardian explains what happened, keeps you in control of what happens next, and verifies the outcome.”
 
-End on **InnerOS Ambient Guardian** and the repository/Devpost page.
+End on **InnerOS Ambient Guardian**.
