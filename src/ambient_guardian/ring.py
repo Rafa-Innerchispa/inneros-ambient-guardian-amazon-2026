@@ -3,6 +3,7 @@ from __future__ import annotations
 import hashlib
 import hmac
 import os
+from datetime import datetime, timezone
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Protocol
@@ -250,7 +251,8 @@ class RingOfficialAdapter:
         meta = data_block.get("meta", {}) if isinstance(data_block.get("meta"), dict) else payload.get("meta", {})
 
         raw_kind = str(
-            attrs.get("kind")
+            data_block.get("type")
+            or attrs.get("kind")
             or attrs.get("event_type")
             or attrs.get("type")
             or payload.get("kind")
@@ -263,13 +265,19 @@ class RingOfficialAdapter:
             "ding": "doorbell_pressed",
             "doorbell": "doorbell_pressed",
             "doorbell_pressed": "doorbell_pressed",
+            "button_press": "doorbell_pressed",
             "motion": "motion",
+            "motion_detected": "motion",
             "person": "person_detected",
             "person_detected": "person_detected",
             "package": "package_detected",
             "package_detected": "package_detected",
             "camera_offline": "camera_offline",
             "offline": "camera_offline",
+            "device_offline": "camera_offline",
+            "device_online": "device_online",
+            "device_added": "device_added",
+            "device_removed": "device_removed",
         }
 
         guardian_type = type_mapping.get(raw_kind, raw_kind or "motion")
@@ -277,9 +285,16 @@ class RingOfficialAdapter:
         severity_mapping = {
             "doorbell_pressed": "info",
             "motion": "info",
-            "person_detected": "warning" if (attrs.get("unknown_person") or payload.get("unknown_person")) else "info",
+            "person_detected": "warning" if (
+                attrs.get("unknown_person")
+                or attrs.get("sub_type") == "human"
+                or payload.get("unknown_person")
+            ) else "info",
             "package_detected": "info",
             "camera_offline": "warning",
+            "device_online": "info",
+            "device_added": "info",
+            "device_removed": "warning",
         }
         severity = (
             attrs.get("severity")
@@ -293,6 +308,9 @@ class RingOfficialAdapter:
             "person_detected": "Person detected by Ring camera.",
             "package_detected": "Package detected by Ring camera.",
             "camera_offline": "Ring camera became offline.",
+            "device_online": "Ring device came online.",
+            "device_added": "Ring device became available.",
+            "device_removed": "Ring device is no longer available.",
         }
         summary = (
             attrs.get("summary")
@@ -322,6 +340,32 @@ class RingOfficialAdapter:
         event_id = data_block.get("id") or payload.get("ding_id") or payload.get("id")
         if event_id:
             normalized["ring_event_id"] = str(event_id)
+
+        raw_timestamp = attrs.get("timestamp")
+        readable_timestamp = attrs.get("timestamp_readable")
+        if raw_timestamp is not None:
+            try:
+                normalized["timestamp"] = datetime.fromtimestamp(
+                    float(raw_timestamp) / 1000.0,
+                    tz=timezone.utc,
+                ).isoformat()
+            except (TypeError, ValueError, OSError):
+                pass
+        elif readable_timestamp:
+            normalized["timestamp"] = str(readable_timestamp)
+        elif isinstance(meta, dict) and meta.get("time"):
+            normalized["timestamp"] = str(meta.get("time"))
+
+        if isinstance(meta, dict):
+            if meta.get("request_id"):
+                normalized["request_id"] = str(meta.get("request_id"))
+            if meta.get("account_id"):
+                normalized["account_id"] = str(meta.get("account_id"))
+
+        if attrs.get("component_ids") is not None:
+            normalized["component_ids"] = attrs.get("component_ids")
+        if attrs.get("sub_type") is not None:
+            normalized["sub_type"] = attrs.get("sub_type")
 
         snapshot_url = (
             meta.get("snapshot_url")
