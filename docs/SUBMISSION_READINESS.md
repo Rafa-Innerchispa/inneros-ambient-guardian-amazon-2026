@@ -1,6 +1,6 @@
 # Submission Readiness — Amazon Build, Ship, Shape 2026
 
-Status date: 2026-09-15
+Status date: 2026-10-07
 
 ## Executive status
 
@@ -27,7 +27,7 @@ Evidence:
 - one-time expiring approval proposal
 - replay protection
 - post-action verification and evidence
-- 27/27 tests PASS
+- 84/84 automated tests PASS on the current finalization candidate
 - GitHub Actions PASS
 
 ### 2. Design
@@ -35,7 +35,7 @@ Evidence:
 Evidence:
 
 - no-terminal Judge Mode
-- three reproducible scenarios
+- three reproducible scenarios, with the standout path reconstructing “What happened at 3 AM?” from time-stamped normalized events
 - clear REAL vs SIMULATED truth labels
 - voice-style interaction plus speakable responses
 - separate human approval surface
@@ -69,7 +69,7 @@ Hackathon-compatible path:
 - simulated Alexa+ experience source included in the public repository
 - Judge Mode demonstrates the actual backend and MCP safety architecture
 
-Physical Echo validation is optional and not claimed.
+Direct Alexa+ partner-toolkit binding is not available to hackathon participants and is not claimed. The valid submission path is the self-hosted MCP runtime plus the truth-labeled participant-built front end. Real Echo/Fire speech has been validated separately through Home Assistant Alexa Devices.
 
 ### AWS Builder — READY
 
@@ -86,21 +86,24 @@ Mini challenge.
 - public repository
 - MIT license detected by GitHub
 - new project created during the hackathon window
-- PR #8 is the preferred contribution URL for judging
+- PR #26 is the current finalization contribution candidate; use its final merged URL if it is merged before submission
 - documentation, tests, CI and friction log are public
 
 ### Ring — NOT ENTERED
 
-Current project contains a Ring-compatible event adapter/simulator boundary but does not yet demonstrate an official Ring API, SDK, Ring simulator or physical Ring device. Do not select this track until that changes.
+Current project now contains a working Ring-compatible demo event ingress and a time-stamped 3 AM incident reconstruction, but that edge is deliberately labeled SIMULATED. Do not select the Ring track until the same flow is demonstrated through an official Ring API, SDK, Developer Playground/test account, simulator, or device.
 
 ## Canonical evidence
 
-- Main SHA: `068fe0a64c2663d38d28e58fd8d195af3b121ba3`
-- Devpost project: `inneros-ambient-guardian`, public project version 6
-- Judge Mode PR: #8
-- Automated tests: 27 PASS
+- Canonical main before finalization: `3517025dc50953a9f43bba0b1161057a0e8e2a08`
+- Current finalization PR: #26
+- Current finalization candidate head: `91f22ed91a8f39d0fae65c32a30ea3fc1a2cd170` before documentation-only commits
+- Devpost project: `inneros-ambient-guardian`
+- Automated tests: 84 PASS on GitHub Actions
 - GitHub Actions: PASS
-- runtime HTTP + MCP smoke: PASS
+- real server + Streamable HTTP MCP smoke: PASS
+- Docker build: PASS
+- 3 AM temporal incident reconstruction: implemented and regression-tested
 - local Judge Mode service: loopback-only on the development host
 - Strands/local-Qwen live requests: PASS
 
