@@ -74,36 +74,86 @@ def test_ring_official_adapter_session_verification_live_mock(monkeypatch):
 def test_ring_official_adapter_json_api_normalization_and_truth_labels():
     adapter = RingOfficialAdapter(webhook_secret="secret")
 
-    # 1. JSON:API format
+    # 1. Official JSON:API-style button press payload
     json_api_payload = {
+        "meta": {
+            "version": "1.1",
+            "time": "2026-10-06T08:04:30Z",
+            "request_id": "req-button-998877",
+            "account_id": "ava1.ring.account.demo",
+        },
         "data": {
-            "id": "ding-998877",
-            "type": "events",
+            "id": "doorbot-01_button_press_1791273870000",
+            "type": "button_press",
             "attributes": {
-                "kind": "doorbell_pressed",
-                "device_name": "Front Porch Doorbell Pro",
-                "zone": "front_porch",
-                "summary": "Front Porch doorbell ring detected.",
-                "severity": "info",
+                "source": "doorbot-01",
+                "source_type": "devices",
+                "timestamp": 1791273870000,
             },
-            "meta": {
-                "snapshot_url": "https://api.amazonvision.com/v1/snapshots/ding-998877.jpg",
-                "confidence": 0.98,
-            },
-        }
+        },
     }
     ding_event = adapter.normalize_event(json_api_payload, verified=True)
     assert ding_event["source"] == "ring-official-edge"
     assert ding_event["type"] == "doorbell_pressed"
     assert ding_event["truth"] == "REAL"
-    assert ding_event["ring_event_id"] == "ding-998877"
-    assert ding_event["recording_ref"] == "https://api.amazonvision.com/v1/snapshots/ding-998877.jpg"
-    assert ding_event["confidence"] == 0.98
+    assert ding_event["ring_event_id"] == "doorbot-01_button_press_1791273870000"
+    assert ding_event["request_id"] == "req-button-998877"
+    assert ding_event["account_id"] == "ava1.ring.account.demo"
+    assert ding_event["timestamp"].endswith("+00:00")
 
     # 2. Unverified event gets UNVERIFIED
     unverified_event = adapter.normalize_event(json_api_payload, verified=False)
     assert unverified_event["source"] == "ring-unverified-ingress"
     assert unverified_event["truth"] == "UNVERIFIED"
+
+
+
+
+
+def test_ring_official_json_api_event_type_mapping_and_metadata():
+    adapter = RingOfficialAdapter(webhook_secret="secret")
+
+    motion_payload = {
+        "meta": {
+            "version": "1.1",
+            "time": "2026-10-06T08:07:00Z",
+            "request_id": "req-motion-1",
+            "account_id": "ava1.ring.account.demo",
+        },
+        "data": {
+            "id": "doorbot-01_motion_1791274020000",
+            "type": "motion_detected",
+            "attributes": {
+                "source": "doorbot-01",
+                "source_type": "devices",
+                "timestamp": 1791274020000,
+                "sub_type": "human",
+                "component_ids": ["0"],
+            },
+        },
+    }
+    event = adapter.normalize_event(motion_payload, verified=True)
+    assert event["type"] == "motion"
+    assert event["truth"] == "REAL"
+    assert event["request_id"] == "req-motion-1"
+    assert event["account_id"] == "ava1.ring.account.demo"
+    assert event["component_ids"] == ["0"]
+    assert event["sub_type"] == "human"
+
+    offline_payload = {
+        "data": {
+            "id": "doorbot-01_offline_1791274200000",
+            "type": "device_offline",
+            "attributes": {
+                "source": "doorbot-01",
+                "source_type": "devices",
+                "timestamp": 1791274200000,
+            },
+        }
+    }
+    offline = adapter.normalize_event(offline_payload, verified=True)
+    assert offline["type"] == "camera_offline"
+    assert offline["severity"] == "warning"
 
 
 def test_ring_official_webhook_hmac_fail_closed_security():
@@ -133,15 +183,21 @@ def test_ring_official_webhook_hmac_fail_closed_security():
 def test_ring_official_webhook_http_endpoint_security():
     client = TestClient(app)
     webhook_payload = {
+        "meta": {
+            "version": "1.1",
+            "time": "2026-10-06T08:04:30Z",
+            "request_id": "req-webhook-54321",
+            "account_id": "ava1.ring.account.demo",
+        },
         "data": {
-            "id": "ding-54321",
-            "type": "events",
+            "id": "doorbot-01_button_press_1791273870000",
+            "type": "button_press",
             "attributes": {
-                "kind": "ding",
-                "device_name": "Front Porch Doorbell Pro",
-                "zone": "porch",
+                "source": "doorbot-01",
+                "source_type": "devices",
+                "timestamp": 1791273870000,
             },
-        }
+        },
     }
     raw_bytes = json.dumps(webhook_payload).encode("utf-8")
 
