@@ -76,7 +76,7 @@ The Google Home MCP adapter is implemented separately as a product expansion pat
 
 ## Canonical evidence
 
-- merged main: `eb479a66868d53984c176822a3bbfeb4302e229a`
+- provider-adapter merge commit: `eb479a66868d53984c176822a3bbfeb4302e229a`
 - PR #28: merged
 - Devpost project slug: `inneros-ambient-guardian`
 - tests: 98 PASS on final provider candidate
