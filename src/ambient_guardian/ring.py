@@ -27,7 +27,7 @@ class RingSimulatorAdapter:
 
     def status(self) -> RingAdapterStatus:
         return RingAdapterStatus(
-            summary="simulator-only; official Ring API/MCP credentials and device binding pending",
+            summary="Ring-compatible demo simulator integrated; official Ring API/SDK/simulator binding still pending",
             official_path=(
                 "Ring Developer: OAuth/account authorization, signed webhooks for events, "
                 "device status/history APIs, and optional WebRTC/WHEP video sessions"
@@ -43,10 +43,14 @@ class RingSimulatorAdapter:
         source = str(payload.get("source") or "ring-compatible-simulator").strip()
         severity = str(payload.get("severity") or "info").strip()
         summary = str(payload.get("summary") or f"Ring-compatible event: {event_type}").strip()
-        return {
+        normalized = {
             "source": source,
             "type": event_type,
             "summary": summary,
             "severity": severity,
         }
+        for field in ("device_name", "zone", "confidence", "recording_ref", "simulated"):
+            if field in payload and payload.get(field) is not None:
+                normalized[field] = payload.get(field)
+        return normalized
 
