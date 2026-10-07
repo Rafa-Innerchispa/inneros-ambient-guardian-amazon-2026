@@ -93,3 +93,24 @@ This log records real integration friction encountered while building Ambient Gu
 - **Severity:** High for schedule and onboarding clarity.
 - **Workaround:** kept the official self-hosted MCP Streamable HTTP runtime as the real backend and built a truth-labeled Judge Mode front end that invokes the same runtime and policy.
 - **Suggestion:** place the hackathon-specific availability boundary directly beside the Alexa+ CLI/Toolkit setup instructions, with a starter front-end template for self-hosted MCP submissions.
+
+## 10. Google Home MCP / Home API developer entitlement & local cast speaker coexistence
+
+- **Task:** integrate Google Home MCP / Home APIs and local Google speakers (Google Home Mini, Cast, Android TV).
+- **Steps:** inspected GCP APIs and Google Home Developer access requirements for the workspace account.
+- **Expected:** immediate cloud-only HomeGraph access without device pairing restrictions.
+- **Actual:** Google Home Cloud API requires specific developer entitlement and OAuth consent scopes, whereas local site speakers (Google Home Mini Bedroom, Disco, Chromecast) are instantly controllable with sub-second latency via Home Assistant Cast and Google Translate TTS.
+- **Severity:** Moderate.
+- **Workaround:** implemented a dual-mode `GoogleHomeBridge` that provides official Google Home MCP tool schemas (`google_home_status`, `google_home_list_devices`, `google_home_history`, `google_home_preview_announcement`) and bounded physical speech execution over verified local Cast endpoints, maintaining $0 spend and zero external credential leaks.
+- **Suggestion:** provide unified local-network mDNS/Cast discovery alongside cloud Home APIs in standard starter templates.
+
+## 11. Official Ring Appstore Webhook HMAC validation vs zero-hardware simulation
+
+- **Task:** support official Ring ingress without requiring judges or testers to own physical Ring doorbells.
+- **Steps:** implemented `RingOfficialAdapter` with HMAC-SHA256 signature verification (`X-Ring-Signature`) and standardized event mapping (`ding` → `doorbell_pressed`, `motion`, `person`, `package`).
+- **Expected:** official credentials needed to run CI or local tests.
+- **Actual:** requiring real credentials would break local developer and CI runs.
+- **Severity:** Moderate.
+- **Workaround:** designed the adapter with dual-mode truth labeling (`source="ring-official-edge"` / `truth="REAL"` for verified webhooks, and `source="ring-compatible-simulator"` / `truth="SIMULATED"` for demo runs). All unit and incident reconstruction tests verify both paths independently.
+- **Suggestion:** provide standardized official webhook fixture simulators in hackathon starter repos.
+

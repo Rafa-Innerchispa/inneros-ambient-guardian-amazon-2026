@@ -77,6 +77,34 @@ def integration_status() -> dict[str, Any]:
     }
 
 
+@mcp.tool()
+def google_home_status() -> dict[str, Any]:
+    """Report readiness, speakers, and commands of Google Home MCP and Cast speakers."""
+    return STATE.google_home.status().as_dict()
+
+
+@mcp.tool()
+def google_home_list_devices() -> dict[str, Any]:
+    """List Google Home speakers, Chromecast devices, and TTS engines."""
+    return STATE.google_home.list_resources()
+
+
+@mcp.tool()
+def google_home_history(at_iso: str, window_minutes: int = 15) -> dict[str, Any]:
+    """Fetch Google Home speaker events and announcements around a target time."""
+    return {
+        "target_time": at_iso,
+        "window_minutes": window_minutes,
+        "history": STATE.google_home.list_history(at_iso, window_minutes),
+    }
+
+
+@mcp.tool()
+def google_home_preview_announcement(speaker_id: str, message: str) -> dict[str, Any]:
+    """Dry-run test a bounded Google Home speaker announcement without physical execution."""
+    return STATE.google_home.speak(speaker_id, message, dry_run=True)
+
+
 def _state_payload() -> dict[str, Any]:
     return {
         "guardian": STATE.guardian_status(),
@@ -170,6 +198,70 @@ async def simulate_ring_event(request: Request) -> Response:
             "guardian": STATE.guardian_status(),
         }
     )
+
+
+@mcp.custom_route("/api/ring/webhook", methods=["POST"])
+async def ring_official_webhook(request: Request) -> Response:
+    """Official Ring Appstore & Developer Webhook ingress with HMAC signature verification."""
+    try:
+        raw_body = await request.body()
+        sig_header = request.headers.get("x-signature") or request.headers.get("x-ring-signature")
+        if not STATE.ring_official.verify_webhook_signature(raw_body, sig_header):
+            return JSONResponse({"detail": "invalid webhook signature"}, status_code=401)
+        payload = await _read_object(request)
+        event = STATE.add_ring_official_event(
+            payload,
+            timestamp=str(payload.get("timestamp") or "").strip() or None,
+        )
+    except ValueError as exc:
+        return JSONResponse({"detail": str(exc)}, status_code=400)
+    return JSONResponse(
+        {
+            "status": "received",
+            "event": event,
+            "truth": {
+                "ring_edge": "REAL",
+                "guardian_pipeline": "REAL",
+            },
+            "guardian": STATE.guardian_status(),
+        }
+    )
+
+
+@mcp.custom_route("/api/google_home/state", methods=["GET"])
+async def google_home_state(request: Request) -> Response:
+    """Read-only Google Home MCP & Cast speaker state inspection."""
+    del request
+    return JSONResponse(
+        {
+            "status": STATE.google_home.status().as_dict(),
+            "resources": STATE.google_home.list_resources(),
+            "states": STATE.google_home.list_states(),
+        }
+    )
+
+
+@mcp.custom_route("/api/google_home/speak", methods=["POST"])
+async def google_home_speak_route(request: Request) -> Response:
+    """Owner-only or dry-run Google Home speaker announcement route."""
+    try:
+        payload = await _read_object(request)
+        speaker_id = str(payload.get("speaker_id") or "").strip()
+        message = str(payload.get("message") or "").strip()
+        dry_run = bool(payload.get("dry_run", True))
+        if not dry_run and not _owner_authorized(request):
+            return JSONResponse({"detail": "owner authorization required for physical broadcast"}, status_code=401)
+        result = STATE.google_home.speak(
+            speaker_id,
+            message,
+            command=str(payload.get("command") or "broadcast_announcement").strip(),
+            dry_run=dry_run,
+        )
+    except (PermissionError, RuntimeError, ValueError) as exc:
+        return JSONResponse({"detail": str(exc)}, status_code=400)
+    except Exception:
+        return JSONResponse({"detail": "Google Home broadcast failed"}, status_code=502)
+    return JSONResponse(result)
 
 
 @mcp.custom_route("/api/incidents/summary", methods=["POST"])
