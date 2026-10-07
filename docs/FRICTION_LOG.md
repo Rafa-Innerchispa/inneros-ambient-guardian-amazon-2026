@@ -82,3 +82,14 @@ This log records real integration friction encountered while building Ambient Gu
 - **Severity:** Moderate.
 - **Workaround:** created an isolated `.venv` inside the worktree, installed only `requirements.txt`, and reran the suite successfully.
 - **Suggestion:** keep project-local environments mandatory for MCP examples and print the SDK version in the default smoke test.
+
+
+## 9. Alexa+ partner tooling looked like the required path, but hackathon participants cannot use it
+
+- **Task:** bind the self-hosted MCP server to a real Alexa+ add-on experience for end-to-end testing.
+- **Steps:** followed the Alexa+ MCP Toolkit/CLI path and checked the hackathon forum/FAQ when the package and partner access were unavailable.
+- **Expected:** hackathon participants could register or request access to the Alexa+ add-on toolkit, CLI, or web simulator.
+- **Actual:** the organizer clarified that hackathon participants cannot integrate their MCP directly with Alexa+ because the add-on toolkit is not available to participants. The accepted track path is a working self-hosted MCP server plus a participant-created front end, or another permitted simulated Alexa+ experience.
+- **Severity:** High for schedule and onboarding clarity.
+- **Workaround:** kept the official self-hosted MCP Streamable HTTP runtime as the real backend and built a truth-labeled Judge Mode front end that invokes the same runtime and policy.
+- **Suggestion:** place the hackathon-specific availability boundary directly beside the Alexa+ CLI/Toolkit setup instructions, with a starter front-end template for self-hosted MCP submissions.
