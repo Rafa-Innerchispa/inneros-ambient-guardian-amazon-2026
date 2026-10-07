@@ -131,7 +131,7 @@ class GoogleHomeMCPClient:
     def _headers(self) -> dict[str, str]:
         headers = {
             "Content-Type": "application/json",
-            "Accept": "application/json",
+            "Accept": "application/json, text/event-stream",
         }
         if self.oauth_token:
             headers["Authorization"] = f"Bearer {self.oauth_token}"
