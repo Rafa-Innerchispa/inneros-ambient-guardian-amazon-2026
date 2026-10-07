@@ -36,8 +36,12 @@ def run_preflight() -> dict:
     # 2. Google Cast Local Bridge
     cast_bridge = GoogleCastBridge()
     cast_status = cast_bridge.status()
+    cast_live = bool(cast_status.cast_reachable) and any(
+        spk.get("truth") == "REAL" for spk in cast_status.speakers
+    )
+    cast_label = "PROVIDER_LIVE_VERIFIED" if cast_live else "CODE_READY (HA/Cast not live-verified)"
     print(f"\n[2] Google Cast Local & Home Assistant Bridge:")
-    print(f"    - Status:                PROVIDER_LIVE_VERIFIED (Local Network / HA)")
+    print(f"    - Status:                {cast_label}")
     print(f"    - Home Name:             {cast_status.home_name}")
     print(f"    - Discovered Speakers:   {cast_status.speakers_count}")
     for spk in cast_status.speakers:
@@ -59,7 +63,7 @@ def run_preflight() -> dict:
     print("\n" + "=" * 60)
     print("Summary Audit Matrix:")
     print(f"  * Google Home MCP:         CODE_READY: YES | PROVIDER_LIVE: {'YES' if gh_status.startswith('PROVIDER_LIVE_VERIFIED') else 'NO (Requires OAuth Token)'}")
-    print(f"  * Google Cast Bridge:      CODE_READY: YES | PROVIDER_LIVE: YES ({cast_status.speakers_count} speakers discovered)")
+    print(f"  * Google Cast Bridge:      CODE_READY: YES | PROVIDER_LIVE: {'YES' if cast_live else 'NO'} ({cast_status.speakers_count} speakers discovered)")
     print(f"  * Ring Official Adapter:   CODE_READY: YES | PROVIDER_LIVE: {'YES' if ring_status.startswith('PROVIDER_LIVE_VERIFIED') else 'NO (Requires Token / Secret)'}")
     print("=" * 60)
 
@@ -72,8 +76,9 @@ def run_preflight() -> dict:
         },
         "google_cast_bridge": {
             "code_ready": True,
-            "provider_live_verified": True,
+            "provider_live_verified": cast_live,
             "speakers_count": cast_status.speakers_count,
+            "cast_reachable": cast_status.cast_reachable,
         },
         "ring_official": {
             "code_ready": True,
