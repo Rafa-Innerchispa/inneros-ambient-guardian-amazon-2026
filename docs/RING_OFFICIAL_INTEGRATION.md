@@ -29,3 +29,20 @@ InnerOS Ambient Guardian provides an official Ring Appstore & Developer Webhook 
 
 5. **Graceful Simulator Fallback:**
    - When official credentials are not yet linked, `RingSimulatorAdapter` serves as transparent local fallback so all automated tests and demos function safely.
+
+## Provider Readiness Status
+- **Implementation Status (`CODE_READY`):** COMPLETE.
+  - Official endpoint: `https://api.amazonvision.com/v1/devices`
+  - Ingress HMAC-SHA256 signature verification supporting `X-Signature` and `X-Ring-Signature` (fail-closed)
+  - Full JSON:API normalization (`data`, `attributes`, `meta`, timestamps, sub_types, component_ids, lifecycle events)
+  - Truth labels (`REAL` for authenticated/signed, `UNVERIFIED` for unsigned)
+  - Unit and integration tests 100% passing.
+- **Live Provider Status (`PROVIDER_LIVE_VERIFIED`):** PENDING LIVE CREDENTIALS.
+  - Upstream Amazon Vision / Ring API requires live developer token (`RING_TOKEN`) and webhook secret (`RING_WEBHOOK_SECRET`).
+- **Local Fallback:** `CODE_READY` and verified via `RingSimulatorAdapter`.
+
+## Preflight Verification
+To run the diagnostic preflight audit:
+```bash
+PYTHONPATH=src python scripts/preflight_providers.py
+```

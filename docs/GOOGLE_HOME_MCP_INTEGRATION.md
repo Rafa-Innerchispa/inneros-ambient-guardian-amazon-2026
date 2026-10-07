@@ -35,3 +35,19 @@ To maintain absolute engineering integrity and avoid overstating capabilities:
    - Speaker history events are correlated into `incident_summary`.
    - Events emitted by verified live Cast/Home endpoints carry `metadata.truth = "REAL"`.
    - Simulated/fixture events carry `metadata.truth = "SIMULATED"`.
+
+## Provider Readiness Status
+- **Implementation Status (`CODE_READY`):** COMPLETE.
+  - JSON-RPC 2.0 client via `https://home.googleapis.com/mcp`
+  - OAuth Bearer authorization and `Accept: application/json, text/event-stream` headers
+  - Full support for `tools/list` and `tools/call` (`list_homes`, `list_home_resources`, `list_home_states`, `list_home_history`)
+  - Unit and integration tests 100% passing.
+- **Live Provider Status (`PROVIDER_LIVE_VERIFIED`):** PENDING LIVE CREDENTIALS.
+  - Upstream Google Home MCP requires live OAuth Bearer token configured via `GOOGLE_HOME_ACCESS_TOKEN` / `GOOGLE_HOME_OAUTH_TOKEN` registered with Google Cloud Home Developer APIs.
+- **Local Fallback:** `PROVIDER_LIVE_VERIFIED` via local Home Assistant / Google Cast bridge (4 discovered physical speakers).
+
+## Preflight Verification
+To run the diagnostic preflight audit:
+```bash
+PYTHONPATH=src python scripts/preflight_providers.py
+```
