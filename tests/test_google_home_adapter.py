@@ -35,6 +35,7 @@ def test_google_home_mcp_client_jsonrpc_tools_list_and_call(monkeypatch):
         json_data = kwargs.get("json") or {}
         assert "Authorization" in headers
         assert headers["Authorization"] == "Bearer mock-valid-bearer-token"
+        assert headers["Accept"] == "application/json, text/event-stream"
         req = httpx.Request("POST", url)
         method = json_data.get("method")
         if method == "tools/list":
