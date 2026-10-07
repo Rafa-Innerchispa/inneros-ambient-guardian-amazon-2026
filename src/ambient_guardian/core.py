@@ -11,8 +11,9 @@ from typing import Any
 import httpx
 
 from .dmx import DMXBridge
+from .google_home import GoogleHomeBridge, GoogleHomeStatus
 from .home_assistant import HomeAssistantBridge
-from .ring import RingAdapterStatus, RingSimulatorAdapter
+from .ring import RingAdapterStatus, RingOfficialAdapter, RingSimulatorAdapter
 
 
 def utc_now() -> datetime:
@@ -66,8 +67,10 @@ class GuardianState:
         self._ttl = action_ttl_seconds
         self.adapter = SimulatorAdapter()
         self.ring_adapter = RingSimulatorAdapter()
+        self.ring_official = RingOfficialAdapter()
         self.home_assistant = HomeAssistantBridge()
         self.dmx = DMXBridge()
+        self.google_home = GoogleHomeBridge()
         self.events: list[dict[str, Any]] = []
         self.pending: dict[str, PendingAction] = {}
         self.evidence: list[dict[str, Any]] = []
@@ -89,6 +92,8 @@ class GuardianState:
             self.evidence = []
             self.adapter = SimulatorAdapter()
             self.ring_adapter = RingSimulatorAdapter()
+            self.ring_official = RingOfficialAdapter()
+            self.google_home = GoogleHomeBridge()
 
     def add_event(
         self,
@@ -107,6 +112,8 @@ class GuardianState:
             "camera_offline": ("The front-door camera became unavailable.", "warning"),
             "door_open": ("The front door is open.", "warning"),
             "door_secured": ("The front door was secured.", "info"),
+            "speaker_announcement": ("A voice announcement was broadcast.", "info"),
+            "google_home_command": ("A Google Home voice/action command was registered.", "info"),
         }
         if event_type not in event_map:
             raise ValueError(f"Unsupported simulator event: {event_type}")
@@ -171,6 +178,59 @@ class GuardianState:
             event["severity"] = severity
         return event
 
+    def add_ring_official_event(
+        self,
+        event_payload: dict[str, Any],
+        *,
+        timestamp: str | None = None,
+    ) -> dict[str, Any]:
+        """Inject a verified, truth-labeled real event from Ring official webhook/API."""
+        normalized = self.ring_official.normalize_event(event_payload)
+        event = self.add_event(
+            str(normalized["type"]),
+            str(normalized["source"]),
+            timestamp=timestamp,
+            metadata={
+                "provider": "ring_official",
+                "truth": "REAL",
+                "device_name": normalized.get("device_name", "Ring Video Doorbell"),
+                "zone": normalized.get("zone", "front_door"),
+                "ring_event_id": normalized.get("ring_event_id"),
+                "recording_ref": normalized.get("recording_ref"),
+            },
+        )
+        if normalized.get("summary"):
+            event["summary"] = normalized["summary"]
+        if normalized.get("severity"):
+            event["severity"] = normalized["severity"]
+        return event
+
+    def add_google_home_event(
+        self,
+        event_type: str,
+        summary: str,
+        *,
+        speaker_id: str = "media_player.dormitorio",
+        timestamp: str | None = None,
+        truth: str = "REAL",
+    ) -> dict[str, Any]:
+        """Inject a truth-labeled Google Home / Cast speaker event into the pipeline."""
+        self.google_home.add_history_event(
+            event_type, summary, speaker_id=speaker_id, timestamp=timestamp, truth=truth
+        )
+        event = self.add_event(
+            event_type,
+            "google-home-mcp",
+            timestamp=timestamp,
+            metadata={
+                "provider": "google_home",
+                "truth": truth,
+                "speaker_id": speaker_id,
+            },
+        )
+        event["summary"] = summary
+        return event
+
     def recent_events(self, limit: int = 8) -> list[dict[str, Any]]:
         limit = max(1, min(int(limit), 25))
         with self._lock:
@@ -224,6 +284,22 @@ class GuardianState:
             if len(matches) > 6:
                 summary += f" Plus {len(matches) - 6} additional event(s)."
 
+        ring_used = "NOT_USED"
+        for e in matches:
+            prov = (e.get("metadata") or {}).get("provider")
+            if prov == "ring_official":
+                ring_used = "REAL"
+                break
+            elif prov == "ring":
+                ring_used = "SIMULATED"
+
+        google_home_used = "NOT_USED"
+        for e in matches:
+            prov = (e.get("metadata") or {}).get("provider")
+            if prov == "google_home":
+                google_home_used = (e.get("metadata") or {}).get("truth", "REAL")
+                break
+
         return {
             "status": "attention_required" if warning else "all_clear",
             "target_time": target.isoformat(),
@@ -238,12 +314,8 @@ class GuardianState:
             "truth": {
                 "analysis": "REAL",
                 "event_pipeline": "REAL",
-                "ring_edge": "SIMULATED"
-                if any(
-                    (e.get("metadata") or {}).get("provider") == "ring"
-                    for e in matches
-                )
-                else "NOT_USED",
+                "ring_edge": ring_used,
+                "google_home": google_home_used,
             },
         }
 
@@ -351,6 +423,8 @@ class GuardianState:
 
     def integration_status(self) -> dict[str, Any]:
         ring_status: RingAdapterStatus = self.ring_adapter.status()
+        ring_official_status: RingAdapterStatus = self.ring_official.status()
+        google_home_status = self.google_home.status().as_dict()
         home_status = self.home_assistant.status().as_dict()
         dmx_status = self.dmx.status().as_dict()
         return {
@@ -362,6 +436,13 @@ class GuardianState:
             "ring": ring_status.summary,
             "ring_official_path": ring_status.official_path,
             "ring_device_verification": ring_status.device_verification,
+            "ring_official": {
+                "summary": ring_official_status.summary,
+                "mode": ring_official_status.mode,
+                "device_verification": ring_official_status.device_verification,
+                "configured": self.ring_official.is_configured(),
+            },
+            "google_home": google_home_status,
             "local_llm": bool(os.getenv("INNEROS_LOCAL_LLM_URL")),
             "aws_strands_enabled": os.getenv("AWS_STRANDS_ENABLED", "0") == "1",
             "home_assistant": home_status,
