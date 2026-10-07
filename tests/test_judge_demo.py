@@ -14,7 +14,7 @@ def test_judge_ui_declares_truth_boundaries_and_three_scenarios():
     assert "Judge Mode" in html
     assert "REAL: MCP Streamable HTTP runtime" in html
     assert "SIMULATED: Alexa+ voice experience" in html
-    assert "SIMULATED: Ring-compatible event source" in html
+    assert "SIMULATED: Ring-compatible demo edge" in html
     assert "1. Home status" in html
     assert "2. What happened at 3 AM?" in html
     assert "3. Prepare lock" in html
