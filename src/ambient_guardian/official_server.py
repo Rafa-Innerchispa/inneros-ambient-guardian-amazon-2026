@@ -14,7 +14,7 @@ from . import aws_strands
 from .core import GuardianReasoner, GuardianState
 from .orchestration import simulated_alexa_turn
 
-APP_VERSION = "0.5.0"
+APP_VERSION = "0.6.0"
 STATE = GuardianState()
 REASONER = GuardianReasoner()
 STATIC_DIR = Path(__file__).parent / "static"
@@ -40,6 +40,12 @@ def guardian_status() -> dict[str, Any]:
 def recent_events(limit: int = 8) -> dict[str, Any]:
     """Return recent normalized Ring-compatible and IoT events."""
     return {"events": STATE.recent_events(limit)}
+
+
+@mcp.tool()
+def incident_summary(at_iso: str, window_minutes: int = 15) -> dict[str, Any]:
+    """Summarize normalized home activity around a specific ISO-8601 time."""
+    return STATE.incident_summary(at_iso, window_minutes)
 
 
 @mcp.tool()
@@ -132,10 +138,54 @@ async def simulate_event(request: Request) -> Response:
     try:
         payload = await _read_object(request)
         event_type = str(payload.get("event_type", "")).strip()
-        event = STATE.add_event(event_type)
+        timestamp = str(payload.get("timestamp") or "").strip() or None
+        event = STATE.add_event(event_type, timestamp=timestamp)
     except ValueError as exc:
         return JSONResponse({"detail": str(exc)}, status_code=400)
     return JSONResponse({"event": event, "guardian": STATE.guardian_status()})
+
+
+@mcp.custom_route("/api/simulate/ring", methods=["POST"])
+async def simulate_ring_event(request: Request) -> Response:
+    """Truth-labeled Ring-compatible demo ingress. This is not an official Ring API claim."""
+    try:
+        payload = await _read_object(request)
+        event = STATE.add_ring_demo_event(
+            str(payload.get("event_type", "")).strip(),
+            timestamp=str(payload.get("timestamp") or "").strip() or None,
+            device_name=str(payload.get("device_name") or "Front Door").strip(),
+            zone=str(payload.get("zone") or "front_entry").strip(),
+            summary=str(payload.get("summary") or "").strip() or None,
+            severity=str(payload.get("severity") or "").strip() or None,
+        )
+    except ValueError as exc:
+        return JSONResponse({"detail": str(exc)}, status_code=400)
+    return JSONResponse(
+        {
+            "event": event,
+            "truth": {
+                "ring_edge": "SIMULATED",
+                "guardian_pipeline": "REAL",
+            },
+            "guardian": STATE.guardian_status(),
+        }
+    )
+
+
+@mcp.custom_route("/api/incidents/summary", methods=["POST"])
+async def incident_summary_http(request: Request) -> Response:
+    try:
+        payload = await _read_object(request)
+        at_iso = str(payload.get("at_iso") or "").strip()
+        if not at_iso:
+            raise ValueError("at_iso is required")
+        result = STATE.incident_summary(
+            at_iso,
+            int(payload.get("window_minutes") or 15),
+        )
+    except (TypeError, ValueError) as exc:
+        return JSONResponse({"detail": str(exc)}, status_code=400)
+    return JSONResponse(result)
 
 
 @mcp.custom_route("/api/alexa", methods=["POST"])
