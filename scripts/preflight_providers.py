@@ -12,11 +12,36 @@ import json
 import os
 import sys
 
+from pathlib import Path
+
 from ambient_guardian.google_home import GoogleCastBridge, GoogleHomeMCPClient
 from ambient_guardian.ring import RingOfficialAdapter
 
 
+def _load_env_file() -> None:
+    env_file = Path(".env")
+    if not env_file.is_file():
+        for p in Path.cwd().parents:
+            if (p / ".env").is_file():
+                env_file = p / ".env"
+                break
+    if env_file.is_file():
+        try:
+            for line in env_file.read_text(encoding="utf-8").splitlines():
+                line = line.strip()
+                if not line or line.startswith("#") or "=" not in line:
+                    continue
+                k, v = line.split("=", 1)
+                k = k.strip()
+                v = v.strip().strip("'\"")
+                if k and k not in os.environ:
+                    os.environ[k] = v
+        except OSError:
+            pass
+
+
 def run_preflight() -> dict:
+    _load_env_file()
     print("=" * 60)
     print("Ambient Guardian Provider Preflight & Diagnostic Audit")
     print("=" * 60)

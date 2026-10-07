@@ -75,6 +75,8 @@ class GoogleHomeMCPClient:
         if not path_value:
             return {}
         path = Path(path_value).expanduser()
+        if not path.is_file():
+            return {}
         try:
             lines = path.read_text(encoding="utf-8").splitlines()
         except OSError:
@@ -83,6 +85,7 @@ class GoogleHomeMCPClient:
             "GOOGLE_HOME_MCP_URL",
             "GOOGLE_HOME_OAUTH_TOKEN",
             "GOOGLE_HOME_ACCESS_TOKEN",
+            "GOOGLE_HOME_API_KEY",
             "GOOGLE_HOME_PROJECT_ID",
         }
         found: dict[str, str] = {}
@@ -123,30 +126,39 @@ class GoogleHomeMCPClient:
             or shared.get("GOOGLE_HOME_ACCESS_TOKEN")
             or ""
         ).strip()
+        self.api_key = (
+            os.getenv("GOOGLE_HOME_API_KEY")
+            or os.getenv("GOOGLE_API_KEY")
+            or shared.get("GOOGLE_HOME_API_KEY")
+            or shared.get("GOOGLE_API_KEY")
+            or ("" if not self.oauth_token.startswith("AIza") else self.oauth_token)
+        ).strip()
         self.timeout = timeout
 
     def is_configured(self) -> bool:
-        return bool(self.oauth_token)
+        return bool(self.oauth_token or self.api_key)
 
     def _headers(self) -> dict[str, str]:
         headers = {
             "Content-Type": "application/json",
             "Accept": "application/json, text/event-stream",
         }
+        if self.api_key:
+            headers["X-Goog-Api-Key"] = self.api_key
         if self.oauth_token:
             headers["Authorization"] = f"Bearer {self.oauth_token}"
         return headers
 
     def test_connection(self) -> dict[str, Any]:
         """Test authentication and connectivity against official Google Home MCP."""
-        if not self.oauth_token:
+        if not self.is_configured():
             return {
                 "configured": False,
                 "reachable": False,
                 "endpoint": self.mcp_url,
                 "detail": (
-                    "Google Home MCP client awaiting OAuth Bearer token (GOOGLE_HOME_ACCESS_TOKEN / GOOGLE_HOME_OAUTH_TOKEN). "
-                    "Cloud Home APIs require Google Cloud Developer Console registration."
+                    "Google Home MCP client awaiting OAuth Bearer token (GOOGLE_HOME_ACCESS_TOKEN / GOOGLE_HOME_OAUTH_TOKEN) "
+                    "or API Key (GOOGLE_HOME_API_KEY). Cloud Home APIs require Google Cloud Developer Console registration."
                 ),
             }
         try:
@@ -158,17 +170,22 @@ class GoogleHomeMCPClient:
                     "params": {},
                 }
                 resp = client.post(self.mcp_url, headers=self._headers(), json=payload)
-                if resp.status_code == 200:
-                    data = resp.json()
+                if resp.status_code in {200, 401}:
+                    data = {}
+                    try:
+                        data = resp.json()
+                    except Exception:
+                        pass
                     tools = (data.get("result") or {}).get("tools", [])
-                    return {
-                        "configured": True,
-                        "reachable": True,
-                        "endpoint": self.mcp_url,
-                        "tools_count": len(tools),
-                        "detail": f"Official Google Home MCP reachable with {len(tools)} tools available.",
-                    }
-                elif resp.status_code in {401, 403}:
+                    if tools:
+                        return {
+                            "configured": True,
+                            "reachable": True,
+                            "endpoint": self.mcp_url,
+                            "tools_count": len(tools),
+                            "detail": f"Official Google Home MCP reachable with {len(tools)} tools available (tools/list verified).",
+                        }
+                if resp.status_code in {401, 403}:
                     return {
                         "configured": True,
                         "reachable": False,
@@ -200,9 +217,9 @@ class GoogleHomeMCPClient:
         return self._jsonrpc_call("tools/call", params)
 
     def _jsonrpc_call(self, method: str, params: dict[str, Any]) -> dict[str, Any]:
-        if not self.oauth_token:
+        if not self.is_configured():
             raise RuntimeError(
-                "Google Home MCP client requires an OAuth Bearer token (GOOGLE_HOME_ACCESS_TOKEN)"
+                "Google Home MCP client requires an OAuth Bearer token (GOOGLE_HOME_ACCESS_TOKEN) or API Key (GOOGLE_HOME_API_KEY)"
             )
         req_id = str(uuid.uuid4())[:8]
         payload = {
