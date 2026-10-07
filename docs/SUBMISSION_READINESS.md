@@ -27,7 +27,7 @@ Evidence:
 - one-time expiring approval proposal
 - replay protection
 - post-action verification and evidence
-- 84/84 automated tests PASS on the current finalization candidate
+- 84/84 automated tests PASS on merged main
 - GitHub Actions PASS
 
 ### 2. Design
@@ -86,7 +86,7 @@ Mini challenge.
 - public repository
 - MIT license detected by GitHub
 - new project created during the hackathon window
-- PR #26 is the current finalization contribution candidate; use its final merged URL if it is merged before submission
+- PR #26 is merged and is the preferred current Open Source contribution URL
 - documentation, tests, CI and friction log are public
 
 ### Ring — NOT ENTERED
@@ -95,9 +95,8 @@ Current project now contains a working Ring-compatible demo event ingress and a 
 
 ## Canonical evidence
 
-- Canonical main before finalization: `3517025dc50953a9f43bba0b1161057a0e8e2a08`
-- Current finalization PR: #26
-- Current finalization candidate head: `91f22ed91a8f39d0fae65c32a30ea3fc1a2cd170` before documentation-only commits
+- Canonical main after finalization: `ef6ccbb04e92f87ba3a45c52630906b2bf0ec31e`
+- Finalization PR: #26 (merged)
 - Devpost project: `inneros-ambient-guardian`
 - Automated tests: 84 PASS on GitHub Actions
 - GitHub Actions: PASS
