@@ -16,6 +16,7 @@ def test_official_mcp_sdk_discovers_and_calls_guardian_tools():
             assert {
                 "guardian_status",
                 "recent_events",
+                "incident_summary",
                 "ask_guardian",
                 "prepare_action",
                 "verification_evidence",
@@ -23,6 +24,13 @@ def test_official_mcp_sdk_discovers_and_calls_guardian_tools():
             } <= names
             assert "approve_action" not in names
             assert not any("speak" in name for name in names)
+
+            incident = await client.call_tool(
+                "incident_summary",
+                {"at_iso": "2026-10-06T03:00:00-05:00", "window_minutes": 15},
+            )
+            assert incident.is_error is False
+            assert "event_count" in incident.structured_content
 
             result = await client.call_tool("guardian_status", {})
             assert result.is_error is False

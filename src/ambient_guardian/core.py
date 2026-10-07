@@ -90,33 +90,162 @@ class GuardianState:
             self.adapter = SimulatorAdapter()
             self.ring_adapter = RingSimulatorAdapter()
 
-    def add_event(self, event_type: str, source: str = "ring-compatible-simulator") -> dict[str, Any]:
+    def add_event(
+        self,
+        event_type: str,
+        source: str = "ring-compatible-simulator",
+        *,
+        timestamp: str | None = None,
+        metadata: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
         event_map = {
             "package_detected": ("A package was detected at the front door.", "info"),
-            "person_detected": ("A known person was detected near the front door.", "info"),
+            "person_detected": ("A person was detected near the front door.", "info"),
             "unknown_person": ("An unknown person is lingering near the front door.", "warning"),
+            "motion": ("Motion was detected near the front door.", "info"),
+            "doorbell_pressed": ("The front-door doorbell was pressed.", "info"),
+            "camera_offline": ("The front-door camera became unavailable.", "warning"),
             "door_open": ("The front door is open.", "warning"),
             "door_secured": ("The front door was secured.", "info"),
         }
         if event_type not in event_map:
             raise ValueError(f"Unsupported simulator event: {event_type}")
         summary, severity = event_map[event_type]
+        event_timestamp = timestamp or iso_now()
+        try:
+            parsed = datetime.fromisoformat(event_timestamp.replace("Z", "+00:00"))
+        except ValueError as exc:
+            raise ValueError("timestamp must be ISO 8601") from exc
+        if parsed.tzinfo is None:
+            parsed = parsed.replace(tzinfo=timezone.utc)
         event = {
             "id": f"evt-{secrets.token_hex(5)}",
             "source": source,
             "type": event_type,
             "summary": summary,
             "severity": severity,
-            "timestamp": iso_now(),
+            "timestamp": parsed.isoformat(),
         }
+        if metadata:
+            event["metadata"] = dict(metadata)
         with self._lock:
             self.events.append(event)
+        return event
+
+    def add_ring_demo_event(
+        self,
+        event_type: str,
+        *,
+        timestamp: str | None = None,
+        device_name: str = "Front Door",
+        zone: str = "front_entry",
+        summary: str | None = None,
+        severity: str | None = None,
+    ) -> dict[str, Any]:
+        """Inject a truth-labeled Ring-compatible demo event into the real Guardian pipeline."""
+        normalized = self.ring_adapter.normalize_event(
+            {
+                "type": event_type,
+                "source": "ring-compatible-simulator",
+                "summary": summary,
+                "severity": severity,
+                "device_name": device_name,
+                "zone": zone,
+                "simulated": True,
+            }
+        )
+        event = self.add_event(
+            str(normalized["type"]),
+            str(normalized["source"]),
+            timestamp=timestamp,
+            metadata={
+                "provider": "ring",
+                "truth": "SIMULATED",
+                "device_name": normalized.get("device_name", device_name),
+                "zone": normalized.get("zone", zone),
+            },
+        )
+        if summary:
+            event["summary"] = summary
+        if severity:
+            event["severity"] = severity
         return event
 
     def recent_events(self, limit: int = 8) -> list[dict[str, Any]]:
         limit = max(1, min(int(limit), 25))
         with self._lock:
             return list(self.events[-limit:])
+
+    def incident_summary(self, at_iso: str, window_minutes: int = 15) -> dict[str, Any]:
+        """Summarize normalized events around a target time without executing any action."""
+        try:
+            target = datetime.fromisoformat(str(at_iso).replace("Z", "+00:00"))
+        except ValueError as exc:
+            raise ValueError("at_iso must be ISO 8601") from exc
+        if target.tzinfo is None:
+            target = target.replace(tzinfo=timezone.utc)
+
+        window_minutes = max(1, min(int(window_minutes), 120))
+        start = target - timedelta(minutes=window_minutes)
+        end = target + timedelta(minutes=window_minutes)
+
+        with self._lock:
+            candidates = list(self.events)
+
+        matches: list[dict[str, Any]] = []
+        for event in candidates:
+            raw_ts = str(event.get("timestamp") or "")
+            try:
+                event_ts = datetime.fromisoformat(raw_ts.replace("Z", "+00:00"))
+            except ValueError:
+                continue
+            if event_ts.tzinfo is None:
+                event_ts = event_ts.replace(tzinfo=timezone.utc)
+            if start <= event_ts <= end:
+                matches.append(event)
+
+        matches.sort(key=lambda item: str(item.get("timestamp") or ""))
+        warning = any(e.get("severity") in {"warning", "critical"} for e in matches)
+        if not matches:
+            summary = (
+                f"No normalized home events were found within {window_minutes} minutes "
+                f"of {target.strftime('%H:%M')}."
+            )
+        else:
+            details = []
+            for event in matches[:6]:
+                event_ts = datetime.fromisoformat(
+                    str(event["timestamp"]).replace("Z", "+00:00")
+                )
+                details.append(
+                    f"{event_ts.strftime('%H:%M')}: {str(event.get('summary') or event.get('type'))}"
+                )
+            summary = " ".join(details)
+            if len(matches) > 6:
+                summary += f" Plus {len(matches) - 6} additional event(s)."
+
+        return {
+            "status": "attention_required" if warning else "all_clear",
+            "target_time": target.isoformat(),
+            "window_minutes": window_minutes,
+            "start_time": start.isoformat(),
+            "end_time": end.isoformat(),
+            "event_count": len(matches),
+            "events": matches,
+            "event_ids": [str(e.get("id") or "") for e in matches if e.get("id")],
+            "sources": sorted({str(e.get("source") or "") for e in matches if e.get("source")}),
+            "summary": summary,
+            "truth": {
+                "analysis": "REAL",
+                "event_pipeline": "REAL",
+                "ring_edge": "SIMULATED"
+                if any(
+                    (e.get("metadata") or {}).get("provider") == "ring"
+                    for e in matches
+                )
+                else "NOT_USED",
+            },
+        }
 
     def guardian_status(self) -> dict[str, Any]:
         with self._lock:

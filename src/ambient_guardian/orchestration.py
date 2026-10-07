@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import os
 import re
+from datetime import datetime, timezone
 from typing import Any
 
 from . import aws_strands
@@ -48,6 +49,66 @@ _ALARM_STATUS_QUERY = re.compile(
     r"|\b(?:alarma|alarm)\b[^.]*\b(?:esta|está|is)\b[^.]*\b(?:activa|activada|armada|armed|desarmada|disarmed)\b",
     re.I,
 )
+
+
+_TEMPORAL_INCIDENT_QUERY = re.compile(
+    r"\b(?:what happened|what was happening|qué pasó|que paso|qué ocurrio|que ocurrio)\b"
+    r"[^?!.]*?\b(\d{1,2})(?::(\d{2}))?\s*(a\.?\s*m\.?|p\.?\s*m\.?)?\b",
+    re.I,
+)
+
+
+def _temporal_incident_response(
+    utterance: str,
+    state: GuardianState,
+) -> dict[str, Any] | None:
+    match = _TEMPORAL_INCIDENT_QUERY.search(" ".join(utterance.strip().split()))
+    if not match:
+        return None
+
+    hour = int(match.group(1))
+    minute = int(match.group(2) or 0)
+    if minute > 59:
+        return None
+
+    meridian = re.sub(r"[^apm]", "", (match.group(3) or "").lower())
+    if meridian == "pm" and hour < 12:
+        hour += 12
+    elif meridian == "am" and hour == 12:
+        hour = 0
+    elif not meridian and hour > 23:
+        return None
+    if hour > 23:
+        return None
+
+    anchor = None
+    for event in reversed(state.recent_events(25)):
+        raw = str(event.get("timestamp") or "")
+        if not raw:
+            continue
+        try:
+            anchor = datetime.fromisoformat(raw.replace("Z", "+00:00"))
+            break
+        except ValueError:
+            continue
+    if anchor is None:
+        anchor = datetime.now(timezone.utc)
+    elif anchor.tzinfo is None:
+        anchor = anchor.replace(tzinfo=timezone.utc)
+
+    target = anchor.replace(hour=hour, minute=minute, second=0, microsecond=0)
+    incident = state.incident_summary(target.isoformat(), 15)
+    return {
+        "utterance": utterance,
+        "response": {
+            "answer": incident["summary"],
+            "status": incident["status"],
+            "reasoning_mode": "deterministic-temporal-incident",
+        },
+        "prepared_action": None,
+        "incident": incident,
+        "evidence_count": len(state.evidence_snapshot()),
+    }
 
 
 def _owner_speaker_authorized(
@@ -434,6 +495,10 @@ def simulated_alexa_turn(
     events = state.recent_events(8)
 
     normalized_utterance = " ".join(utterance.strip().split())
+
+    temporal_incident = _temporal_incident_response(normalized_utterance, state)
+    if temporal_incident is not None:
+        return temporal_incident
 
     siren_request = parse_siren_command(normalized_utterance)
     if siren_request is not None:
