@@ -5,7 +5,7 @@ InnerOS Ambient Guardian provides an official Ring Appstore & Developer Webhook 
 
 ## Key Capabilities & Security Controls
 1. **Fail-Closed HMAC-SHA256 Webhook Verification:**
-   - Inbound webhook requests to `/api/ring/webhook` MUST contain a valid cryptographic signature in the `X-Ring-Signature` header matching the HMAC-SHA256 of the payload computed with `RING_WEBHOOK_SECRET`.
+   - Inbound webhook requests to `/api/ring/webhook` MUST contain a valid HMAC-SHA256 signature in the current `X-Signature` header. `X-Ring-Signature` remains accepted only as a compatibility fallback.
    - **Fail-Closed Invariant:** If `RING_WEBHOOK_SECRET` is unconfigured, or if the header is missing/invalid, the endpoint strictly rejects the request with HTTP 401.
 
 2. **Truth-Labeling Policy:**
@@ -15,16 +15,17 @@ InnerOS Ambient Guardian provides an official Ring Appstore & Developer Webhook 
    - `incident_summary` reflects `truth.ring_edge = "REAL"` ONLY when verified official events are part of the target timeline.
 
 3. **Live API Client & Session Check:**
-   - `RingOfficialAdapter.verify_session()` tests credentials against the official Ring Clients REST API (`https://api.ring.com/clients_api/ring_devices`).
+   - `RingOfficialAdapter.verify_session()` tests credentials against the current Amazon Vision / Ring developer endpoint `GET https://api.amazonvision.com/v1/devices` using Bearer authentication.
    - Merely having a token string present without a successful API response is truthfully reported as `device_verification="unverified_token"` and `mode="official_ring_pending"`.
 
 4. **Normalized Schema Ingress:**
    - Standardizes Ring event schemas into Ambient Guardian events:
-     - `ding` / `doorbell` → `doorbell_pressed`
-     - `motion` → `motion`
-     - `person` → `person_detected`
-     - `package` → `package_detected`
-     - `camera_offline` → `camera_offline`
+     - `button_press` / legacy `ding` / `doorbell` → `doorbell_pressed`
+     - `motion_detected` / `motion` → `motion`
+     - `person_detected` / `person` → `person_detected`
+     - `package_detected` / `package` → `package_detected`
+     - `device_offline` / `camera_offline` → `camera_offline`
+     - `device_online`, `device_added`, `device_removed` → corresponding lifecycle events
    - Retains references to `recording_ref` and `ring_event_id` without streaming raw video payloads over MCP.
 
 5. **Graceful Simulator Fallback:**
