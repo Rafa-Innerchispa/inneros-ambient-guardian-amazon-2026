@@ -7,8 +7,8 @@ InnerOS Ambient Guardian integrates Google Home / Google Cast smart speakers and
 To maintain absolute engineering integrity and avoid overstating capabilities:
 1. **Upstream Google Home MCP Client (`GoogleHomeMCPClient`):**
    - Implements official MCP protocol client over Streamable HTTP / JSON-RPC.
-   - Active when `GOOGLE_HOME_MCP_URL` is configured with an authorized upstream Google Cloud Home API server.
-   - When unconfigured or blocked by lack of early-access developer entitlement, it truthfully reports `configured=False` and documents the exact requirement.
+   - Uses the official endpoint `https://home.googleapis.com/mcp` by default and becomes active only when a valid OAuth Bearer token is available through the secure runtime.
+   - When OAuth credentials or entitlement are unavailable, it fails closed and reports the exact missing authorization instead of synthesizing Home MCP data.
 
 2. **Local Google Cast & Home Assistant Speaker Engine (`GoogleCastBridge`):**
    - Performs dynamic live discovery of Google Cast speakers and Google Translate TTS engines directly from the live Home Assistant instance.
