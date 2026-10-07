@@ -3,6 +3,7 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import uuid
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -24,6 +25,7 @@ class GoogleIntegrationStatus:
     active_mode: str
     mcp_configured: bool
     mcp_reachable: bool
+    mcp_endpoint: str
     mcp_detail: str
     cast_configured: bool
     cast_reachable: bool
@@ -40,6 +42,7 @@ class GoogleIntegrationStatus:
             "active_mode": self.active_mode,
             "mcp_configured": self.mcp_configured,
             "mcp_reachable": self.mcp_reachable,
+            "mcp_endpoint": self.mcp_endpoint,
             "mcp_detail": self.mcp_detail,
             "cast_configured": self.cast_configured,
             "cast_reachable": self.cast_reachable,
@@ -53,62 +56,168 @@ class GoogleIntegrationStatus:
         }
 
 
-# For backward compatibility with existing status dicts
+# For backward compatibility
 GoogleHomeStatus = GoogleIntegrationStatus
 
 
 class GoogleHomeMCPClient:
     """Official Google Home MCP Client.
 
-    Connects to an upstream Google Home MCP Server over Streamable HTTP or JSON-RPC
-    when GOOGLE_HOME_MCP_URL is configured and OAuth/early access entitlement is active.
-    Fails closed and reports truthful unconfigured/blocked status otherwise.
+    Connects to the official Google Home MCP endpoint (default: https://home.googleapis.com/mcp)
+    using standard JSON-RPC 2.0 MCP protocol with OAuth Bearer authentication.
     """
 
-    def __init__(self, mcp_url: str = "", timeout: float = 4.0) -> None:
-        self.mcp_url = mcp_url.rstrip("/")
+    DEFAULT_OFFICIAL_ENDPOINT = "https://home.googleapis.com/mcp"
+
+    @staticmethod
+    def _selected_shared_env(path_value: str) -> dict[str, str]:
+        path_value = path_value.strip()
+        if not path_value:
+            return {}
+        path = Path(path_value).expanduser()
+        try:
+            lines = path.read_text(encoding="utf-8").splitlines()
+        except OSError:
+            return {}
+        allowed = {
+            "GOOGLE_HOME_MCP_URL",
+            "GOOGLE_HOME_OAUTH_TOKEN",
+            "GOOGLE_HOME_ACCESS_TOKEN",
+            "GOOGLE_HOME_PROJECT_ID",
+        }
+        found: dict[str, str] = {}
+        for raw in lines:
+            line = raw.strip()
+            if not line or line.startswith("#") or "=" not in line:
+                continue
+            key, value = line.split("=", 1)
+            key = key.strip()
+            if key not in allowed:
+                continue
+            value = value.strip()
+            if len(value) >= 2 and value[0] == value[-1] and value[0] in {"'", '"'}:
+                value = value[1:-1]
+            found[key] = value
+        return found
+
+    def __init__(
+        self,
+        mcp_url: str | None = None,
+        oauth_token: str | None = None,
+        timeout: float = 4.0,
+    ) -> None:
+        shared = self._selected_shared_env(
+            os.getenv("AMBIENT_GUARDIAN_SHARED_ENV_FILE", "")
+        )
+        self.mcp_url = (
+            mcp_url
+            or os.getenv("GOOGLE_HOME_MCP_URL")
+            or shared.get("GOOGLE_HOME_MCP_URL")
+            or self.DEFAULT_OFFICIAL_ENDPOINT
+        ).rstrip("/")
+        self.oauth_token = (
+            oauth_token
+            or os.getenv("GOOGLE_HOME_OAUTH_TOKEN")
+            or os.getenv("GOOGLE_HOME_ACCESS_TOKEN")
+            or shared.get("GOOGLE_HOME_OAUTH_TOKEN")
+            or shared.get("GOOGLE_HOME_ACCESS_TOKEN")
+            or ""
+        ).strip()
         self.timeout = timeout
 
     def is_configured(self) -> bool:
-        return bool(self.mcp_url)
+        return bool(self.oauth_token)
+
+    def _headers(self) -> dict[str, str]:
+        headers = {
+            "Content-Type": "application/json",
+            "Accept": "application/json",
+        }
+        if self.oauth_token:
+            headers["Authorization"] = f"Bearer {self.oauth_token}"
+        return headers
 
     def test_connection(self) -> dict[str, Any]:
-        if not self.mcp_url:
+        """Test authentication and connectivity against official Google Home MCP."""
+        if not self.oauth_token:
             return {
                 "configured": False,
                 "reachable": False,
+                "endpoint": self.mcp_url,
                 "detail": (
-                    "Google Home MCP URL is not configured (GOOGLE_HOME_MCP_URL). "
-                    "Google Cloud Home APIs require project entitlement and OAuth Web Client."
+                    "Google Home MCP client awaiting OAuth Bearer token (GOOGLE_HOME_ACCESS_TOKEN / GOOGLE_HOME_OAUTH_TOKEN). "
+                    "Cloud Home APIs require Google Cloud Developer Console registration."
                 ),
             }
         try:
             with httpx.Client(timeout=self.timeout) as client:
-                resp = client.get(f"{self.mcp_url}/health")
+                payload = {
+                    "jsonrpc": "2.0",
+                    "id": str(uuid.uuid4())[:8],
+                    "method": "tools/list",
+                    "params": {},
+                }
+                resp = client.post(self.mcp_url, headers=self._headers(), json=payload)
                 if resp.status_code == 200:
-                    return {"configured": True, "reachable": True, "detail": "Google Home MCP endpoint reachable."}
+                    data = resp.json()
+                    tools = (data.get("result") or {}).get("tools", [])
+                    return {
+                        "configured": True,
+                        "reachable": True,
+                        "endpoint": self.mcp_url,
+                        "tools_count": len(tools),
+                        "detail": f"Official Google Home MCP reachable with {len(tools)} tools available.",
+                    }
+                elif resp.status_code in {401, 403}:
+                    return {
+                        "configured": True,
+                        "reachable": False,
+                        "endpoint": self.mcp_url,
+                        "detail": f"Google Home MCP authentication/entitlement required (HTTP {resp.status_code}).",
+                    }
                 return {
                     "configured": True,
                     "reachable": False,
-                    "detail": f"Google Home MCP returned HTTP {resp.status_code}",
+                    "endpoint": self.mcp_url,
+                    "detail": f"Google Home MCP endpoint returned HTTP {resp.status_code}",
                 }
         except Exception as exc:
             return {
                 "configured": True,
                 "reachable": False,
-                "detail": f"Google Home MCP unreachable: {type(exc).__name__}: {exc}",
+                "endpoint": self.mcp_url,
+                "detail": f"Google Home MCP connection error: {type(exc).__name__}: {exc}",
             }
 
-    def call_tool(self, tool_name: str, arguments: dict[str, Any]) -> dict[str, Any]:
-        if not self.mcp_url:
-            raise RuntimeError("Google Home MCP client is not configured (missing GOOGLE_HOME_MCP_URL)")
-        with httpx.Client(timeout=self.timeout) as client:
-            resp = client.post(
-                f"{self.mcp_url}/mcp/tools/{tool_name}",
-                json=arguments,
+    def list_tools(self) -> list[dict[str, Any]]:
+        """Query official tools/list via JSON-RPC 2.0."""
+        res = self._jsonrpc_call("tools/list", {})
+        return (res.get("result") or {}).get("tools", [])
+
+    def call_tool(self, name: str, arguments: dict[str, Any] | None = None) -> dict[str, Any]:
+        """Execute official tools/call via JSON-RPC 2.0."""
+        params = {"name": name, "arguments": arguments or {}}
+        return self._jsonrpc_call("tools/call", params)
+
+    def _jsonrpc_call(self, method: str, params: dict[str, Any]) -> dict[str, Any]:
+        if not self.oauth_token:
+            raise RuntimeError(
+                "Google Home MCP client requires an OAuth Bearer token (GOOGLE_HOME_ACCESS_TOKEN)"
             )
+        req_id = str(uuid.uuid4())[:8]
+        payload = {
+            "jsonrpc": "2.0",
+            "id": req_id,
+            "method": method,
+            "params": params,
+        }
+        with httpx.Client(timeout=self.timeout) as client:
+            resp = client.post(self.mcp_url, headers=self._headers(), json=payload)
             resp.raise_for_status()
-            return resp.json()
+            data = resp.json()
+            if "error" in data:
+                raise RuntimeError(f"Google Home MCP JSON-RPC Error: {data['error']}")
+            return data
 
 
 class GoogleCastBridge:
@@ -150,6 +259,8 @@ class GoogleCastBridge:
             "HOME_ASSISTANT_TOKEN",
             "HA_TOKEN",
             "GOOGLE_HOME_MCP_URL",
+            "GOOGLE_HOME_OAUTH_TOKEN",
+            "GOOGLE_HOME_ACCESS_TOKEN",
             "GOOGLE_HOME_PROJECT_ID",
             "GOOGLE_HOME_TTS_ENTITY",
             "GOOGLE_HOME_SPEAK_ENABLED",
@@ -190,8 +301,15 @@ class GoogleCastBridge:
         self.google_mcp_url = (
             os.getenv("GOOGLE_HOME_MCP_URL")
             or shared.get("GOOGLE_HOME_MCP_URL")
-            or ""
+            or GoogleHomeMCPClient.DEFAULT_OFFICIAL_ENDPOINT
         ).rstrip("/")
+        self.google_oauth_token = (
+            os.getenv("GOOGLE_HOME_OAUTH_TOKEN")
+            or os.getenv("GOOGLE_HOME_ACCESS_TOKEN")
+            or shared.get("GOOGLE_HOME_OAUTH_TOKEN")
+            or shared.get("GOOGLE_HOME_ACCESS_TOKEN")
+            or ""
+        ).strip()
         self.project_id = (
             os.getenv("GOOGLE_HOME_PROJECT_ID")
             or shared.get("GOOGLE_HOME_PROJECT_ID")
@@ -207,7 +325,11 @@ class GoogleCastBridge:
             or shared.get("GOOGLE_HOME_SPEAK_ENABLED", "0") == "1"
         )
         self.timeout = float(os.getenv("GOOGLE_HOME_TIMEOUT", "4.0"))
-        self.mcp_client = GoogleHomeMCPClient(self.google_mcp_url, timeout=self.timeout)
+        self.mcp_client = GoogleHomeMCPClient(
+            mcp_url=self.google_mcp_url,
+            oauth_token=self.google_oauth_token,
+            timeout=self.timeout,
+        )
         self._history_cache: list[dict[str, Any]] = []
 
     def status(self) -> GoogleIntegrationStatus:
@@ -240,6 +362,7 @@ class GoogleCastBridge:
             active_mode=active_mode,
             mcp_configured=mcp_test.get("configured", False),
             mcp_reachable=mcp_test.get("reachable", False),
+            mcp_endpoint=self.google_mcp_url,
             mcp_detail=mcp_test.get("detail", ""),
             cast_configured=cast_configured,
             cast_reachable=cast_reachable,
@@ -457,11 +580,7 @@ class GoogleCastBridge:
         command: str = "broadcast_announcement",
         dry_run: bool = True,
     ) -> dict[str, Any]:
-        """Bounded Google Speaker speech execution.
-
-        Validates speaker allowlist, command allowlist, and message sanitization.
-        Dry-run mode is enforced by default.
-        """
+        """Bounded Google Speaker speech execution."""
         speaker_id = speaker_id.strip()
         discovered = {s["entity_id"] for s in self.discover_speakers()}
         allowed_speakers = self.KNOWN_SPEAKER_ENTITIES | discovered

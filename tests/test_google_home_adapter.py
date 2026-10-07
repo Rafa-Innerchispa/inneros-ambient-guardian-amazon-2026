@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import httpx
 import pytest
 from starlette.testclient import TestClient
 
@@ -8,16 +9,79 @@ from ambient_guardian.google_home import GoogleCastBridge, GoogleHomeMCPClient, 
 from ambient_guardian.official_server import app
 
 
-def test_google_home_mcp_client_reports_unconfigured():
+def test_google_home_mcp_client_defaults_and_unconfigured():
     client = GoogleHomeMCPClient()
+    assert client.mcp_url == "https://home.googleapis.com/mcp"
     assert client.is_configured() is False
     res = client.test_connection()
     assert res["configured"] is False
     assert res["reachable"] is False
-    assert "GOOGLE_HOME_MCP_URL" in res["detail"]
+    assert "OAuth Bearer token" in res["detail"]
 
-    with pytest.raises(RuntimeError, match="not configured"):
+    with pytest.raises(RuntimeError, match="OAuth Bearer token"):
         client.call_tool("list_homes", {})
+
+
+def test_google_home_mcp_client_jsonrpc_tools_list_and_call(monkeypatch):
+    client = GoogleHomeMCPClient(
+        mcp_url="https://home.googleapis.com/mcp",
+        oauth_token="mock-valid-bearer-token",
+    )
+    assert client.is_configured() is True
+
+    # Mock httpx responses for official JSON-RPC tools/list and tools/call
+    def mock_post(self, url, *args, **kwargs):
+        headers = kwargs.get("headers") or {}
+        json_data = kwargs.get("json") or {}
+        assert "Authorization" in headers
+        assert headers["Authorization"] == "Bearer mock-valid-bearer-token"
+        req = httpx.Request("POST", url)
+        method = json_data.get("method")
+        if method == "tools/list":
+            return httpx.Response(
+                200,
+                request=req,
+                json={
+                    "jsonrpc": "2.0",
+                    "id": json_data.get("id"),
+                    "result": {
+                        "tools": [
+                            {"name": "list_homes", "description": "List all Google Home structures"},
+                            {"name": "list_home_resources", "description": "List all devices in the home"},
+                            {"name": "list_home_states", "description": "List real-time state of devices"},
+                            {"name": "list_home_history", "description": "List device history and events"},
+                        ]
+                    },
+                },
+            )
+        elif method == "tools/call":
+            tool_name = json_data.get("params", {}).get("name")
+            return httpx.Response(
+                200,
+                request=req,
+                json={
+                    "jsonrpc": "2.0",
+                    "id": json_data.get("id"),
+                    "result": {
+                        "content": [{"type": "text", "text": f"Output from {tool_name}"}],
+                        "status": "success",
+                    },
+                },
+            )
+        return httpx.Response(404, request=req, json={"error": "Not Found"})
+
+    monkeypatch.setattr(httpx.Client, "post", mock_post)
+
+    # Test tools/list
+    tools = client.list_tools()
+    assert len(tools) == 4
+    tool_names = {t["name"] for t in tools}
+    assert "list_homes" in tool_names
+    assert "list_home_resources" in tool_names
+
+    # Test tools/call
+    call_res = client.call_tool("list_homes", {})
+    assert call_res["result"]["status"] == "success"
 
 
 def test_google_cast_bridge_status_and_discovery():
@@ -33,8 +97,7 @@ def test_google_cast_bridge_status_and_discovery():
     assert "media_player.chromecast_estudio" in speaker_entities
     assert "broadcast_announcement" in status.command_definitions
     assert status.tts_engine == "tts.google_translate_en_com"
-    assert status.mcp_configured is False
-    assert status.active_mode in {"google_cast_local_bridge", "simulator"}
+    assert status.mcp_endpoint == "https://home.googleapis.com/mcp"
 
 
 def test_google_cast_list_resources_and_states():
@@ -101,6 +164,7 @@ def test_google_home_http_routes():
     assert "status" in data
     assert "resources" in data
     assert data["status"]["home_name"] == "Ralphi Home - Ambient Guardian"
+    assert data["status"]["mcp_endpoint"] == "https://home.googleapis.com/mcp"
 
     # Test POST /api/google_home/speak (dry-run)
     resp = client.post(

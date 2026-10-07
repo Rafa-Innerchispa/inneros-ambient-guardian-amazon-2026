@@ -205,7 +205,7 @@ async def ring_official_webhook(request: Request) -> Response:
     """Official Ring Appstore & Developer Webhook ingress with HMAC signature verification."""
     try:
         raw_body = await request.body()
-        sig_header = request.headers.get("x-ring-signature")
+        sig_header = request.headers.get("x-signature") or request.headers.get("x-ring-signature")
         if not STATE.ring_official.verify_webhook_signature(raw_body, sig_header):
             return JSONResponse({"detail": "invalid webhook signature"}, status_code=401)
         payload = await _read_object(request)

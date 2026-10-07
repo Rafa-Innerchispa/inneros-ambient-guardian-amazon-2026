@@ -19,7 +19,7 @@ class RingAdapterStatus:
 
 
 class RingEventAdapter(Protocol):
-    """Boundary for official Ring Appstore APIs or the safe simulator."""
+    """Boundary for official Ring Appstore / Amazon Vision APIs or the safe simulator."""
 
     def status(self) -> RingAdapterStatus:
         """Return honest readiness without implying a real device is connected."""
@@ -29,13 +29,13 @@ class RingEventAdapter(Protocol):
 
 
 class RingSimulatorAdapter:
-    """Safe adapter used until a Ring developer test account/device is linked."""
+    """Safe adapter used until an official Ring/Amazon Vision test account or device is linked."""
 
     def status(self) -> RingAdapterStatus:
         return RingAdapterStatus(
             summary="Ring-compatible demo simulator integrated; official Ring API/SDK/simulator binding still pending",
             official_path=(
-                "Ring Developer: OAuth/account authorization, signed webhooks for events, "
+                "Ring Developer / Amazon Vision API: OAuth/account authorization, signed webhooks for events, "
                 "device status/history APIs, and optional WebRTC/WHEP video sessions"
             ),
             device_verification="pending_real_or_official_test_account",
@@ -44,12 +44,22 @@ class RingSimulatorAdapter:
 
     def normalize_event(self, payload: dict[str, Any], *, verified: bool = False) -> dict[str, Any]:
         del verified
-        event_type = str(payload.get("type") or payload.get("event_type") or "").strip()
+        # Handle JSON:API or flat dictionary
+        data_block = payload.get("data") if isinstance(payload.get("data"), dict) else {}
+        attrs = data_block.get("attributes", {}) if isinstance(data_block.get("attributes"), dict) else {}
+        source_dict = attrs if attrs else payload
+
+        event_type = str(
+            source_dict.get("type")
+            or source_dict.get("event_type")
+            or source_dict.get("kind")
+            or ""
+        ).strip()
         if not event_type:
             raise ValueError("Ring simulator payload requires type or event_type")
-        source = str(payload.get("source") or "ring-compatible-simulator").strip()
-        severity = str(payload.get("severity") or "info").strip()
-        summary = str(payload.get("summary") or f"Ring-compatible event: {event_type}").strip()
+        source = str(source_dict.get("source") or "ring-compatible-simulator").strip()
+        severity = str(source_dict.get("severity") or "info").strip()
+        summary = str(source_dict.get("summary") or f"Ring-compatible event: {event_type}").strip()
         normalized = {
             "source": source,
             "type": event_type,
@@ -57,21 +67,20 @@ class RingSimulatorAdapter:
             "severity": severity,
         }
         for field in ("device_name", "zone", "confidence", "recording_ref", "simulated"):
-            if field in payload and payload.get(field) is not None:
-                normalized[field] = payload.get(field)
+            if field in source_dict and source_dict.get(field) is not None:
+                normalized[field] = source_dict.get(field)
         return normalized
 
 
 class RingOfficialAdapter:
-    """Official Ring Appstore & Developer Webhook Adapter.
+    """Official Ring & Amazon Vision Developer API Adapter.
 
-    Validates HMAC webhook signatures (failing closed when secret is absent),
-    normalizes official Ring event schemas, and tags events with strict truth labels:
-    REAL only when cryptographically verified or backed by live provider session,
-    otherwise UNVERIFIED/PENDING.
+    Validates HMAC webhook signatures (X-Signature / X-Ring-Signature),
+    queries live devices via https://api.amazonvision.com/v1/devices (or Ring Clients API),
+    and normalizes JSON:API data/meta event structures with fail-closed truth labeling.
     """
 
-    RING_API_BASE = "https://api.ring.com/clients_api"
+    DEFAULT_AMAZON_VISION_API_BASE = "https://api.amazonvision.com/v1"
 
     @staticmethod
     def _selected_shared_env(path_value: str) -> dict[str, str]:
@@ -89,6 +98,8 @@ class RingOfficialAdapter:
             "RING_WEBHOOK_SECRET",
             "RING_DEVICE_ID",
             "RING_ACCOUNT_ID",
+            "RING_API_URL",
+            "AMAZON_VISION_API_URL",
         }
         found: dict[str, str] = {}
         for raw in lines:
@@ -109,6 +120,7 @@ class RingOfficialAdapter:
         self,
         token: str | None = None,
         webhook_secret: str | None = None,
+        api_base: str | None = None,
         device_id: str | None = None,
         timeout: float = 4.0,
     ) -> None:
@@ -129,6 +141,14 @@ class RingOfficialAdapter:
             or shared.get("RING_WEBHOOK_SECRET")
             or ""
         ).strip()
+        self.api_base = (
+            api_base
+            or os.getenv("AMAZON_VISION_API_URL")
+            or os.getenv("RING_API_URL")
+            or shared.get("AMAZON_VISION_API_URL")
+            or shared.get("RING_API_URL")
+            or self.DEFAULT_AMAZON_VISION_API_BASE
+        ).rstrip("/")
         self.device_id = (
             device_id
             or os.getenv("RING_DEVICE_ID")
@@ -141,27 +161,27 @@ class RingOfficialAdapter:
         return bool(self.token or self.webhook_secret)
 
     def verify_session(self) -> dict[str, Any]:
-        """Test authentication against official Ring REST API."""
+        """Test authentication against official Amazon Vision / Ring REST API."""
         if not self.token:
             return {
                 "authenticated": False,
-                "detail": "No Ring OAuth or refresh token configured (RING_TOKEN).",
+                "detail": "No Ring OAuth / API token configured (RING_TOKEN).",
             }
         try:
             with httpx.Client(timeout=self.timeout) as client:
                 resp = client.get(
-                    f"{self.RING_API_BASE}/ring_devices",
+                    f"{self.api_base}/devices",
                     headers={"Authorization": f"Bearer {self.token}"},
                 )
                 if resp.status_code == 200:
                     return {
                         "authenticated": True,
-                        "detail": "Official Ring session verified via Ring Clients API.",
+                        "detail": f"Official Ring API session verified via {self.api_base}/devices.",
                         "devices": resp.json(),
                     }
                 return {
                     "authenticated": False,
-                    "detail": f"Ring API returned HTTP {resp.status_code}: {resp.text[:100]}",
+                    "detail": f"Ring API ({self.api_base}/devices) returned HTTP {resp.status_code}: {resp.text[:100]}",
                 }
         except Exception as exc:
             return {
@@ -172,10 +192,10 @@ class RingOfficialAdapter:
     def status(self) -> RingAdapterStatus:
         if self.webhook_secret:
             return RingAdapterStatus(
-                summary="Official Ring Developer Webhook adapter active with HMAC-SHA256 signature verification",
+                summary="Official Ring Developer Webhook adapter active with HMAC-SHA256 signature verification (X-Signature)",
                 official_path=(
-                    "Ring Developer Appstore / Webhook API: Inbound push events, HMAC validation, "
-                    "evidence snapshot referencing"
+                    f"Ring Developer / Amazon Vision API ({self.api_base}): Inbound push events, HMAC validation, "
+                    "JSON:API payload support"
                 ),
                 device_verification="verified_webhook_signer",
                 mode="official_ring_edge",
@@ -184,8 +204,8 @@ class RingOfficialAdapter:
             session_check = self.verify_session()
             if session_check.get("authenticated"):
                 return RingAdapterStatus(
-                    summary="Official Ring API adapter active and verified with Ring Client API",
-                    official_path="Ring Developer API: Live device status & history verified",
+                    summary=f"Official Ring API adapter active and verified with {self.api_base}/devices",
+                    official_path="Amazon Vision / Ring API: Live device status & history verified",
                     device_verification="verified_official_api",
                     mode="official_ring_edge",
                 )
@@ -198,7 +218,7 @@ class RingOfficialAdapter:
         return RingAdapterStatus(
             summary="Official Ring adapter ready for token/webhook binding; simulator active as safe fallback",
             official_path=(
-                "Ring Developer: OAuth/account authorization, signed webhooks for events, "
+                "Ring Developer / Amazon Vision API: OAuth/account authorization, signed webhooks for events, "
                 "device status/history APIs, and optional WebRTC/WHEP video sessions"
             ),
             device_verification="pending_real_or_official_test_account",
@@ -206,10 +226,10 @@ class RingOfficialAdapter:
         )
 
     def verify_webhook_signature(self, payload_bytes: bytes, signature_header: str | None) -> bool:
-        """Verify HMAC-SHA256 signature from Ring webhook headers.
+        """Verify HMAC-SHA256 signature from Ring/Amazon Vision webhook headers.
 
-        CRITICAL SECURITY INVARIANT: Must fail closed (return False) if
-        RING_WEBHOOK_SECRET is not configured or signature is missing/invalid.
+        Supports X-Signature and X-Ring-Signature.
+        Fails closed (returns False) if secret is not configured or signature is missing/invalid.
         """
         if not self.webhook_secret:
             return False
@@ -224,12 +244,16 @@ class RingOfficialAdapter:
         return hmac.compare_digest(expected, clean_sig)
 
     def normalize_event(self, payload: dict[str, Any], *, verified: bool = False) -> dict[str, Any]:
-        """Convert official Ring webhook/API payload to Ambient Guardian event.
+        """Convert official Ring JSON:API or flat webhook payload to Ambient Guardian event."""
+        data_block = payload.get("data") if isinstance(payload.get("data"), dict) else {}
+        attrs = data_block.get("attributes", {}) if isinstance(data_block.get("attributes"), dict) else {}
+        meta = data_block.get("meta", {}) if isinstance(data_block.get("meta"), dict) else payload.get("meta", {})
 
-        Truth label is stamped as REAL only when verified=True, otherwise UNVERIFIED.
-        """
         raw_kind = str(
-            payload.get("kind")
+            attrs.get("kind")
+            or attrs.get("event_type")
+            or attrs.get("type")
+            or payload.get("kind")
             or payload.get("event_type")
             or payload.get("type")
             or ""
@@ -253,11 +277,15 @@ class RingOfficialAdapter:
         severity_mapping = {
             "doorbell_pressed": "info",
             "motion": "info",
-            "person_detected": "warning" if payload.get("unknown_person") else "info",
+            "person_detected": "warning" if (attrs.get("unknown_person") or payload.get("unknown_person")) else "info",
             "package_detected": "info",
             "camera_offline": "warning",
         }
-        severity = payload.get("severity") or severity_mapping.get(guardian_type, "info")
+        severity = (
+            attrs.get("severity")
+            or payload.get("severity")
+            or severity_mapping.get(guardian_type, "info")
+        )
 
         summary_mapping = {
             "doorbell_pressed": "Ring Doorbell was pressed.",
@@ -266,9 +294,20 @@ class RingOfficialAdapter:
             "package_detected": "Package detected by Ring camera.",
             "camera_offline": "Ring camera became offline.",
         }
-        summary = payload.get("summary") or summary_mapping.get(
-            guardian_type, f"Ring event: {guardian_type}"
+        summary = (
+            attrs.get("summary")
+            or payload.get("summary")
+            or summary_mapping.get(guardian_type, f"Ring event: {guardian_type}")
         )
+
+        device_name = (
+            attrs.get("device_name")
+            or attrs.get("doorbot_description")
+            or payload.get("device_name")
+            or payload.get("doorbot_description")
+            or "Ring Video Doorbell"
+        )
+        zone = attrs.get("zone") or payload.get("zone") or "front_door"
 
         normalized = {
             "source": "ring-official-edge" if verified else "ring-unverified-ingress",
@@ -276,15 +315,25 @@ class RingOfficialAdapter:
             "summary": summary,
             "severity": severity,
             "truth": "REAL" if verified else "UNVERIFIED",
-            "device_name": payload.get("device_name") or payload.get("doorbot_description") or "Ring Video Doorbell",
-            "zone": payload.get("zone") or "front_door",
+            "device_name": device_name,
+            "zone": zone,
         }
 
-        if "id" in payload or "ding_id" in payload:
-            normalized["ring_event_id"] = str(payload.get("ding_id") or payload.get("id"))
-        if "snapshot_url" in payload or "recording_ref" in payload:
-            normalized["recording_ref"] = str(payload.get("snapshot_url") or payload.get("recording_ref"))
-        if "confidence" in payload:
-            normalized["confidence"] = payload["confidence"]
+        event_id = data_block.get("id") or payload.get("ding_id") or payload.get("id")
+        if event_id:
+            normalized["ring_event_id"] = str(event_id)
+
+        snapshot_url = (
+            meta.get("snapshot_url")
+            or meta.get("recording_ref")
+            or payload.get("snapshot_url")
+            or payload.get("recording_ref")
+        )
+        if snapshot_url:
+            normalized["recording_ref"] = str(snapshot_url)
+
+        confidence = meta.get("confidence") or payload.get("confidence")
+        if confidence is not None:
+            normalized["confidence"] = confidence
 
         return normalized
