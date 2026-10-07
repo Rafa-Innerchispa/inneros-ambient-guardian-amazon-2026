@@ -191,7 +191,7 @@ class GuardianState:
         event = self.add_event(
             str(normalized["type"]),
             str(normalized["source"]),
-            timestamp=timestamp,
+            timestamp=timestamp or normalized.get("timestamp"),
             metadata={
                 "provider": "ring_official",
                 "truth": truth,
@@ -199,6 +199,10 @@ class GuardianState:
                 "zone": normalized.get("zone", "front_door"),
                 "ring_event_id": normalized.get("ring_event_id"),
                 "recording_ref": normalized.get("recording_ref"),
+                "request_id": normalized.get("request_id"),
+                "account_id": normalized.get("account_id"),
+                "component_ids": normalized.get("component_ids"),
+                "sub_type": normalized.get("sub_type"),
             },
         )
         if normalized.get("summary"):
