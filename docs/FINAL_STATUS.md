@@ -1,35 +1,50 @@
-# Final technical status — 2026-09-13
+# Final technical status — 2026-10-07
 
 ## Canonical product commit
 
-`dfdce1a13b2e25ea1c0daeb2732384601ba096e5`
+`eb479a66868d53984c176822a3bbfeb4302e229a`
+
+Merged through PR #28: **Add Google Home MCP and Ring provider adapters**.
 
 ## Functional status
 
-The technical project is complete for the Alexa+ primary track and AWS Builder/Open Source mini-challenge path.
+The engineering build is ready for the Alexa+ primary track plus AWS Builder/Open Source mini-challenges.
 
 Verified evidence:
 
-- 20/20 tests PASS in an isolated project environment with declared dependencies
+- 98/98 automated tests PASS on the merged provider candidate before merge
 - official MCP Python SDK v2 + Streamable HTTP runtime
 - official MCP client connects over real HTTP and discovers/calls tools
-- MCP intentionally does not expose any execution/approval tool
+- read-only `incident_summary` reconstructs normalized home activity around a requested time window
+- Judge Mode includes **“What happened at 3 AM?”**
+- Google Home MCP adapter is CODE_READY for `https://home.googleapis.com/mcp` using JSON-RPC 2.0 + OAuth Bearer
+- Google Cast / Home Assistant bridge is separate from Home MCP and supports the local speaker path
+- Ring official adapter is CODE_READY for `https://api.amazonvision.com/v1/devices`
+- Ring webhook verification is fail-closed and supports the current `X-Signature` HMAC-SHA256 path
+- Ring JSON:API event normalization handles `button_press`, `motion_detected`, device lifecycle events, timestamps and metadata
+- AWS Strands Agent integrates with local Qwen/vLLM
+- MCP intentionally does not expose an approval/execution tool
 - Docker image builds successfully in GitHub Actions
-- AWS Strands Agent executes against local Qwen/vLLM on the AMD AI node
-- full Alexa+ simulation -> Strands -> local Qwen -> bounded proposal -> separate human approval -> simulated execution -> verification -> evidence flow PASS on final merged main
-- one-time approval replay is rejected
-- `unlock`/negated lock requests fail closed
+- bounded proposal -> separate human approval -> verification -> evidence flow PASS
+
+## Provider verification status
+
+- **Google Home MCP:** CODE_READY, live OAuth/provider verification still pending.
+- **Google Cast / Home Assistant:** local physical speaker path available separately.
+- **Ring official:** CODE_READY, live developer token/test-account verification still pending.
+- **Ring simulator:** available as the truth-labeled hackathon fallback.
+
+Use `PYTHONPATH=src python scripts/preflight_providers.py` to distinguish CODE_READY from PROVIDER_LIVE_VERIFIED.
 
 ## Submission status
 
-Devpost project copy has been updated to the functional implementation. The project has **not** been submitted to the hackathon yet.
+The Devpost submission still needs participant-owned finalization.
 
-Remaining participant-owned items:
+Remaining owner gates:
 
 1. public English YouTube/Vimeo demo video under 3 minutes
-2. submitter type / organization representation details
-3. country / Canada answer
-4. legal attestations (age, eligible jurisdiction, non-employee of Promotion Entities)
-5. explicit rules acknowledgment and final authorization to submit
+2. final submitter/organization/country fields
+3. required legal attestations and acknowledgments
+4. explicit final authorization to submit
 
-See `docs/DEVPOST_FORM_ANSWERS.md` and `devpost-submission.md`.
+Do not claim Google Home MCP or Ring as PROVIDER_LIVE_VERIFIED until the OAuth/test-account preflight succeeds.

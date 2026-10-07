@@ -8,7 +8,7 @@ Built for **Build, Ship, Shape: Amazon Developer Hackathon 2026**.
 
 - **Primary track:** Alexa+
 - **Mini challenges:** AWS Builder, Open Source
-- **Ring:** integration boundary + simulator today; we do **not** claim the Ring primary track until an official Ring API/SDK/simulator/device path is demonstrated.
+- **Ring:** official provider adapter is CODE_READY and the simulator remains the demo fallback. We do **not** claim live Ring track eligibility until an official developer token/test account/session is verified.
 
 ## Why this exists
 
@@ -29,7 +29,7 @@ The public hackathon build controls only a simulator. Private customer/device co
 - MCP tools for status, events, **time-bounded incident reconstruction**, local reasoning, action preparation, evidence, and integration diagnostics
 - **No `approve_action` MCP tool**. A model can prepare an action but cannot approve its own request
 - Alexa+ web simulation with typed input, browser speech recognition, and spoken responses
-- Ring-compatible normalized demo ingress for safe public testing, including a time-stamped front-door incident scenario. It is explicitly labeled SIMULATED and is not presented as an official Ring integration.
+- Ring-compatible normalized demo ingress for safe public testing, plus a separate official Ring/Amazon Vision adapter with fail-closed signed webhook verification. Demo events remain explicitly SIMULATED unless a real provider session/signature is verified.
 - Optional **Home Assistant + Alexa Devices** bridge for real Echo/Fire endpoints, read-only alarm context, owner-authorized speech, and allowlisted reversible lighting; direct Alexa+ MCP Toolkit linking remains separate and unclaimed
 - **InnerOS DMX / Art-Net bridge** to the existing loopback-only lighting engine for allowlisted colors/scenes Alexa does not natively understand
 - Local Qwen/vLLM reasoning using an OpenAI-compatible endpoint
@@ -153,7 +153,7 @@ The project now has two distinct Alexa surfaces and reports them separately:
 
 - **Real Echo/Fire via Home Assistant Alexa Devices:** supported through the optional Home Assistant bridge. In the author's deployment, Home Assistant discovered real Amazon endpoints and successfully delivered speech to a physical Echo through `notify.*_speak`.
 - **Direct Alexa+ MCP Toolkit binding:** still not linked and not claimed. The hackathon Alexa+ path remains the self-hosted MCP runtime plus the truth-labeled simulated Alexa+ experience unless partner entitlement is proven.
-- **Ring:** a Ring-compatible demo simulator is integrated for the Alexa+ story, but Ring track eligibility remains unclaimed until an official Ring API, SDK, Developer Playground, test-account, or device path is demonstrated.
+- **Ring:** the official adapter targets `https://api.amazonvision.com/v1`, verifies signed webhook ingress fail-closed, and normalizes JSON:API events. Ring track eligibility remains unclaimed until a live developer token/test account/session is verified.
 
 Alexa speech from Ambient Guardian is intentionally not an MCP tool. It requires a separate owner-authorized HTTP route, an explicit enable flag, and an allowlisted Home Assistant notify entity.
 
@@ -236,7 +236,7 @@ Truth boundary shown in the UI:
 
 - REAL: MCP Streamable HTTP runtime and Guardian policy/state.
 - SIMULATED: Alexa+ browser voice experience.
-- SIMULATED: Ring-compatible demo edge; official Ring binding remains pending.
+- SIMULATED: Ring-compatible demo edge. The official Ring adapter is CODE_READY but live provider verification is still pending.
 - SAFE: MCP/model cannot approve or execute its own physical action.
 
 See `docs/JUDGE_DEMO.md` and `docs/DEMO_SCRIPT.md` for the reproducible judge flow and recording script.
