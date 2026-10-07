@@ -26,10 +26,10 @@ The public hackathon build controls only a simulator. Private customer/device co
 
 - Official **MCP Python SDK v2** server at `/mcp`
 - Streamable HTTP transport, modern MCP protocol with backward compatibility for the hackathon-required `2025-11-25` generation
-- MCP tools for status, events, local reasoning, action preparation, evidence, and integration diagnostics
+- MCP tools for status, events, **time-bounded incident reconstruction**, local reasoning, action preparation, evidence, and integration diagnostics
 - **No `approve_action` MCP tool**. A model can prepare an action but cannot approve its own request
 - Alexa+ web simulation with typed input, browser speech recognition, and spoken responses
-- Ring-compatible normalized event simulator for safe public testing
+- Ring-compatible normalized demo ingress for safe public testing, including a time-stamped front-door incident scenario. It is explicitly labeled SIMULATED and is not presented as an official Ring integration.
 - Optional **Home Assistant + Alexa Devices** bridge for real Echo/Fire endpoints, read-only alarm context, owner-authorized speech, and allowlisted reversible lighting; direct Alexa+ MCP Toolkit linking remains separate and unclaimed
 - **InnerOS DMX / Art-Net bridge** to the existing loopback-only lighting engine for allowlisted colors/scenes Alexa does not natively understand
 - Local Qwen/vLLM reasoning using an OpenAI-compatible endpoint
@@ -125,14 +125,13 @@ The integration uses `strands.Agent` with `strands.models.openai.OpenAIModel`, p
 
 ## Demo flow
 
-1. Click **Unknown person** to create a warning event.
-2. Ask: `Alexa, is everything okay at home?`
-3. Ambient Guardian summarizes the context.
-4. Ask: `Alexa, lock the front door.`
-5. The system returns an expiring proposal. **Nothing executes.**
-6. Click **Approve bounded action** in the human UI.
-7. The simulator executes, verifies the observed state, and emits evidence.
-8. Try `Alexa, unlock the front door` or `do not lock the front door`. No action is prepared.
+The strongest Judge Mode path is a three-part story rather than a feature tour:
+
+1. **Home status:** ask `Alexa, is everything okay at home?` to prove read-only context.
+2. **What happened at 3 AM?:** the demo injects truth-labeled Ring-compatible events at 03:04, 03:07 and 03:11, then reconstructs the incident through the real normalized event pipeline and the read-only `incident_summary` MCP tool.
+3. **Prepare lock:** ask `Alexa, prepare to lock the front door`. The system returns an expiring proposal with `executed=false`. Only the separate human approval surface may execute the bounded simulator action and emit verification evidence.
+
+The demo always distinguishes the **SIMULATED Ring edge** from the **REAL MCP/runtime, temporal correlation, policy and evidence pipeline**.
 
 ## MCP tools
 
@@ -140,6 +139,7 @@ The integration uses `strands.Agent` with `strands.models.openai.OpenAIModel`, p
 |---|---:|---|
 | `guardian_status` | No | Current property summary |
 | `recent_events` | No | Recent normalized events |
+| `incident_summary` | No | Reconstructs normalized activity around an ISO-8601 time window |
 | `ask_guardian` | No | Local-first safety answer |
 | `prepare_action` | Proposal only | Creates an expiring bounded proposal |
 | `verification_evidence` | No | Returns verified action evidence |
@@ -153,7 +153,7 @@ The project now has two distinct Alexa surfaces and reports them separately:
 
 - **Real Echo/Fire via Home Assistant Alexa Devices:** supported through the optional Home Assistant bridge. In the author's deployment, Home Assistant discovered real Amazon endpoints and successfully delivered speech to a physical Echo through `notify.*_speak`.
 - **Direct Alexa+ MCP Toolkit binding:** still not linked and not claimed. The hackathon Alexa+ path remains the self-hosted MCP runtime plus the truth-labeled simulated Alexa+ experience unless partner entitlement is proven.
-- **Ring:** simulator-only until an official Ring API/SDK/simulator/device binding is demonstrated.
+- **Ring:** a Ring-compatible demo simulator is integrated for the Alexa+ story, but Ring track eligibility remains unclaimed until an official Ring API, SDK, Developer Playground, test-account, or device path is demonstrated.
 
 Alexa speech from Ambient Guardian is intentionally not an MCP tool. It requires a separate owner-authorized HTTP route, an explicit enable flag, and an allowlisted Home Assistant notify entity.
 
@@ -229,14 +229,14 @@ The canonical hackathon demo now uses the **real self-hosted MCP backend** with 
 Open the web UI and use the three Judge Mode scenarios:
 
 1. **Home status** — read-only property context.
-2. **Front-door event** — Ring-compatible simulated event -> Guardian context.
+2. **What happened at 3 AM?** — truth-labeled Ring-compatible demo events -> real temporal incident reconstruction.
 3. **Prepare lock** — bounded proposal with `executed=false` until a separate human approval step.
 
 Truth boundary shown in the UI:
 
 - REAL: MCP Streamable HTTP runtime and Guardian policy/state.
 - SIMULATED: Alexa+ browser voice experience.
-- SIMULATED: Ring-compatible event source.
+- SIMULATED: Ring-compatible demo edge; official Ring binding remains pending.
 - SAFE: MCP/model cannot approve or execute its own physical action.
 
 See `docs/JUDGE_DEMO.md` and `docs/DEMO_SCRIPT.md` for the reproducible judge flow and recording script.
