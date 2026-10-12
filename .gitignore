@@ -6,3 +6,6 @@ __pycache__/
 .DS_Store
 coverage.xml
 htmlcov/
+
+var/*.sqlite3
+var/*.sqlite3-*
