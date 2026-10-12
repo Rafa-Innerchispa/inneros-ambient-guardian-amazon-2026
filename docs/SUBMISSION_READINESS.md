@@ -1,6 +1,6 @@
 # Submission Readiness — Amazon Build, Ship, Shape 2026
 
-Status date: 2026-10-07
+Status date: 2026-10-11
 
 ## Executive status
 
@@ -90,8 +90,21 @@ The Google Home MCP adapter is implemented separately as a product expansion pat
 
 1. Complete the Google OAuth consent/login only if we want live Google Home MCP product validation.
 2. Complete the Ring developer login/consent only if we want live Ring evidence / track eligibility.
-3. Record and publish the English demo video under three minutes.
-4. Confirm the remaining Devpost submitter/legal fields.
-5. Give explicit final authorization to submit.
+3. Decide the final public project name; keep the repository/internal engine name unchanged until approved.
+4. If feasible, bind Ring Developer Playground or another official provider path and re-run the Ring preflight.
+5. Record and publish the English demo video under three minutes.
+6. Synchronize the newer canonical write-up to the live Devpost project.
+7. Confirm the remaining Devpost submitter/legal fields.
+8. Give explicit final authorization to submit.
 
 Until those gates are resolved, keep Devpost in draft and do not overstate provider verification.
+
+## Final sprint priorities — 2026-10-11
+
+1. Preserve the current stable engineering main. Avoid broad feature work.
+2. Prioritize Amazon judging value over unrelated product expansion.
+3. Preferred wow path: official Ring Developer Playground event -> temporal reconstruction -> separate human approval -> verified Incident Receipt.
+4. Add persistence only if it can be implemented narrowly and tested before feature freeze.
+5. Keep the working public title "InnerOS Ambient Guardian" until a stronger English/Spanish-friendly name is explicitly approved.
+6. Treat the Devpost connector as a ChatGPT-side integration issue; do not assign its repair to the InnerOS/Notion engineering lane.
+7. Canonical source of truth while connector sync is unavailable: `devpost-submission.md` plus this readiness document.
