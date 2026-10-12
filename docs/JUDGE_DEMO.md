@@ -30,18 +30,19 @@ Expected flow:
 
 Acceptance: read-only, no physical effect.
 
-### 2. Front-door event
+### 2. What happened at 3 AM?
 
-Click **2. Front-door event**.
+Click **2. What happened at 3 AM?**.
 
 Expected flow:
 
-1. A Ring-compatible `unknown_person` event is inserted into the normalized event stream.
-2. The simulated Alexa+ utterance asks: `What happened at the front door?`
-3. Ambient Guardian reports the event context and raises the property to `attention_required`.
-4. No action is executed.
+1. Three Ring-compatible demo events are inserted at 03:04, 03:07 and 03:11.
+2. The simulated Alexa+ utterance asks: `What happened at 3 AM?`
+3. Ambient Guardian reconstructs the bounded time window using the real normalized event pipeline.
+4. The result is persisted as a Home Flight Recorder / Incident Receipt with immutable incident ID and SHA-256 digest.
+5. The receipt remains recoverable in a later session; no action is executed.
 
-Acceptance: event-to-context path works and remains truthfully labeled as simulated at the Ring edge.
+Acceptance: temporal event reconstruction works, the Ring edge remains truthfully labeled SIMULATED, and the incident receipt is durable.
 
 ### 3. Prepare lock
 
@@ -68,8 +69,8 @@ The MCP tool surface intentionally excludes any approval or execution tool. The 
 
 1. 0:00-0:20 — show project name and REAL/SIMULATED truth badges.
 2. 0:20-0:50 — run Home status.
-3. 0:50-1:20 — run Front-door event.
-4. 1:20-2:05 — run Prepare lock and point to `executed=false`.
+3. 0:50-1:25 — run What happened at 3 AM? and show the persistent Incident Receipt.
+4. 1:25-2:05 — run Prepare lock and point to `executed=false`.
 5. 2:05-2:30 — approve the bounded simulator action and show verified evidence.
 6. 2:30-2:50 — show MCP / local-first / Strands integration truth.
 7. 2:50-3:00 — close on the safety statement.
