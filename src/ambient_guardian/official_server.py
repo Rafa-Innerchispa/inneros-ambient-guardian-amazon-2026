@@ -15,7 +15,12 @@ from .core import GuardianReasoner, GuardianState
 from .orchestration import simulated_alexa_turn
 
 APP_VERSION = "0.6.0"
-STATE = GuardianState()
+STATE = GuardianState(
+    incident_db_path=os.getenv(
+        "AMBIENT_GUARDIAN_INCIDENT_DB",
+        "var/ambient_guardian_incidents.sqlite3",
+    )
+)
 REASONER = GuardianReasoner()
 STATIC_DIR = Path(__file__).parent / "static"
 
@@ -44,8 +49,21 @@ def recent_events(limit: int = 8) -> dict[str, Any]:
 
 @mcp.tool()
 def incident_summary(at_iso: str, window_minutes: int = 15) -> dict[str, Any]:
-    """Summarize normalized home activity around a specific ISO-8601 time."""
+    """Summarize normalized home activity and persist an immutable incident receipt."""
     return STATE.incident_summary(at_iso, window_minutes)
+
+
+@mcp.tool()
+def incident_receipts(limit: int = 8) -> dict[str, Any]:
+    """Return durable incident receipts created in this and previous sessions."""
+    return {"receipts": STATE.incident_receipts(limit)}
+
+
+@mcp.tool()
+def incident_receipt(incident_id: str) -> dict[str, Any]:
+    """Return one persisted incident snapshot by immutable receipt id."""
+    record = STATE.incident_record(incident_id)
+    return {"incident": record, "found": record is not None}
 
 
 @mcp.tool()
@@ -110,6 +128,7 @@ def _state_payload() -> dict[str, Any]:
         "guardian": STATE.guardian_status(),
         "events": STATE.recent_events(12),
         "evidence": STATE.evidence_snapshot(),
+        "incident_receipts": STATE.incident_receipts(6),
         "integrations": {
             **STATE.integration_status(),
             "approval_channel": "human-only web/API route; not exposed as an MCP tool",
@@ -319,6 +338,21 @@ async def approve_http_action(request: Request) -> Response:
 async def evidence(request: Request) -> Response:
     del request
     return JSONResponse({"evidence": STATE.evidence_snapshot()})
+
+
+@mcp.custom_route("/api/incidents", methods=["GET"])
+async def incidents(request: Request) -> Response:
+    del request
+    return JSONResponse({"receipts": STATE.incident_receipts(20)})
+
+
+@mcp.custom_route("/api/incidents/{incident_id}", methods=["GET"])
+async def incident_by_id(request: Request) -> Response:
+    incident_id = str(request.path_params.get("incident_id") or "").strip()
+    record = STATE.incident_record(incident_id)
+    if record is None:
+        return JSONResponse({"detail": "incident receipt not found"}, status_code=404)
+    return JSONResponse({"incident": record})
 
 
 @mcp.custom_route("/api/integrations", methods=["GET"])
