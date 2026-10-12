@@ -1,6 +1,6 @@
 # Submission Readiness — Amazon Build, Ship, Shape 2026
 
-Status date: 2026-10-11
+Status date: 2026-10-12
 
 ## Executive status
 
@@ -8,7 +8,7 @@ Status date: 2026-10-11
 
 **Final Devpost submission: NOT YET AUTHORIZED**
 
-The code, Judge Mode, MCP transport, AWS Strands integration, local Qwen path, temporal incident reconstruction, Google Home MCP adapter and Ring provider adapter are implemented and tested.
+The code, Judge Mode, MCP transport, AWS Strands integration, local Qwen path, temporal incident reconstruction, persistent Incident Receipts, Google Home MCP adapter and Ring provider adapter are implemented. The post-Incident-Receipt full regression run is the remaining engineering verification gate.
 
 ## Judging criteria coverage
 
@@ -25,9 +25,9 @@ Evidence:
 - no MCP `approve_action` / physical execution tool
 - one-time expiring approval proposal with replay protection
 - post-action verification and evidence
-- 98 automated tests PASS on the final provider candidate
-- GitHub Actions PASS
-- Docker build PASS
+- 98 automated tests PASS on the previous provider candidate
+- persistent Incident Receipt regression tests are now merged on current main
+- final post-merge full-suite / MCP smoke / Docker refresh is pending execution-plane repo-policy repair
 
 ### 2. Design
 
@@ -77,11 +77,12 @@ The Google Home MCP adapter is implemented separately as a product expansion pat
 ## Canonical evidence
 
 - provider-adapter merge commit: `eb479a66868d53984c176822a3bbfeb4302e229a`
+- Incident Receipt / Home Flight Recorder commit: `1dc81ab8e922567564a1130c43c7214bfc4c2a53`
 - PR #28: merged
 - Devpost project slug: `inneros-ambient-guardian`
-- tests: 98 PASS on final provider candidate
-- runtime HTTP + Streamable HTTP MCP smoke: PASS
-- Docker build: PASS
+- tests: 98 PASS on the previous provider candidate; final current-main count pending rerun
+- runtime HTTP + Streamable HTTP MCP smoke: PASS on previous provider candidate; current-main refresh pending
+- Docker build: PASS on previous provider candidate; current-main refresh pending
 - “What happened at 3 AM?” temporal incident reconstruction: implemented
 - Google Home MCP: CODE_READY, live OAuth pending
 - Ring official adapter: CODE_READY, live provider token/test account pending
@@ -104,7 +105,7 @@ Until those gates are resolved, keep Devpost in draft and do not overstate provi
 1. Preserve the current stable engineering main. Avoid broad feature work.
 2. Prioritize Amazon judging value over unrelated product expansion.
 3. Preferred wow path: official Ring Developer Playground event -> temporal reconstruction -> separate human approval -> verified Incident Receipt.
-4. Add persistence only if it can be implemented narrowly and tested before feature freeze.
+4. Persistence is implemented; freeze that scope and only perform regression verification/documentation corrections.
 5. Keep the working public title "InnerOS Ambient Guardian" until a stronger English/Spanish-friendly name is explicitly approved.
 6. Treat the Devpost connector as a ChatGPT-side integration issue; do not assign its repair to the InnerOS/Notion engineering lane.
 7. Canonical source of truth while connector sync is unavailable: `devpost-submission.md` plus this readiness document.
