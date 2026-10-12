@@ -40,6 +40,8 @@ Earlier development used coding agents for architecture review, MCP migration, s
 - Human approval kept outside MCP tools
 - Atomic replay/concurrency protection
 - Post-action verification and evidence
+- Persistent Home Flight Recorder / Incident Receipts with immutable IDs and SHA-256 digests
+- Cross-session incident lookup through MCP/HTTP
 - Docker packaging and GitHub Actions CI
 
 ## Architecture
@@ -73,8 +75,9 @@ PYTHONPATH=src python scripts/runtime_smoke.py
 CI installs dependencies in a clean environment, runs the complete suite, boots the real server, connects using the official MCP HTTP client, and builds the Docker image.
 
 Final verification evidence:
-- **98/98 tests PASS in the final provider verification suite**
-- GitHub Actions PASS
+- **98 tests PASS on the previous provider verification candidate**
+- Current main includes additional Incident Receipt persistence regressions; the final post-merge full-suite count is being re-verified
+- GitHub Actions PASS on the previous provider candidate
 - `compileall` PASS
 - `git diff --check` PASS
 - real Streamable HTTP MCP smoke PASS
@@ -84,8 +87,8 @@ Final verification evidence:
 - all three Judge Mode scenarios exercised through browser QA
 - bounded proposal -> separate approval -> verification -> evidence flow PASS
 
-Canonical engineering main before this submission-doc refresh:
-`53850a8a893fde320a6fee952d2724aecf53d42f`
+Canonical engineering main for this submission-doc refresh:
+`1dc81ab8e922567564a1130c43c7214bfc4c2a53`
 
 ## Public Demo Link
 A secure public Judge Mode URL is optional and is not yet published. The local model endpoint remains private and must never be exposed directly.
@@ -123,7 +126,7 @@ See:
 ## Known Limitations
 - Public action adapter is simulator-only; no real lock or alarm is controlled.
 - The official Ring/Amazon Vision adapter is implemented and tested in code, but Ring track eligibility remains unclaimed until Developer Playground, test-account, token, or other official provider evidence is completed.
-- Demo state is in-memory and resets on service restart.
+- Incident receipts are durable across service/state restarts. The public demo's transient proposal/action-evidence list is still process-local; production deployment would persist that full approval/evidence ledger.
 - Bedrock currently returns `ValidationException: Operation not allowed`; it is optional and not part of the functional safety path.
 - Physical Echo/Alexa+ MCP Toolkit validation remains optional product validation, not a hackathon blocker.
 - Real-device production use would require authentication, tenant policy, durable audit storage, rate limiting, secrets management, and device-specific verification.
@@ -142,11 +145,11 @@ See:
 Do not call Devpost final submission actions until those items are explicitly resolved.
 
 
-## Final Sprint Note — 2026-10-11
+## Final Sprint Note — 2026-10-12
 - Official deadline: 2026-10-23 12:00 PM Pacific Time.
 - Internal target: feature freeze by 2026-10-16; final submission ready by 2026-10-21/22.
 - Project naming is under review. Do not rename the Devpost project or repository until the owner approves a bilingual English/Spanish-friendly name.
 - Primary judging story: cross-system incident reconstruction ("What happened at 3 AM?") -> bounded human-approved action -> verified evidence.
-- Candidate enhancement under review: a persistent Home Flight Recorder / Incident Receipt that preserves source event IDs, timestamps, policy decision, approval, verification and evidence digest across sessions.
+- Implemented enhancement: the Home Flight Recorder / Incident Receipt now persists incident snapshots across sessions with immutable IDs and SHA-256 digests; verified action evidence links back to the latest incident receipt.
 - Google Home MCP is product expansion and should not displace Amazon-track work.
 - Ring Developer Playground is the preferred path to obtain official Ring track evidence without hardware, if available to the account.
