@@ -94,6 +94,15 @@ Architecture:
 - Rafa personal Google account authorizes the actual home resources.
 - Google Home OAuth remains a product-validation task, not a primary Amazon judging dependency.
 
+## Demo language and Ecuador proof
+
+The final video and Devpost story are in English.
+
+The pitch should explicitly state that the local control layer is already running and being validated in a real home in Ecuador. This is useful credibility evidence, but it must remain truth-labeled:
+- real local/home integrations may be shown as REAL only when already validated
+- public Judge Mode remains clearly SIMULATED where appropriate
+- Google Home and Ring provider paths must not be called LIVE until their provider-specific acceptance tests pass
+
 ## Naming
 
 Current working title: **InnerOS Ambient Guardian**.
