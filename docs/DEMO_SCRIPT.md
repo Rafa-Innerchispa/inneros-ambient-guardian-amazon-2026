@@ -64,6 +64,10 @@ Key line:
 
 ## 2:12–2:32 — Real-home proof
 
+Say:
+
+**“This is not only a lab demo. The local control layer is already running in a real home in Ecuador, where we validate the physical integrations separately from the public simulator.”**
+
 Very briefly show the integration truth panel and mention that the product has separately validated:
 - real Echo/Fire speech through Home Assistant Alexa Devices
 - Intelbras alarm state and bounded owner-authenticated controls
