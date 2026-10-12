@@ -1,6 +1,6 @@
 # Amazon Build, Ship, Shape — Final Sprint Control
 
-Status: 2026-10-11
+Status: 2026-10-12
 
 ## Deadline
 
@@ -19,8 +19,8 @@ Internal plan:
 
 Repository: `Rafa-Innerchispa/inneros-ambient-guardian-amazon-2026`
 
-Main at start of final sprint:
-`53850a8a893fde320a6fee952d2724aecf53d42f`
+Current canonical main:
+`1dc81ab8e922567564a1130c43c7214bfc4c2a53`
 
 Verified package:
 - official MCP Python SDK v2 + Streamable HTTP
@@ -32,9 +32,10 @@ Verified package:
 - Google Cast / Home Assistant physical path
 - Google Home MCP adapter CODE_READY; user OAuth still pending
 - Ring/Amazon Vision adapter CODE_READY; provider-live evidence still pending
-- 98/98 tests PASS in final provider verification suite
-- runtime MCP smoke PASS
-- Docker build PASS
+- previous provider candidate: 98 tests PASS
+- current main adds persistent Incident Receipt regression tests; final post-merge full-suite count is being re-verified after the execution-plane repo-policy repair
+- runtime MCP smoke PASS on the prior provider candidate
+- Docker build PASS on the prior provider candidate
 
 ## Organizer guidance to optimize for
 
@@ -56,25 +57,13 @@ Core differentiator:
 Preferred one-line judging memory:
 **The home can explain what happened, keep the human in control of what happens next, and prove the result.**
 
-## Candidate wow enhancement
+## Implemented wow enhancement — Home Flight Recorder / Incident Receipt
 
-Working concept: **Home Flight Recorder / Incident Receipt**.
+Commit `1dc81ab8e922567564a1130c43c7214bfc4c2a53` implements durable incident receipts backed by SQLite. The current build now preserves an immutable incident id, source event ids, timestamps, truth labels, the reconstructed event payload and a SHA-256 digest. Receipts can be recovered in later sessions instead of pretending continuity from volatile memory.
 
-A durable incident record should preserve:
-- incident id
-- provider/source event ids
-- timestamps
-- truth labels
-- observations vs inferences
-- policy/proposal
-- human approval identity/time
-- executed action
-- post-action verification
-- evidence digest/hash
+A verified bounded action also carries a digest and links back to the latest incident receipt, creating a reviewable chain from incident -> human-approved action -> verification evidence.
 
-Minimum requirement: recover an incident in a later session and answer "What changed since last night?" without fabricating continuity.
-
-Do not implement until scoped small enough to finish before feature freeze.
+Public Judge Mode exposes persistent incident receipts and clearly distinguishes persisted incident history from the still-bounded action approval surface.
 
 ## Ring priority
 
@@ -144,7 +133,8 @@ P0:
 6. explicit final submit authorization
 
 P1:
-- narrow persistent Incident Receipt if it fits before freeze
+- final post-Incident-Receipt regression run and evidence refresh
+- Ring official/Playground validation if obtainable without threatening feature freeze
 
 P2 / after hackathon:
 - Google Home live OAuth if it threatens Amazon-track schedule
