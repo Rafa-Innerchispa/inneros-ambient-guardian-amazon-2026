@@ -38,11 +38,11 @@ Then the interface asks:
 
 **“Alexa, what happened at 3 AM?”**
 
-Point to the time-ordered answer, event IDs and sources.
+Point to the time-ordered answer, event IDs and sources. Then point to the **Home Flight Recorder** receipt: immutable incident ID, SHA-256 digest and `persistent=true`.
 
 Key line:
 
-“The Ring edge in this demo is simulated and labeled as such. The normalized event pipeline, time-window correlation and MCP tool are real. That same read-only pattern is designed to accept official Ring, camera, alarm and access-control events.”
+“The Ring edge in this demo is simulated and labeled as such. The normalized event pipeline, time-window correlation and MCP tool are real. The incident is also written to a persistent receipt, so the home can recover the same evidence in a later session instead of inventing memory.”
 
 ## 1:32–2:12 — Human-controlled action
 
@@ -81,7 +81,8 @@ Do not imply those private-home integrations are part of the public simulator.
 Flash:
 - public GitHub repository + MIT license
 - GitHub Actions PASS
-- **98 automated tests PASS in the final provider verification suite**
+- previous provider candidate: **98 automated tests PASS**
+- current Incident Receipt build: final regression count to be shown only after the current-main rerun completes
 - real Streamable HTTP MCP smoke PASS
 - Docker build PASS
 - friction log

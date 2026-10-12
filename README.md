@@ -37,6 +37,8 @@ The public hackathon build controls only a simulator. Private customer/device co
 - **AWS Strands Agents SDK** as a real read-only orchestration/synthesis layer against the local OpenAI-compatible Qwen endpoint
 - One-time expiring approval tokens, replay protection, and concurrent-consumption protection
 - Post-action verification evidence
+- Persistent **Home Flight Recorder / Incident Receipts** backed by SQLite, with immutable incident IDs and SHA-256 digests recoverable across sessions
+- Action evidence digests linked back to the latest incident receipt
 - Docker packaging and CI that boots the actual server and connects with a real MCP HTTP client
 
 ## Architecture
@@ -131,7 +133,7 @@ The strongest Judge Mode path is a three-part story rather than a feature tour:
 2. **What happened at 3 AM?:** the demo injects truth-labeled Ring-compatible events at 03:04, 03:07 and 03:11, then reconstructs the incident through the real normalized event pipeline and the read-only `incident_summary` MCP tool.
 3. **Prepare lock:** ask `Alexa, prepare to lock the front door`. The system returns an expiring proposal with `executed=false`. Only the separate human approval surface may execute the bounded simulator action and emit verification evidence.
 
-The demo always distinguishes the **SIMULATED Ring edge** from the **REAL MCP/runtime, temporal correlation, policy and evidence pipeline**.
+The demo always distinguishes the **SIMULATED Ring edge** from the **REAL MCP/runtime, temporal correlation, policy and evidence pipeline**. The 3 AM scenario also writes a persistent Incident Receipt so the same incident can be recovered in a later session.
 
 ## MCP tools
 
@@ -139,7 +141,9 @@ The demo always distinguishes the **SIMULATED Ring edge** from the **REAL MCP/ru
 |---|---:|---|
 | `guardian_status` | No | Current property summary |
 | `recent_events` | No | Recent normalized events |
-| `incident_summary` | No | Reconstructs normalized activity around an ISO-8601 time window |
+| `incident_summary` | No | Reconstructs normalized activity around an ISO-8601 time window and records an immutable receipt |
+| `incident_receipts` | No | Lists durable incident receipts from current and prior sessions |
+| `incident_receipt` | No | Retrieves one persisted incident snapshot by receipt ID |
 | `ask_guardian` | No | Local-first safety answer |
 | `prepare_action` | Proposal only | Creates an expiring bounded proposal |
 | `verification_evidence` | No | Returns verified action evidence |
