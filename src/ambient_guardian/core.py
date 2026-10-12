@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import secrets
@@ -13,6 +14,7 @@ import httpx
 from .dmx import DMXBridge
 from .google_home import GoogleHomeBridge, GoogleHomeStatus
 from .home_assistant import HomeAssistantBridge
+from .incident_store import IncidentStore
 from .ring import RingAdapterStatus, RingOfficialAdapter, RingSimulatorAdapter
 
 
@@ -62,9 +64,14 @@ class SimulatorAdapter:
 class GuardianState:
     ACTIONS = {"lock_front_door", "enable_delivery_mode", "disable_delivery_mode"}
 
-    def __init__(self, action_ttl_seconds: int = 120) -> None:
+    def __init__(
+        self,
+        action_ttl_seconds: int = 120,
+        incident_db_path: str | None = None,
+    ) -> None:
         self._lock = threading.RLock()
         self._ttl = action_ttl_seconds
+        self.incident_store = IncidentStore(incident_db_path)
         self.adapter = SimulatorAdapter()
         self.ring_adapter = RingSimulatorAdapter()
         self.ring_official = RingOfficialAdapter()
@@ -309,7 +316,7 @@ class GuardianState:
                 google_home_used = (e.get("metadata") or {}).get("truth", "REAL")
                 break
 
-        return {
+        result = {
             "status": "attention_required" if warning else "all_clear",
             "target_time": target.isoformat(),
             "window_minutes": window_minutes,
@@ -327,6 +334,8 @@ class GuardianState:
                 "google_home": google_home_used,
             },
         }
+        result["receipt"] = self.incident_store.record(result)
+        return result
 
     def guardian_status(self) -> dict[str, Any]:
         with self._lock:
@@ -402,6 +411,7 @@ class GuardianState:
 
         after = self.adapter.execute(item.action)
         verified = self._verify(item.action, after)
+        linked_incident = self.incident_store.latest_receipt()
         evidence = {
             "evidence_id": f"evd-{secrets.token_hex(6)}",
             "action": item.action,
@@ -411,7 +421,20 @@ class GuardianState:
             "adapter": after["adapter"],
             "observed_state": after,
             "verified_at": iso_now(),
+            "linked_incident_id": (
+                linked_incident.get("incident_id") if linked_incident else None
+            ),
+            "linked_incident_digest": (
+                linked_incident.get("digest") if linked_incident else None
+            ),
         }
+        evidence_payload = json.dumps(
+            evidence,
+            sort_keys=True,
+            separators=(",", ":"),
+            ensure_ascii=False,
+        ).encode("utf-8")
+        evidence["evidence_digest"] = hashlib.sha256(evidence_payload).hexdigest()
         with self._lock:
             self.evidence.append(evidence)
         return evidence
@@ -429,6 +452,14 @@ class GuardianState:
     def evidence_snapshot(self) -> list[dict[str, Any]]:
         with self._lock:
             return list(self.evidence)
+
+    def incident_receipts(self, limit: int = 8) -> list[dict[str, Any]]:
+        """Return durable incident receipts without replaying or executing actions."""
+        return self.incident_store.list_receipts(limit)
+
+    def incident_record(self, incident_id: str) -> dict[str, Any] | None:
+        """Return one persisted incident snapshot by immutable receipt id."""
+        return self.incident_store.get(incident_id)
 
     def integration_status(self) -> dict[str, Any]:
         ring_status: RingAdapterStatus = self.ring_adapter.status()
@@ -452,6 +483,11 @@ class GuardianState:
                 "configured": self.ring_official.is_configured(),
             },
             "google_home": google_home_status,
+            "incident_receipts": {
+                "storage": "sqlite",
+                "persistent": self.incident_store.path != ":memory:",
+                "count_visible": len(self.incident_store.list_receipts(50)),
+            },
             "local_llm": bool(os.getenv("INNEROS_LOCAL_LLM_URL")),
             "aws_strands_enabled": os.getenv("AWS_STRANDS_ENABLED", "0") == "1",
             "home_assistant": home_status,

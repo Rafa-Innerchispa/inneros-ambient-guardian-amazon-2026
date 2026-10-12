@@ -19,6 +19,7 @@ def test_judge_ui_declares_truth_boundaries_and_three_scenarios():
     assert "2. What happened at 3 AM?" in html
     assert "3. Prepare lock" in html
     assert "model cannot approve or execute" in html
+    assert "Persistent incident receipts" in html
 
 
 def test_scenario_one_home_status_is_read_only(monkeypatch):
@@ -89,6 +90,8 @@ def test_scenario_two_temporal_ring_demo_reconstructs_3am_incident(monkeypatch):
     assert payload["incident"]["event_count"] == 3
     assert payload["incident"]["truth"]["analysis"] == "REAL"
     assert payload["incident"]["truth"]["ring_edge"] == "SIMULATED"
+    assert payload["incident"]["receipt"]["algorithm"] == "sha256"
+    assert len(payload["incident"]["receipt"]["digest"]) == 64
     assert "03:07" in payload["response"]["answer"]
     assert STATE.evidence_snapshot() == []
 

@@ -17,6 +17,8 @@ def test_official_mcp_sdk_discovers_and_calls_guardian_tools():
                 "guardian_status",
                 "recent_events",
                 "incident_summary",
+                "incident_receipts",
+                "incident_receipt",
                 "ask_guardian",
                 "prepare_action",
                 "verification_evidence",
@@ -31,6 +33,20 @@ def test_official_mcp_sdk_discovers_and_calls_guardian_tools():
             )
             assert incident.is_error is False
             assert "event_count" in incident.structured_content
+            assert "receipt" in incident.structured_content
+
+            receipts = await client.call_tool("incident_receipts", {"limit": 5})
+            assert receipts.is_error is False
+            saved = receipts.structured_content["receipts"]
+            assert saved
+            incident_id = saved[0]["incident_id"]
+
+            restored = await client.call_tool(
+                "incident_receipt",
+                {"incident_id": incident_id},
+            )
+            assert restored.is_error is False
+            assert restored.structured_content["found"] is True
 
             result = await client.call_tool("guardian_status", {})
             assert result.is_error is False
