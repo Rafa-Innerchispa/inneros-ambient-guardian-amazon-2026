@@ -18,6 +18,8 @@ Ambient Guardian is designed as a premium local-first intelligence layer for sma
 
 The customer does not need another isolated device or dashboard. The customer needs the hardware already installed in the home to behave like one coherent system.
 
+This is not only a lab concept. The local control layer is already being validated in a real home in Ecuador, with physical integrations kept clearly separate from the public Judge Mode simulator and from any provider path that is not yet live-verified.
+
 ## How We Used AI
 - Local Qwen/vLLM provides private, local-first contextual reasoning through an OpenAI-compatible endpoint.
 - AWS Strands Agents SDK provides real agent orchestration/synthesis using an explicit local OpenAI-compatible model provider.
