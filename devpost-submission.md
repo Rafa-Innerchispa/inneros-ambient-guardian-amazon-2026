@@ -32,7 +32,7 @@ Earlier development used coding agents for architecture review, MCP migration, s
 - No-terminal Judge Mode with a clearly labeled simulated Alexa+ experience
 - Local Qwen/vLLM reasoning
 - Real AWS Strands Agent integration
-- Ring-compatible simulated event boundary without claiming official Ring integration
+- Ring-compatible simulated event boundary for Judge Mode plus a separate official Ring/Amazon Vision adapter that remains CODE_READY until provider-live verification
 - Fail-closed deterministic action parser
 - One-time expiring approval proposals
 - Human approval kept outside MCP tools
@@ -71,7 +71,7 @@ PYTHONPATH=src python scripts/runtime_smoke.py
 CI installs dependencies in a clean environment, runs the complete suite, boots the real server, connects using the official MCP HTTP client, and builds the Docker image.
 
 Final verification evidence:
-- **27/27 tests PASS**
+- **98/98 tests PASS in the final provider verification suite**
 - GitHub Actions PASS
 - `compileall` PASS
 - `git diff --check` PASS
@@ -83,7 +83,7 @@ Final verification evidence:
 - bounded proposal -> separate approval -> verification -> evidence flow PASS
 
 Canonical engineering main before this submission-doc refresh:
-`068fe0a64c2663d38d28e58fd8d195af3b121ba3`
+`53850a8a893fde320a6fee952d2724aecf53d42f`
 
 ## Public Demo Link
 A secure public Judge Mode URL is optional and is not yet published. The local model endpoint remains private and must never be exposed directly.
@@ -110,7 +110,7 @@ Recording references:
 7. GitHub Actions green + public MIT license + friction log.
 
 ## Submission Readiness
-Engineering demo is READY. Devpost public project write-up is updated to version 6. Technical answers, AWS Builder response, Open Source response, feature requests, feedback answers, friction log and judge-oriented demo material are prepared.
+Engineering demo is READY. The local canonical submission copy is newer than the currently visible Devpost project page and is waiting for connector/manual sync. Technical answers, AWS Builder response, Open Source response, feature requests, feedback answers, friction log and judge-oriented demo material are prepared.
 
 The final submission remains intentionally blocked on owner-controlled fields and the final public video.
 
@@ -120,7 +120,7 @@ See:
 
 ## Known Limitations
 - Public action adapter is simulator-only; no real lock or alarm is controlled.
-- Ring primary track is not claimed because no official Ring API/SDK/simulator/device path is demonstrated.
+- The official Ring/Amazon Vision adapter is implemented and tested in code, but Ring track eligibility remains unclaimed until Developer Playground, test-account, token, or other official provider evidence is completed.
 - Demo state is in-memory and resets on service restart.
 - Bedrock currently returns `ValidationException: Operation not allowed`; it is optional and not part of the functional safety path.
 - Physical Echo/Alexa+ MCP Toolkit validation remains optional product validation, not a hackathon blocker.
@@ -138,3 +138,13 @@ See:
 9. Explicit final authorization to submit.
 
 Do not call Devpost final submission actions until those items are explicitly resolved.
+
+
+## Final Sprint Note — 2026-10-11
+- Official deadline: 2026-10-23 12:00 PM Pacific Time.
+- Internal target: feature freeze by 2026-10-16; final submission ready by 2026-10-21/22.
+- Project naming is under review. Do not rename the Devpost project or repository until the owner approves a bilingual English/Spanish-friendly name.
+- Primary judging story: cross-system incident reconstruction ("What happened at 3 AM?") -> bounded human-approved action -> verified evidence.
+- Candidate enhancement under review: a persistent Home Flight Recorder / Incident Receipt that preserves source event IDs, timestamps, policy decision, approval, verification and evidence digest across sessions.
+- Google Home MCP is product expansion and should not displace Amazon-track work.
+- Ring Developer Playground is the preferred path to obtain official Ring track evidence without hardware, if available to the account.
