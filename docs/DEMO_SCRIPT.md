@@ -8,7 +8,7 @@ Canonical recording path for the Amazon Developer Hackathon. The video must be p
 - **REAL:** Ambient Guardian policy, normalized event pipeline, temporal correlation and evidence
 - **REAL:** AWS Strands orchestration with local Qwen/vLLM when enabled
 - **SIMULATED:** Alexa+ browser interaction
-- **SIMULATED:** Ring-compatible demo edge until an official Ring developer path is bound
+- **SIMULATED:** Ring-compatible demo edge for the public Judge Mode; the separate official Ring adapter is CODE_READY but not yet provider-live verified
 - **SAFE:** the model cannot approve or execute its own consequential action
 
 ## 0:00–0:22 — Problem and promise
@@ -77,7 +77,7 @@ Do not imply those private-home integrations are part of the public simulator.
 Flash:
 - public GitHub repository + MIT license
 - GitHub Actions PASS
-- **84 automated tests PASS**
+- **98 automated tests PASS in the final provider verification suite**
 - real Streamable HTTP MCP smoke PASS
 - Docker build PASS
 - friction log
@@ -86,4 +86,4 @@ Flash:
 
 “Alerts tell you that something happened. Ambient Guardian explains what happened, keeps you in control of what happens next, and verifies the outcome.”
 
-End on **InnerOS Ambient Guardian**.
+End on the current working title **InnerOS Ambient Guardian**. Final submission name is intentionally pending owner approval.
