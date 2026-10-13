@@ -86,6 +86,9 @@ Use the interaction model that matches the Echo language:
 - `es-MX`: `docs/alexa-custom-skill-es-MX.json`
   - invocation: `guardián ambiental`
   - smoke phrase: `Alexa, abre Guardián Ambiental`
+- `es-ES`: `docs/alexa-custom-skill-es-ES.json`
+  - invocation: `guardián ambiental`
+  - smoke phrase: `Alexa, abre Guardián Ambiental`
 
 In Developer Console, add the locale under **Language Settings**, import/paste
 the corresponding interaction model, then **Save Model** and **Build Model**
