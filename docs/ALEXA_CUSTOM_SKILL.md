@@ -65,14 +65,38 @@ Create a **Custom** skill:
 
 - Name: `Ambient Guardian`
 - Primary locale: `English (US)`
-- Invocation: `ambient guardian`
-- Interaction model: `docs/alexa-custom-skill-en-US.json`
 - Endpoint type: HTTPS
 - Default endpoint: `https://voz.pcdoctor.ai/alexa/skill`
 - SSL certificate: trusted certificate
 
-The development skill can be tested in the Alexa simulator and in the Alexa
-mobile app signed into the same developer account using en-US.
+### Locale and invocation names
+
+The physical Echo must use a locale that is actually enabled and built for the
+development skill. Enabling the skill in the Alexa app is not sufficient when
+the device locale does not match a configured skill locale.
+
+Use the interaction model that matches the Echo language:
+
+- `en-US`: `docs/alexa-custom-skill-en-US.json`
+  - invocation: `ambient guardian`
+  - smoke phrase: `Alexa, open Ambient Guardian`
+- `es-US`: `docs/alexa-custom-skill-es-US.json`
+  - invocation: `guardián ambiental`
+  - smoke phrase: `Alexa, abre Guardián Ambiental`
+- `es-MX`: `docs/alexa-custom-skill-es-MX.json`
+  - invocation: `guardián ambiental`
+  - smoke phrase: `Alexa, abre Guardián Ambiental`
+
+In Developer Console, add the locale under **Language Settings**, import/paste
+the corresponding interaction model, then **Save Model** and **Build Model**
+for that locale before testing on the physical Echo.
+
+For the hackathon video, the canonical English path is `en-US` with:
+`Alexa, open Ambient Guardian`.
+
+The development skill can be tested in the Alexa simulator and on a physical
+Alexa device only when the device uses a supported skill locale and the device
+is registered to the same Amazon account used for development testing.
 
 For owner security actions, enable **Skills Personalization** and **PIN Confirmation**
 in Developer Console. The owner must have Voice ID, Personalize skills, and a
