@@ -1,6 +1,6 @@
 # InnerOS Ambient Guardian
 
-**Alexa+ becomes the voice of a local-first AI guardian that understands Ring-compatible and IoT events, prepares bounded actions, requires human approval, and returns verified evidence.**
+**Alexa becomes the voice of a local-first AI guardian that explains home incidents, prepares bounded actions, requires separate human approval, and returns verified evidence.**
 
 [![tests](https://github.com/Rafa-Innerchispa/inneros-ambient-guardian-amazon-2026/actions/workflows/tests.yml/badge.svg)](https://github.com/Rafa-Innerchispa/inneros-ambient-guardian-amazon-2026/actions/workflows/tests.yml)
 
@@ -14,7 +14,7 @@ Built for **Build, Ship, Shape: Amazon Developer Hackathon 2026**.
 
 Smart-home systems produce many alerts but still make a person answer the hard questions manually: *What happened? Is it important? What should happen next? Did the action actually work?*
 
-Ambient Guardian gives Alexa+ one safe orchestration surface through an official MCP server. It correlates property context, reasons locally, prepares only allowlisted actions, waits for a separate human approval, executes through an adapter, verifies observed state, and records evidence.
+Ambient Guardian gives Alexa a safe orchestration surface through an official MCP server and a signed Custom Skill gateway. It correlates property context, reasons locally, prepares only allowlisted actions, waits for a separate human approval, executes through an adapter, verifies observed state, and records evidence. Direct Alexa+ MCP remains explicitly `CODE_READY / NOT_PROVEN` until the account and device entitlement are demonstrated.
 
 The core invariant is deliberately strict:
 
@@ -29,6 +29,8 @@ The public hackathon build controls only a simulator. Private customer/device co
 - MCP tools for status, events, **time-bounded incident reconstruction**, local reasoning, action preparation, evidence, and integration diagnostics
 - **No `approve_action` MCP tool**. A model can prepare an action but cannot approve its own request
 - Alexa+ web simulation with typed input, browser speech recognition, and spoken responses
+- Signed physical-Alexa Custom Skill gateway with Amazon certificate, timestamp, Skill ID, Account Linking, Voice ID/PIN, and a shared-secret loopback trust boundary
+- **Live Evidence Console** for utterance, intent, consulted systems, Incident Receipt, prepared action, approval, PBX result, evidence digest, and REAL/SIMULATED/CODE_READY labels
 - Ring-compatible normalized demo ingress for safe public testing, plus a separate official Ring/Amazon Vision adapter with fail-closed signed webhook verification. Demo events remain explicitly SIMULATED unless a real provider session/signature is verified.
 - Optional **Home Assistant + Alexa Devices** bridge for real Echo/Fire endpoints, read-only alarm context, owner-authorized speech, and allowlisted reversible lighting; direct Alexa+ MCP Toolkit linking remains separate and unclaimed
 - **InnerOS DMX / Art-Net bridge** to the existing loopback-only lighting engine for allowlisted colors/scenes Alexa does not natively understand
@@ -39,12 +41,13 @@ The public hackathon build controls only a simulator. Private customer/device co
 - Post-action verification evidence
 - Persistent **Home Flight Recorder / Incident Receipts** backed by SQLite, with immutable incident IDs and SHA-256 digests recoverable across sessions
 - Action evidence digests linked back to the latest incident receipt
+- VoiceOps/PBX callback preparation linked to the exact Incident Receipt that existed at PREPARE time; VoiceOps alone owns the private extension and SIP/PBX credentials
 - Docker packaging and CI that boots the actual server and connects with a real MCP HTTP client
 
 ## Architecture
 
 ```text
-Alexa+ / simulated Alexa+
+Physical Echo Custom Skill / Judge Mode / entitlement-gated Alexa+ MCP
         |
         v
 Official MCP Python SDK v2 / Streamable HTTP
@@ -132,6 +135,7 @@ The strongest Judge Mode path is a three-part story rather than a feature tour:
 1. **Home status:** ask `Alexa, is everything okay at home?` to prove read-only context.
 2. **What happened at 3 AM?:** the demo injects truth-labeled Ring-compatible events at 03:04, 03:07 and 03:11, then reconstructs the incident through the real normalized event pipeline and the read-only `incident_summary` MCP tool.
 3. **Prepare lock:** ask `Alexa, prepare to lock the front door`. The system returns an expiring proposal with `executed=false`. Only the separate human approval surface may execute the bounded simulator action and emit verification evidence.
+4. **PBX escalation:** ask `Alexa, call me through my PBX and give me the incident report`. Ambient Guardian only prepares a callback tied to that Incident Receipt. A separate owner-authenticated HTTP approval asks VoiceOps to call its preconfigured `voiceops.owner` alias, then records sanitized verification evidence.
 
 The demo always distinguishes the **SIMULATED Ring edge** from the **REAL MCP/runtime, temporal correlation, policy and evidence pipeline**. The 3 AM scenario also writes a persistent Incident Receipt so the same incident can be recovered in a later session.
 
@@ -146,17 +150,19 @@ The demo always distinguishes the **SIMULATED Ring edge** from the **REAL MCP/ru
 | `incident_receipt` | No | Retrieves one persisted incident snapshot by receipt ID |
 | `ask_guardian` | No | Local-first safety answer |
 | `prepare_action` | Proposal only | Creates an expiring bounded proposal |
+| `prepare_pbx_callback` | Proposal only | Prepares an owner PBX callback tied to the latest Incident Receipt; never places a call |
 | `verification_evidence` | No | Returns verified action evidence |
 | `integration_status` | No | Reports MCP/Strands/Ring/local model state |
 
 There is deliberately **no MCP execution/approval tool**.
 
-## Physical Alexa and Ring readiness
+## Alexa, PBX, and Ring readiness
 
-The project now has two distinct Alexa surfaces and reports them separately:
+The project reports each integration separately so a code-complete path is never presented as live evidence:
 
-- **Real Echo/Fire via Home Assistant Alexa Devices:** supported through the optional Home Assistant bridge. In the author's deployment, Home Assistant discovered real Amazon endpoints and successfully delivered speech to a physical Echo through `notify.*_speak`.
-- **Direct Alexa+ MCP Toolkit binding:** still not linked and not claimed. The hackathon Alexa+ path remains the self-hosted MCP runtime plus the truth-labeled simulated Alexa+ experience unless partner entitlement is proven.
+- **Physical Echo via Custom Skill:** code-complete signed gateway at `/alexa/skill`, with owner Account Linking and authenticated gateway-to-backend identity forwarding. It remains `CODE_READY` until a physical request/response is captured.
+- **Direct Alexa+ MCP Toolkit:** entitlement is `NOT_PROVEN`; it is not claimed as LIVE.
+- **VoiceOps/PBX:** the app sends no destination, number, extension, or SIP credential. After separate owner approval it calls the existing private VoiceOps contract and verifies the dispatch receipt. Simulator mode is explicitly `SIMULATED`.
 - **Ring:** the official adapter targets `https://api.amazonvision.com/v1`, verifies signed webhook ingress fail-closed, and normalizes JSON:API events. Ring track eligibility remains unclaimed until a live developer token/test account/session is verified.
 
 Alexa speech from Ambient Guardian is intentionally not an MCP tool. It requires a separate owner-authorized HTTP route, an explicit enable flag, and an allowlisted Home Assistant notify entity.
@@ -188,6 +194,13 @@ See [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md) for production host/origin settin
 | `AMBIENT_GUARDIAN_ALEXA_SPEAK_ENABLED` | `0` | Enables the owner-only physical Alexa speech route |
 | `AMBIENT_GUARDIAN_ALEXA_NOTIFY_ALLOWLIST` | unset | Comma-separated allowlist of HA `notify.*` Alexa endpoints |
 | `AMBIENT_GUARDIAN_OWNER_TOKEN` | unset | Required owner token for owner-only Home Assistant routes |
+| `AMBIENT_GUARDIAN_SKILL_BRIDGE_TOKEN` | unset | Shared runtime secret authenticating the loopback Custom Skill gateway to `/api/alexa` |
+| `AMBIENT_GUARDIAN_ACCOUNT_LINKING_REQUIRED` | `0` | Fail closed with an Alexa `LinkAccount` card until the owner OAuth token validates |
+| `AMBIENT_GUARDIAN_ACCOUNT_USERINFO_URL` | `https://auth.pcdoctor.ai/userinfo` | Owner Account Linking validation endpoint |
+| `AMBIENT_GUARDIAN_PHYSICAL_ALEXA_VERIFIED` | `0` | Truth flag set only after physical Echo evidence exists |
+| `AMBIENT_GUARDIAN_ALEXA_PLUS_ENTITLEMENT_VERIFIED` | `0` | Truth flag set only after real Alexa+ MCP entitlement is proven |
+| `VOICEOPS_RUNTIME_URL` | unset | Private/loopback VoiceOps runtime; enables real mode when configured |
+| `VOICEOPS_RUNTIME_TOKEN` | unset | Optional runtime-only VoiceOps bearer token; never exposed in UI/MCP/Git |
 | `AMBIENT_GUARDIAN_LIGHT_CONTROL_ENABLED` | `0` | Enables bounded, reversible Home Assistant light control |
 | `AMBIENT_GUARDIAN_LIGHT_ALLOWLIST` | unset | Comma-separated allowlist of Home Assistant `light.*` entities |
 | `AMBIENT_GUARDIAN_DMX_URL` | unset | Loopback-only InnerOS DMX API base URL |
@@ -209,6 +222,8 @@ CI performs all of the following from a clean environment:
 
 The security regression suite includes `unlock`/negation parsing, token expiration, replay, and concurrent approval consumption.
 
+Final-sprint reproducible result on 2026-10-13: **112 tests passed**, `compileall` passed, and `scripts/runtime_smoke.py` connected to the running Streamable HTTP server with the official MCP client. Tool discovery confirmed that MCP exposes preparation but no approval, execution, or speaker tool.
+
 ## Hackathon evidence
 
 - Amazon integration notes: [`docs/AMAZON_INTEGRATIONS.md`](docs/AMAZON_INTEGRATIONS.md)
@@ -226,9 +241,9 @@ The security regression suite includes `unlock`/negation parsing, token expirati
 MIT. See [`LICENSE`](LICENSE).
 
 
-## Hackathon Judge Mode (no Echo required)
+## Hackathon Judge Mode
 
-The canonical hackathon demo now uses the **real self-hosted MCP backend** with truth-labeled simulated Amazon device edges. Physical Echo and Ring hardware are optional product-validation paths, not submission blockers.
+Judge Mode preserves three deterministic scenarios and adds a Live Evidence Console. The final physical video path uses the Custom Skill when physical verification is available; the browser remains the reproducible fallback and never impersonates an Echo.
 
 Open the web UI and use the three Judge Mode scenarios:
 
@@ -239,7 +254,8 @@ Open the web UI and use the three Judge Mode scenarios:
 Truth boundary shown in the UI:
 
 - REAL: MCP Streamable HTTP runtime and Guardian policy/state.
-- SIMULATED: Alexa+ browser voice experience.
+- CODE_READY: signed Alexa Custom Skill gateway, until physical proof is captured.
+- CODE_READY / NOT_PROVEN: direct Alexa+ MCP entitlement.
 - SIMULATED: Ring-compatible demo edge. The official Ring adapter is CODE_READY but live provider verification is still pending.
 - SAFE: MCP/model cannot approve or execute its own physical action.
 

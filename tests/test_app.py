@@ -79,7 +79,8 @@ def test_integration_status_is_honest_about_ring_and_official_mcp():
     assert "2025-11-25" in data["mcp_protocol"]
     assert "demo simulator" in data["ring"]
     assert data["ring_device_verification"] == "pending_real_or_official_test_account"
-    assert "not-linked" in data["physical_alexa"]
+    assert data["physical_alexa"].startswith("CODE_READY:")
+    assert data["alexa_plus_mcp"]["entitlement"] == "NOT_PROVEN"
 
 
 def test_owner_authorization_requires_matching_header(monkeypatch):
@@ -106,3 +107,126 @@ def test_owner_authorization_requires_matching_header(monkeypatch):
     )
     assert _owner_authorized(good) is True
     assert _owner_authorized(bad) is False
+
+
+def test_public_alexa_route_ignores_forged_speaker_identity(monkeypatch):
+    import ambient_guardian.official_server as server
+
+    captured = []
+
+    def fake_turn(utterance, state, reasoner, *, speaker_context=None):
+        del state, reasoner
+        captured.append((utterance, speaker_context))
+        return {
+            "utterance": utterance,
+            "response": {
+                "answer": "No physical action was taken.",
+                "status": "all_clear",
+                "reasoning_mode": "deterministic-local-fallback",
+            },
+            "prepared_action": None,
+            "evidence_count": 0,
+        }
+
+    monkeypatch.setattr(server, "simulated_alexa_turn", fake_turn)
+    response = client.post(
+        "/api/alexa",
+        json={
+            "utterance": "activa la alarma",
+            "speaker_context": {
+                "person_id": "forged-owner",
+                "authentication_confidence": 400,
+                "account_linked": True,
+            },
+        },
+    )
+
+    assert response.status_code == 200
+    assert captured == [("activa la alarma", {})]
+
+
+def test_authenticated_skill_bridge_can_forward_identity_without_leaking_token(monkeypatch):
+    import ambient_guardian.official_server as server
+
+    captured = []
+    monkeypatch.setenv("AMBIENT_GUARDIAN_SKILL_BRIDGE_TOKEN", "bridge-secret")
+
+    def fake_turn(utterance, state, reasoner, *, speaker_context=None):
+        del state, reasoner
+        captured.append((utterance, speaker_context))
+        return {
+            "utterance": utterance,
+            "response": {
+                "answer": "Prepared safely.",
+                "status": "all_clear",
+                "reasoning_mode": "deterministic-local-fallback",
+            },
+            "prepared_action": None,
+            "evidence_count": 0,
+        }
+
+    monkeypatch.setattr(server, "simulated_alexa_turn", fake_turn)
+    response = client.post(
+        "/api/alexa",
+        headers={"X-Ambient-Skill-Bridge": "bridge-secret"},
+        json={
+            "utterance": "is everything okay",
+            "request_id": "alexa-request-1",
+            "speaker_context": {
+                "person_id": "owner-person",
+                "authentication_confidence": 400,
+                "account_linked": True,
+            },
+        },
+    )
+
+    assert response.status_code == 200
+    assert captured[0][1]["person_id"] == "owner-person"
+    live = client.get("/api/live-evidence").json()
+    assert live["truth"]["channel"] == "CODE_READY"
+    assert live["request_id"] == "alexa-request-1"
+    assert "bridge-secret" not in str(live)
+    assert "approval_token" not in str(live)
+
+
+def test_pbx_approval_token_never_crosses_alexa_or_frontend(monkeypatch):
+    monkeypatch.setenv("AWS_STRANDS_ENABLED", "0")
+    monkeypatch.setenv("AMBIENT_GUARDIAN_OWNER_TOKEN", "owner-test-token")
+    client.post(
+        "/api/incidents/summary",
+        json={"at_iso": "2026-10-06T03:00:00-05:00", "window_minutes": 15},
+    )
+
+    prepared_response = client.post(
+        "/api/alexa",
+        json={
+            "utterance": (
+                "Alexa, call me through my PBX and give me the incident report"
+            )
+        },
+    )
+    assert prepared_response.status_code == 200
+    prepared = prepared_response.json()["prepared_action"]
+    assert prepared["action"] == "voiceops_owner_callback"
+    assert "approval_token" not in prepared
+    assert "approval_token" not in str(client.get("/api/live-evidence").json())
+
+    route = f"/api/pbx/actions/{prepared['action_id']}/approve"
+    assert client.post(route).status_code == 401
+    approved = client.post(route, headers={"X-Owner-Token": "owner-test-token"})
+    assert approved.status_code == 200
+    assert approved.json()["status"] == "executed_and_verified"
+    assert approved.json()["evidence"]["action"] == "voiceops_owner_callback"
+    assert client.post(route, headers={"X-Owner-Token": "owner-test-token"}).status_code == 409
+
+
+def test_pbx_approval_route_cannot_execute_a_non_pbx_action(monkeypatch):
+    monkeypatch.setenv("AMBIENT_GUARDIAN_OWNER_TOKEN", "owner-test-token")
+    prepared = STATE.prepare_action("lock_front_door", "must stay pending")
+    route = f"/api/pbx/actions/{prepared['action_id']}/approve"
+
+    response = client.post(route, headers={"X-Owner-Token": "owner-test-token"})
+
+    assert response.status_code == 409
+    assert STATE.pending_action_name(prepared["approval_token"]) == "lock_front_door"
+    assert STATE.evidence_snapshot() == []

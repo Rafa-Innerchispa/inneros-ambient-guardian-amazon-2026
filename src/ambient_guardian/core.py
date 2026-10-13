@@ -16,6 +16,7 @@ from .google_home import GoogleHomeBridge, GoogleHomeStatus
 from .home_assistant import HomeAssistantBridge
 from .incident_store import IncidentStore
 from .ring import RingAdapterStatus, RingOfficialAdapter, RingSimulatorAdapter
+from .voiceops import OWNER_TARGET_ALIAS, VoiceOpsBridge
 
 
 def utc_now() -> datetime:
@@ -29,10 +30,14 @@ def iso_now() -> str:
 @dataclass(slots=True)
 class PendingAction:
     token: str
+    action_id: str
+    action_digest: str
     action: str
     reason: str
     prepared_at: str
     expires_at: str
+    linked_incident_id: str | None = None
+    linked_incident_digest: str | None = None
 
 
 class SimulatorAdapter:
@@ -62,7 +67,12 @@ class SimulatorAdapter:
 
 
 class GuardianState:
-    ACTIONS = {"lock_front_door", "enable_delivery_mode", "disable_delivery_mode"}
+    ACTIONS = {
+        "lock_front_door",
+        "enable_delivery_mode",
+        "disable_delivery_mode",
+        "voiceops_owner_callback",
+    }
 
     def __init__(
         self,
@@ -78,9 +88,11 @@ class GuardianState:
         self.home_assistant = HomeAssistantBridge()
         self.dmx = DMXBridge()
         self.google_home = GoogleHomeBridge()
+        self.voiceops = VoiceOpsBridge()
         self.events: list[dict[str, Any]] = []
         self.pending: dict[str, PendingAction] = {}
         self.evidence: list[dict[str, Any]] = []
+        self.live_evidence: dict[str, Any] = {}
         self.reset_demo()
 
     def reset_demo(self) -> None:
@@ -97,6 +109,22 @@ class GuardianState:
             ]
             self.pending = {}
             self.evidence = []
+            self.live_evidence = {
+                "utterance": None,
+                "intent": "waiting",
+                "systems_consulted": [],
+                "incident_receipt": None,
+                "prepared_action": None,
+                "approval_state": "NOT_REQUIRED",
+                "pbx_result": None,
+                "verified_evidence": None,
+                "truth": {
+                    "channel": "SIMULATED",
+                    "reasoning": "CODE_READY",
+                    "action": "CODE_READY",
+                },
+                "updated_at": iso_now(),
+            }
             self.adapter = SimulatorAdapter()
             self.ring_adapter = RingSimulatorAdapter()
             self.ring_official = RingOfficialAdapter()
@@ -380,26 +408,114 @@ class GuardianState:
     def prepare_action(self, action: str, reason: str = "") -> dict[str, Any]:
         if action not in self.ACTIONS:
             raise ValueError("Action is outside the public demo allowlist")
+        linked_incident = self.incident_store.latest_receipt()
+        if action == "voiceops_owner_callback":
+            if linked_incident is None:
+                raise ValueError("An Incident Receipt is required before preparing a PBX callback")
+            incident = self.incident_store.get(str(linked_incident["incident_id"])) or {}
+            reason = " ".join(
+                f"Incident report {linked_incident['incident_id']}: {incident.get('summary') or 'Review the recorded incident.'}".split()
+            )[:600]
         token = secrets.token_urlsafe(24)
+        action_id = f"act-{secrets.token_hex(8)}"
         prepared = utc_now()
         expires = prepared + timedelta(seconds=self._ttl)
+        action_payload = {
+            "action_id": action_id,
+            "action": action,
+            "reason": reason,
+            "prepared_at": prepared.isoformat(),
+            "expires_at": expires.isoformat(),
+            "linked_incident_id": linked_incident.get("incident_id") if linked_incident else None,
+            "linked_incident_digest": linked_incident.get("digest") if linked_incident else None,
+        }
+        action_digest = hashlib.sha256(
+            json.dumps(
+                action_payload,
+                sort_keys=True,
+                separators=(",", ":"),
+                ensure_ascii=False,
+            ).encode("utf-8")
+        ).hexdigest()
         item = PendingAction(
             token=token,
+            action_id=action_id,
+            action_digest=action_digest,
             action=action,
             reason=reason,
             prepared_at=prepared.isoformat(),
             expires_at=expires.isoformat(),
+            linked_incident_id=(
+                str(linked_incident.get("incident_id")) if linked_incident else None
+            ),
+            linked_incident_digest=(
+                str(linked_incident.get("digest")) if linked_incident else None
+            ),
         )
         with self._lock:
             self.pending[token] = item
-        return {
+        prepared_result = {
             "status": "approval_required",
             "executed": False,
             "approval_token": token,
+            "action_id": action_id,
+            "action_digest": action_digest,
             "action": action,
             "reason": reason,
+            "prepared_at": item.prepared_at,
             "expires_at": item.expires_at,
+            "linked_incident_id": item.linked_incident_id,
+            "linked_incident_digest": item.linked_incident_digest,
         }
+        if action == "voiceops_owner_callback":
+            prepared_result["target_alias"] = OWNER_TARGET_ALIAS
+        self.record_live_evidence(
+            prepared_action={
+                key: value
+                for key, value in prepared_result.items()
+                if key != "approval_token"
+            },
+            approval_state="WAITING_FOR_OWNER",
+            incident_receipt=linked_incident,
+            truth={
+                **dict(self.live_evidence.get("truth") or {}),
+                "action": (
+                    "SIMULATED"
+                    if action == "voiceops_owner_callback"
+                    and self.voiceops.mode == "simulator"
+                    else "CODE_READY"
+                ),
+            },
+        )
+        return prepared_result
+
+    def pending_action_name(self, token: str) -> str | None:
+        with self._lock:
+            item = self.pending.get(token)
+            return item.action if item else None
+
+    def approve_action_id(
+        self,
+        action_id: str,
+        *,
+        expected_action: str | None = None,
+    ) -> dict[str, Any]:
+        """Approve by public action id while keeping the one-time token private."""
+        with self._lock:
+            match = next(
+                (
+                    (pending_token, item)
+                    for pending_token, item in self.pending.items()
+                    if item.action_id == action_id
+                ),
+                None,
+            )
+        if match is None:
+            raise ValueError("Unknown, expired, or already-used action id")
+        token, item = match
+        if expected_action is not None and item.action != expected_action:
+            raise ValueError("Action id is outside this approval channel")
+        return self.approve_action(token)
 
     def approve_action(self, token: str) -> dict[str, Any]:
         with self._lock:
@@ -409,24 +525,28 @@ class GuardianState:
         if datetime.fromisoformat(item.expires_at) < utc_now():
             raise ValueError("Approval token expired; action was not executed")
 
-        after = self.adapter.execute(item.action)
-        verified = self._verify(item.action, after)
-        linked_incident = self.incident_store.latest_receipt()
+        if item.action == "voiceops_owner_callback":
+            after = self.voiceops.request_owner_callback(
+                correlation_id=item.action_id,
+                reason=item.reason,
+            )
+            verified = bool(after.get("verified"))
+        else:
+            after = self.adapter.execute(item.action)
+            verified = self._verify(item.action, after)
         evidence = {
             "evidence_id": f"evd-{secrets.token_hex(6)}",
+            "action_id": item.action_id,
+            "action_digest": item.action_digest,
             "action": item.action,
             "reason": item.reason,
-            "executed": True,
+            "executed": bool(after.get("executed", True)),
             "verified": verified,
-            "adapter": after["adapter"],
+            "adapter": after.get("adapter", "simulator"),
             "observed_state": after,
             "verified_at": iso_now(),
-            "linked_incident_id": (
-                linked_incident.get("incident_id") if linked_incident else None
-            ),
-            "linked_incident_digest": (
-                linked_incident.get("digest") if linked_incident else None
-            ),
+            "linked_incident_id": item.linked_incident_id,
+            "linked_incident_digest": item.linked_incident_digest,
         }
         evidence_payload = json.dumps(
             evidence,
@@ -437,6 +557,22 @@ class GuardianState:
         evidence["evidence_digest"] = hashlib.sha256(evidence_payload).hexdigest()
         with self._lock:
             self.evidence.append(evidence)
+        self.record_live_evidence(
+            approval_state="VERIFIED" if verified else "FAILED_VERIFICATION",
+            pbx_result=after if item.action == "voiceops_owner_callback" else None,
+            verified_evidence={
+                "evidence_id": evidence["evidence_id"],
+                "evidence_digest": evidence["evidence_digest"],
+                "action_digest": item.action_digest,
+                "linked_incident_id": item.linked_incident_id,
+                "linked_incident_digest": item.linked_incident_digest,
+                "verified": verified,
+            },
+            truth={
+                **dict(self.live_evidence.get("truth") or {}),
+                "action": str(after.get("truth_label") or "SIMULATED"),
+            },
+        )
         return evidence
 
     @staticmethod
@@ -452,6 +588,30 @@ class GuardianState:
     def evidence_snapshot(self) -> list[dict[str, Any]]:
         with self._lock:
             return list(self.evidence)
+
+    def record_live_evidence(self, **updates: Any) -> dict[str, Any]:
+        allowed = {
+            "utterance",
+            "intent",
+            "systems_consulted",
+            "incident_receipt",
+            "prepared_action",
+            "approval_state",
+            "pbx_result",
+            "verified_evidence",
+            "truth",
+            "request_id",
+        }
+        with self._lock:
+            for key, value in updates.items():
+                if key in allowed:
+                    self.live_evidence[key] = value
+            self.live_evidence["updated_at"] = iso_now()
+            return json.loads(json.dumps(self.live_evidence))
+
+    def live_evidence_snapshot(self) -> dict[str, Any]:
+        with self._lock:
+            return json.loads(json.dumps(self.live_evidence))
 
     def incident_receipts(self, limit: int = 8) -> list[dict[str, Any]]:
         """Return durable incident receipts without replaying or executing actions."""
@@ -472,7 +632,36 @@ class GuardianState:
             "mcp_transport": "official-streamable-http",
             "mcp_sdk": "modelcontextprotocol/python-sdk-v2",
             "alexa_plus_demo": "web-simulation-over-official-mcp-runtime",
-            "physical_alexa": "real Echo/Fire path verified via Home Assistant Alexa Devices; direct Alexa+ MCP Toolkit not-linked",
+            "alexa_plus_mcp": {
+                "truth_label": (
+                    "REAL"
+                    if os.getenv("AMBIENT_GUARDIAN_ALEXA_PLUS_ENTITLEMENT_VERIFIED", "0")
+                    == "1"
+                    else "CODE_READY"
+                ),
+                "entitlement": (
+                    "VERIFIED"
+                    if os.getenv("AMBIENT_GUARDIAN_ALEXA_PLUS_ENTITLEMENT_VERIFIED", "0")
+                    == "1"
+                    else "NOT_PROVEN"
+                ),
+            },
+            "alexa_custom_skill": {
+                "truth_label": (
+                    "REAL"
+                    if os.getenv("AMBIENT_GUARDIAN_PHYSICAL_ALEXA_VERIFIED", "0") == "1"
+                    else "CODE_READY"
+                ),
+                "physical_echo_verified": os.getenv(
+                    "AMBIENT_GUARDIAN_PHYSICAL_ALEXA_VERIFIED", "0"
+                )
+                == "1",
+            },
+            "physical_alexa": (
+                "REAL: physical Echo response verified through the Custom Skill"
+                if os.getenv("AMBIENT_GUARDIAN_PHYSICAL_ALEXA_VERIFIED", "0") == "1"
+                else "CODE_READY: Custom Skill complete; physical Echo proof pending"
+            ),
             "ring": ring_status.summary,
             "ring_official_path": ring_status.official_path,
             "ring_device_verification": ring_status.device_verification,
@@ -492,6 +681,7 @@ class GuardianState:
             "aws_strands_enabled": os.getenv("AWS_STRANDS_ENABLED", "0") == "1",
             "home_assistant": home_status,
             "dmx_artnet": dmx_status,
+            "voiceops_pbx": self.voiceops.status(),
             "alexa_devices": {
                 "mode": "home-assistant-alexa-devices",
                 "speech_route": "owner-only-http; not exposed as MCP",

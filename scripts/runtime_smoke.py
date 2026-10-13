@@ -23,7 +23,10 @@ async def mcp_check() -> None:
         names = {tool.name for tool in tools.tools}
         assert "guardian_status" in names
         assert "prepare_action" in names
+        assert "prepare_pbx_callback" in names
         assert "approve_action" not in names
+        assert not any("execute" in name for name in names)
+        assert not any("speak" in name for name in names)
         result = await client.call_tool("guardian_status", {})
         assert result.is_error is False
         assert result.structured_content["privacy_mode"] == "local-first"

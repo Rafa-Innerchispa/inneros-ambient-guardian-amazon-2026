@@ -19,6 +19,16 @@ _ENABLE = re.compile(r"\b(?:enable|start|turn\s+on)\b", re.I)
 _DISABLE = re.compile(r"\b(?:disable|stop|turn\s+off)\b", re.I)
 _NEGATED_ENABLE = re.compile(r"\b(?:do\s+not|don't|dont|never)\b[^.]*\b(?:enable|start|turn\s+on)\b", re.I)
 _NEGATED_DISABLE = re.compile(r"\b(?:do\s+not|don't|dont|never)\b[^.]*\b(?:disable|stop|turn\s+off)\b", re.I)
+_PBX_CALLBACK = re.compile(
+    r"\bcall\s+me\b[^.]*\b(?:through|via|using)\b[^.]*\bpbx\b"
+    r"[^.]*\bincident\s+report\b",
+    re.I,
+)
+_PBX_UNSAFE_DESTINATION = re.compile(
+    r"\b(?:pstn|mobile|cell(?:ular)?|telephone|phone\s+number|extension)\b|\+?\d[\d\s().-]{5,}",
+    re.I,
+)
+_PBX_NEGATED = re.compile(r"\b(?:do\s+not|don't|dont|never|cancel)\b[^.]*\bcall\b", re.I)
 
 
 _ALARM_DISARM_ATTEMPT = re.compile(
@@ -61,6 +71,7 @@ _TEMPORAL_INCIDENT_QUERY = re.compile(
 def _temporal_incident_response(
     utterance: str,
     state: GuardianState,
+    reasoner: GuardianReasoner,
 ) -> dict[str, Any] | None:
     match = _TEMPORAL_INCIDENT_QUERY.search(" ".join(utterance.strip().split()))
     if not match:
@@ -98,13 +109,49 @@ def _temporal_incident_response(
 
     target = anchor.replace(hour=hour, minute=minute, second=0, microsecond=0)
     incident = state.incident_summary(target.isoformat(), 15)
+    response = {
+        "answer": incident["summary"],
+        "status": incident["status"],
+        "reasoning_mode": "deterministic-temporal-incident",
+    }
+    context = json.dumps(
+        {
+            "immutable_incident_receipt": incident["receipt"],
+            "deterministic_summary": incident["summary"],
+            "events": incident["events"],
+        },
+        separators=(",", ":"),
+    )
+    if aws_strands.is_enabled():
+        try:
+            synthesis = aws_strands.run_agent(
+                utterance,
+                "Use only these immutable incident facts. " + context,
+            )
+            response = {
+                "answer": synthesis["answer"],
+                "status": incident["status"],
+                "reasoning_mode": synthesis["mode"],
+                "strands_provider": synthesis["provider"],
+                "strands_model": synthesis["model"],
+            }
+        except Exception as exc:
+            response["strands_fallback"] = type(exc).__name__
+    else:
+        synthesized = reasoner.answer(
+            utterance,
+            {
+                "status": incident["status"],
+                "summary": incident["summary"],
+                "recommendation": "Report only the immutable incident facts.",
+            },
+            incident["events"],
+        )
+        if synthesized.get("reasoning_mode") == "local-qwen-vllm":
+            response = synthesized
     return {
         "utterance": utterance,
-        "response": {
-            "answer": incident["summary"],
-            "status": incident["status"],
-            "reasoning_mode": "deterministic-temporal-incident",
-        },
+        "response": response,
         "prepared_action": None,
         "incident": incident,
         "evidence_count": len(state.evidence_snapshot()),
@@ -121,6 +168,11 @@ def _owner_speaker_authorized(
         return False, "owner_voice_not_enrolled"
     if not isinstance(speaker_context, dict):
         return False, "speaker_not_recognized"
+    if (
+        os.getenv("AMBIENT_GUARDIAN_ACCOUNT_LINKING_REQUIRED", "0") == "1"
+        and speaker_context.get("account_linked") is not True
+    ):
+        return False, "owner_account_not_linked"
     person_id = str(speaker_context.get("person_id") or "").strip()
     if not person_id:
         return False, "speaker_not_recognized"
@@ -452,6 +504,10 @@ def parse_requested_action(utterance: str) -> str | None:
     text = " ".join(utterance.strip().split())
     if not text:
         return None
+    if _PBX_CALLBACK.search(text):
+        if _PBX_UNSAFE_DESTINATION.search(text) or _PBX_NEGATED.search(text):
+            return None
+        return "voiceops_owner_callback"
     if _UNSAFE_DOOR.search(text) or _NEGATED_LOCK.search(text):
         return None
     if _LOCK.search(text):
@@ -496,7 +552,9 @@ def simulated_alexa_turn(
 
     normalized_utterance = " ".join(utterance.strip().split())
 
-    temporal_incident = _temporal_incident_response(normalized_utterance, state)
+    temporal_incident = _temporal_incident_response(
+        normalized_utterance, state, reasoner
+    )
     if temporal_incident is not None:
         return temporal_incident
 
@@ -816,13 +874,31 @@ def simulated_alexa_turn(
     action_name = parse_requested_action(utterance)
     prepared = None
     if action_name:
-        prepared = state.prepare_action(
-            action_name,
-            "Explicit request through Alexa+ simulation; deterministic parser; approval still required",
-        )
-        response["answer"] += (
-            f" I prepared {action_name.replace('_', ' ')}. It has not executed and requires explicit approval."
-        )
+        try:
+            prepared = state.prepare_action(
+                action_name,
+                "Explicit request through Alexa; deterministic parser; approval still required",
+            )
+        except ValueError as exc:
+            if action_name == "voiceops_owner_callback":
+                response["answer"] = (
+                    "I need a persistent Incident Receipt before I can prepare the PBX callback. "
+                    "No call was placed."
+                )
+                response["status"] = "attention_required"
+                response["prepare_error"] = str(exc)
+            else:
+                raise
+        else:
+            if action_name == "voiceops_owner_callback":
+                response["answer"] = (
+                    "I prepared an owner callback through the PBX with the latest Incident Receipt. "
+                    "No call was placed. A separate owner-authenticated approval is required."
+                )
+            else:
+                response["answer"] += (
+                    f" I prepared {action_name.replace('_', ' ')}. It has not executed and requires explicit approval."
+                )
 
     return {
         "utterance": utterance,

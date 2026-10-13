@@ -50,6 +50,8 @@ Failed verification returns HTTP 400.
 export ALEXA_SKILL_ID=amzn1.ask.skill.REPLACE_ME
 export ALEXA_SKILL_HOST=127.0.0.1
 export ALEXA_SKILL_PORT=8795
+export AMBIENT_GUARDIAN_SKILL_BRIDGE_TOKEN=REPLACE_WITH_RUNTIME_SECRET
+export AMBIENT_GUARDIAN_ACCOUNT_LINKING_REQUIRED=1
 python -m ambient_guardian.alexa_skill_gateway
 ```
 
@@ -78,9 +80,21 @@ profile PIN configured in the Alexa app. Ambient Guardian never receives or stor
 the PIN digits; Alexa performs verification and resumes the skill with authentication
 confidence level 400 when Voice ID + PIN succeed.
 
-Account linking is recommended by Amazon and may be added when the owner MCP is
-published, but the local Intelbras authorization additionally requires the exact
-enrolled Alexa personId before any alarm action can execute.
+Configure Account Linking against the existing InnerOS owner OAuth service:
+
+- authorization URI: `https://auth.pcdoctor.ai/authorize`
+- token URI: `https://auth.pcdoctor.ai/token`
+- authorization grant: Authorization Code with PKCE S256
+- client authentication: use the registered Alexa client policy
+- scopes: the minimum owner scope registered for this Skill
+
+The gateway validates Alexa's access token through
+`https://auth.pcdoctor.ai/userinfo`. When
+`AMBIENT_GUARDIAN_ACCOUNT_LINKING_REQUIRED=1`, a missing or invalid token returns
+an Alexa `LinkAccount` card and the backend is not called.
+
+The exact enrolled Alexa `personId` is still required for consequential alarm
+actions. Account Linking does not replace Voice ID/PIN verification.
 
 ## Safety
 
@@ -89,6 +103,9 @@ enrolled Alexa personId before any alarm action can execute.
   Voice ID + profile PIN verification (confidence level 400).
 - Lighting/DMX use separate explicit allowlists and verification policies.
 - Home Assistant credentials never cross the Alexa gateway.
+- OAuth access tokens never cross the gateway-to-backend boundary.
+- `/api/alexa` ignores caller-supplied speaker identity unless the request carries
+  the configured `X-Ambient-Skill-Bridge` runtime secret.
 - The public hostname must route only to :8795, never :8794, :8123, or vLLM.
 
 ## Public ingress gate
@@ -141,6 +158,18 @@ For disarm:
 Alexa should then ask for the **Alexa profile PIN**. That PIN belongs to the
 owner's Alexa profile; it is not an Intelbras code and is never stored by
 Ambient Guardian.
+
+## PBX incident escalation
+
+After an Incident Receipt exists, the owner can say:
+
+`Alexa, ask Ambient Guardian to call me through my PBX and give me the incident report`
+
+This request only prepares `voiceops_owner_callback`. It does not place a call
+and Alexa never receives a destination or extension. A separate owner-authenticated
+HTTP approval asks the existing VoiceOps runtime to call its preconfigured
+`voiceops.owner` alias. The Live Evidence Console then shows a sanitized dispatch
+result and the Incident Receipt → action → evidence digest chain.
 
 
 ## Intelbras audible panic siren

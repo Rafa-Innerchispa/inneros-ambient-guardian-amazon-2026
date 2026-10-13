@@ -24,11 +24,14 @@ async def scenario() -> None:
             "recent_events",
             "ask_guardian",
             "prepare_action",
+            "prepare_pbx_callback",
             "verification_evidence",
             "integration_status",
         }
         assert required <= names
         assert "approve_action" not in names
+        assert not any("execute" in name for name in names)
+        assert not any("speak" in name for name in names)
 
         status = await client.call_tool("guardian_status", {})
         assert status.is_error is False

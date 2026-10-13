@@ -23,6 +23,7 @@ dev = ["pytest>=8.0"]
 
 [project.scripts]
 ambient-guardian = "ambient_guardian.official_server:main"
+ambient-guardian-alexa-skill = "ambient_guardian.alexa_skill_gateway:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]
