@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import os
 import re
+import secrets
 from datetime import datetime, timezone
 from typing import Any
 
@@ -46,6 +47,13 @@ _VOICEOPS_STATUS_QUERY = re.compile(
     r"\b(?:c[oó]mo\s+est[aá]|estado\s+de|est[aá]\s+lista|funciona)\b[^.]*"
     r"\b(?:voice\s*ops|central|pbx|grandstream|sistema\s+de\s+llamadas)\b"
     r"|\b(?:voice\s*ops|pbx|grandstream)\b[^.]*\b(?:status|ready|working)\b",
+    re.I,
+)
+
+_ANTIGRAVITY_DRAFT = re.compile(
+    r"^(?:prepara|preparar|crea|crear|draft|prepare|create)\s+"
+    r"(?:(?:una|un|a)\s+)?(?:tarea|brief|solicitud|request)?\s*"
+    r"(?:para|en|for)\s+antigravity\s*:?\s*(?P<task>.+)$",
     re.I,
 )
 
@@ -567,10 +575,30 @@ def _inneros_capabilities_response() -> dict[str, Any]:
             "preparar una llamada al propietario con el último reporte, y controlar "
             "luces o escenas DMX permitidas. La alarma, la sirena y las llamadas reales "
             "mantienen verificación y aprobación; no marco números arbitrarios. "
-            "Antigravity todavía no tiene un contrato seguro conectado a esta skill."
+            "También puedo preparar un borrador de tarea para Antigravity. Ese borrador "
+            "no se envía ni ejecuta sin una revisión separada."
         ),
         "status": "all_clear",
         "reasoning_mode": "deterministic-inneros-capabilities",
+    }
+
+
+def _antigravity_task_draft(utterance: str) -> dict[str, Any] | None:
+    """Create a local, non-dispatched programming brief from an explicit voice request."""
+    match = _ANTIGRAVITY_DRAFT.match(" ".join(utterance.strip().split()))
+    if not match:
+        return None
+    task = " ".join(match.group("task").strip().split())[:400]
+    if len(task) < 4:
+        return None
+    return {
+        "draft_id": f"draft-{secrets.token_hex(6)}",
+        "target": "Antigravity",
+        "brief": task,
+        "status": "DRAFT_ONLY",
+        "dispatched": False,
+        "executed": False,
+        "requires_owner_review": True,
     }
 
 
@@ -621,6 +649,23 @@ def simulated_alexa_turn(
     events = state.recent_events(8)
 
     normalized_utterance = " ".join(utterance.strip().split())
+
+    antigravity_draft = _antigravity_task_draft(normalized_utterance)
+    if antigravity_draft is not None:
+        return {
+            "utterance": utterance,
+            "response": {
+                "answer": (
+                    "Preparé un borrador de tarea para Antigravity. No lo envié y no se "
+                    "ejecutó ningún código; requiere una revisión separada del propietario."
+                ),
+                "status": "all_clear",
+                "reasoning_mode": "deterministic-antigravity-draft",
+            },
+            "prepared_action": None,
+            "work_request_draft": antigravity_draft,
+            "evidence_count": len(state.evidence_snapshot()),
+        }
 
     if _CAPABILITIES_QUERY.search(normalized_utterance):
         return {

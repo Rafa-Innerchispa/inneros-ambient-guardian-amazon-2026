@@ -41,6 +41,16 @@
           "samples": ["prepárame una llamada por la central con el último incidente", "llámame por la central con el reporte del incidente"]
         },
         {
+          "name": "AntigravityDraftIntent",
+          "slots": [
+            {
+              "name": "task",
+              "type": "AMAZON.SearchQuery"
+            }
+          ],
+          "samples": ["prepara para antigravity {task}", "crea una tarea en antigravity {task}"]
+        },
+        {
           "name": "AMAZON.HelpIntent",
           "samples": []
         },

@@ -429,6 +429,9 @@ def _guardian_query(request_payload: dict[str, Any]) -> str:
         return "cómo está el sistema de llamadas VoiceOps y la central Grandstream"
     if intent_name == "PBXCallbackIntent":
         return "prepárame una llamada por la central con el reporte del último incidente"
+    if intent_name == "AntigravityDraftIntent":
+        task = _slot_value(request_payload, "task")
+        return f"prepara una tarea para Antigravity: {task}" if task else ""
 
     query = _slot_value(request_payload, "query")
     when = _slot_value(request_payload, "when")
@@ -479,6 +482,7 @@ def _dispatch(payload: dict[str, Any]) -> dict[str, Any]:
         "CapabilitiesIntent",
         "VoiceOpsStatusIntent",
         "PBXCallbackIntent",
+        "AntigravityDraftIntent",
     }:
         query = _guardian_query(request_payload)
         speaker = _speaker_context(payload)
@@ -522,6 +526,7 @@ def _dispatch(payload: dict[str, Any]) -> dict[str, Any]:
             return _plain_response(
                 "Puedes preguntarme qué puede hacer InnerOS, qué pasó en la casa, "
                 "cómo está VoiceOps o pedirme que prepare una llamada por la central. "
+                "También puedo preparar un borrador de tarea para Antigravity. "
                 "Las acciones sensibles conservan su aprobación independiente.",
                 reprompt="¿Qué quieres consultar?",
             )

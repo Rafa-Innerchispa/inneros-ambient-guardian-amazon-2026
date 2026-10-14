@@ -222,6 +222,17 @@ HTTP approval asks the existing VoiceOps runtime to call its preconfigured
 `voiceops.owner` alias. The Live Evidence Console then shows a sanitized dispatch
 result and the Incident Receipt → action → evidence digest chain.
 
+## Antigravity programming brief
+
+Alexa can capture a bounded programming request as a local draft for later review:
+
+- `Alexa, pide a Guardián Ambiental que prepare para Antigravity una automatización de bienvenida`
+- `Alexa, ask Ambient Guardian to prepare for Antigravity a welcome-light automation`
+
+The skill returns a `DRAFT_ONLY` work request. It does not contact Antigravity,
+NCP, or any coding agent, and it does not execute code. Dispatch remains a separate
+owner-reviewed integration boundary.
+
 
 ## Intelbras audible panic siren
 
