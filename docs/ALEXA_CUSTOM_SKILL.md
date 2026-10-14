@@ -62,30 +62,20 @@ Alexa requests: `POST /alexa/skill`
 
 ### Persistent InnerOS host services
 
-The checked-in user services keep both loopback processes alive and restart them
-after a failure:
+The current InnerOS host already owns both processes as user services:
 
-- `deploy/systemd/ambient-guardian.service`: orchestration backend on `127.0.0.1:8794`.
-- `deploy/systemd/ambient-guardian-alexa-skill.service`: signed Alexa gateway on
+- `inneros-ambient-guardian-demo.service`: orchestration backend on
+  `127.0.0.1:8794`.
+- `ambient-guardian-alexa-gateway.service`: signed Alexa gateway on
   `127.0.0.1:8795`.
+- `opportunityops-cloudflared.service`: public tunnel whose `/alexa/skill*`
+  ingress targets `127.0.0.1:8795`.
 
-Install them as user services only after the repository exists at
-`~/projects/inneros-ambient-guardian-amazon-2026`, its virtual environment is
-installed, and the protected runtime file exists at
-`~/data/ralfia/ambient_guardian/runtime.env`:
-
-```bash
-install -Dm644 deploy/systemd/ambient-guardian.service ~/.config/systemd/user/ambient-guardian.service
-install -Dm644 deploy/systemd/ambient-guardian-alexa-skill.service ~/.config/systemd/user/ambient-guardian-alexa-skill.service
-systemctl --user daemon-reload
-systemctl --user enable --now ambient-guardian.service ambient-guardian-alexa-skill.service
-curl --fail http://127.0.0.1:8794/health
-curl --fail http://127.0.0.1:8795/health
-```
-
-`runtime.env` supplies the exact Alexa Skill ID and bridge secret; neither value
-belongs in Git. The Cloudflare route for `/alexa/skill*` should continue to target
-`127.0.0.1:8795`.
+The deployed checkout lives in the InnerOS workspace at
+`~/inneros/inneros_core/workspaces/inneros-ambient-guardian-amazon-2026`.
+Keep the exact Alexa Skill ID and bridge secrets in the host configuration;
+neither value belongs in Git. A healthy local gateway with a Cloudflare 1033
+response is a tunnel failure, not an Alexa locale or request-parser failure.
 
 ## Alexa Developer Console
 
