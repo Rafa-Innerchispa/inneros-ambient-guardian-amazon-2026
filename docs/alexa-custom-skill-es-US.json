@@ -35,6 +35,59 @@
           ]
         },
         {
+          "name": "HomeHistoryIntent",
+          "slots": [],
+          "samples": [
+            "dame las novedades reales de la casa",
+            "qué pasó en la madrugada",
+            "dame los eventos de la madrugada",
+            "hubo un corte de luz esta madrugada",
+            "cuéntame el historial de hoy"
+          ]
+        },
+        {
+          "name": "RingDemoStatusIntent",
+          "slots": [],
+          "samples": [
+            "cómo está el demo de ring",
+            "qué detectó ring en el demo",
+            "muéstrame el evento simulado de ring"
+          ]
+        },
+        {
+          "name": "DMXStatusIntent",
+          "slots": [],
+          "samples": [
+            "qué puede hacer el sistema dmx",
+            "qué efectos de discoteca tienes",
+            "cómo está art net",
+            "dime las capacidades dmx"
+          ]
+        },
+        {
+          "name": "UnifiRestartIntent",
+          "slots": [
+            {
+              "name": "target",
+              "type": "AMAZON.SearchQuery"
+            }
+          ],
+          "samples": [
+            "prepara reiniciar unifi {target}",
+            "reinicia el equipo unifi {target}",
+            "prepara el reinicio del punto de acceso {target}"
+          ]
+        },
+        {
+          "name": "PBXPrivateDestinationIntent",
+          "slots": [],
+          "samples": [
+            "llama a mi celular usando grandstream",
+            "marca mi teléfono por la central",
+            "llama a este número por la central"
+          ]
+        },
+        {
           "name": "VoiceOpsStatusIntent",
           "slots": [],
           "samples": [

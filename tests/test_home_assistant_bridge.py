@@ -27,6 +27,10 @@ def clear_bridge_env(monkeypatch):
         "AMBIENT_GUARDIAN_PANIC_ENABLED",
         "AMBIENT_GUARDIAN_PANIC_AUDIBLE_BUTTON",
         "AMBIENT_GUARDIAN_PANIC_STOP_BUTTON",
+        "AMBIENT_GUARDIAN_HISTORY_ENTITY_ALLOWLIST",
+        "AMBIENT_GUARDIAN_HISTORY_LABELS",
+        "AMBIENT_GUARDIAN_UNIFI_RESTART_ENABLED",
+        "AMBIENT_GUARDIAN_UNIFI_RESTART_TARGETS",
         "AMBIENT_GUARDIAN_SHARED_ENV_FILE",
         "HA_URL",
         "HA_TOKEN",
@@ -387,3 +391,111 @@ def test_stop_siren_uses_only_stop_button(monkeypatch):
     result = HomeAssistantBridge().stop_audible_siren()
     assert result["verified"] is True
     assert calls[0][1]["entity_id"] == "button.panel_home_ralphi_desligar_sirene"
+
+
+def test_history_timeline_is_allowlisted_and_truth_labeled(monkeypatch):
+    clear_bridge_env(monkeypatch)
+    monkeypatch.setenv("HOME_ASSISTANT_URL", "http://ha.local:8123")
+    monkeypatch.setenv("HOME_ASSISTANT_TOKEN", "test-token")
+    monkeypatch.setenv(
+        "AMBIENT_GUARDIAN_HISTORY_ENTITY_ALLOWLIST",
+        "binary_sensor.panel_home_zona_*,binary_sensor.solar_grid_present",
+    )
+    monkeypatch.setenv(
+        "AMBIENT_GUARDIAN_HISTORY_LABELS",
+        '{"binary_sensor.panel_home_zona_01":"Contacto de entrada"}',
+    )
+
+    def fake_get(url, headers, timeout, params=None):
+        if url.endswith("/api/states"):
+            return FakeResponse(
+                [
+                    {
+                        "entity_id": "binary_sensor.panel_home_zona_01",
+                        "state": "off",
+                        "attributes": {"friendly_name": "Zona 01"},
+                    },
+                    {
+                        "entity_id": "binary_sensor.not_allowlisted",
+                        "state": "on",
+                        "attributes": {},
+                    },
+                ]
+            )
+        assert "/api/history/period/" in url
+        assert "binary_sensor.not_allowlisted" not in params["filter_entity_id"]
+        return FakeResponse(
+            [
+                [
+                    {
+                        "entity_id": "binary_sensor.panel_home_zona_01",
+                        "state": "off",
+                        "last_changed": "2026-10-14T05:00:00+00:00",
+                    },
+                    {"state": "on", "last_changed": "2026-10-14T05:10:00+00:00"},
+                    {"state": "off", "last_changed": "2026-10-14T05:12:00+00:00"},
+                ],
+                [
+                    {
+                        "entity_id": "binary_sensor.solar_grid_present",
+                        "state": "on",
+                        "last_changed": "2026-10-14T05:00:00+00:00",
+                    },
+                    {"state": "off", "last_changed": "2026-10-14T09:05:00+00:00"},
+                ],
+            ]
+        )
+
+    monkeypatch.setattr("ambient_guardian.home_assistant.httpx.get", fake_get)
+    result = HomeAssistantBridge().history_timeline(
+        datetime(2026, 10, 14, 5, 0, tzinfo=timezone.utc),
+        datetime(2026, 10, 14, 10, 0, tzinfo=timezone.utc),
+    )
+    assert result["truth"] == "REAL"
+    assert result["event_count"] == 3
+    assert result["events"][0]["label"] == "Contacto de entrada"
+    assert result["events"][-1]["summary"] == "Se perdió la red eléctrica"
+
+
+def test_unifi_restart_requires_allowlist_and_returns_real_receipt(monkeypatch):
+    clear_bridge_env(monkeypatch)
+    monkeypatch.setenv("HOME_ASSISTANT_URL", "http://ha.local:8123")
+    monkeypatch.setenv("HOME_ASSISTANT_TOKEN", "test-token")
+    monkeypatch.setenv("AMBIENT_GUARDIAN_UNIFI_RESTART_ENABLED", "1")
+    monkeypatch.setenv(
+        "AMBIENT_GUARDIAN_UNIFI_RESTART_TARGETS",
+        '{"u7 living":{"label":"U7 Living","button":"button.u7_restart",'
+        '"status":"sensor.u7_state","uptime":"sensor.u7_uptime"}}',
+    )
+    calls = []
+
+    def fake_get(url, headers, timeout):
+        state = "connected" if url.endswith("sensor.u7_state") else "before-uptime"
+        return FakeResponse(
+            {
+                "entity_id": url.rsplit("/", 1)[-1],
+                "state": state,
+                "attributes": {},
+                "last_updated": "2026-10-14T10:00:00+00:00",
+            }
+        )
+
+    def fake_post(url, headers, json, timeout):
+        calls.append((url, json))
+        return FakeResponse({})
+
+    monkeypatch.setattr("ambient_guardian.home_assistant.httpx.get", fake_get)
+    monkeypatch.setattr("ambient_guardian.home_assistant.httpx.post", fake_post)
+    bridge = HomeAssistantBridge()
+    result = bridge.restart_unifi_device("u7 living")
+    assert result["executed"] is True
+    assert result["verified"] is False
+    assert result["truth_label"] == "REAL"
+    assert calls[0][1] == {"entity_id": "button.u7_restart"}
+
+    try:
+        bridge.restart_unifi_device("not allowed")
+    except PermissionError as exc:
+        assert "allowlisted" in str(exc)
+    else:
+        raise AssertionError("non-allowlisted UniFi target was restarted")

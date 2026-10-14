@@ -115,7 +115,7 @@ def test_alexa_turn_executes_dmx_without_claiming_physical_verification():
     assert result["dmx"]["engine_accepted"] is True
     assert result["dmx"]["physical_verification"] is False
     assert result["dmx_power"]["target"] == "beams"
-    assert "accepted" in result["response"]["answer"].lower()
+    assert "art-net" in result["response"]["answer"].lower()
 
 
 def test_dmx_power_preflight_blocks_artnet_when_power_unverified():
@@ -128,7 +128,7 @@ def test_dmx_power_preflight_blocks_artnet_when_power_unverified():
     result = simulated_alexa_turn("pon los tachos rojos", state, GuardianReasoner())
     assert result["dmx"] is None
     assert result["dmx_error"] == "RuntimeError"
-    assert "did not send" in result["response"]["answer"].lower()
+    assert "no envi" in result["response"]["answer"].lower()
 
 
 def test_blackout_does_not_power_on_fixtures():

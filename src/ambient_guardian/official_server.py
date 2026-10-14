@@ -1,7 +1,10 @@
 from __future__ import annotations
 
 import os
+import re
 import secrets
+import threading
+import time
 from pathlib import Path
 from typing import Any
 
@@ -16,10 +19,17 @@ from .orchestration import simulated_alexa_turn
 
 APP_VERSION = "0.6.0"
 STATE = GuardianState(
+    action_ttl_seconds=int(
+        os.getenv("AMBIENT_GUARDIAN_APPROVAL_TTL_SECONDS", "900")
+    ),
     incident_db_path=os.getenv(
         "AMBIENT_GUARDIAN_INCIDENT_DB",
         "var/ambient_guardian_incidents.sqlite3",
-    )
+    ),
+    action_db_path=os.getenv(
+        "AMBIENT_GUARDIAN_ACTION_DB",
+        "var/ambient_guardian_actions.sqlite3",
+    ),
 )
 REASONER = GuardianReasoner()
 STATIC_DIR = Path(__file__).parent / "static"
@@ -100,7 +110,7 @@ def integration_status() -> dict[str, Any]:
     return {
         **STATE.integration_status(),
         "official_mcp_sdk": "python-sdk-v2",
-        "approval_channel": "human-only web/API route; not exposed as an MCP tool",
+        "approval_channel": "authenticated owner WhatsApp; not exposed as an MCP tool",
         "aws_strands": aws_strands.status(),
     }
 
@@ -331,6 +341,12 @@ async def simulated_alexa(request: Request) -> Response:
         REASONER,
         speaker_context=speaker_context,
     )
+    evidence_utterance = str(result.get("utterance") or utterance)
+    evidence_utterance = re.sub(
+        r"\+?\d[\d\s().-]{5,}",
+        "[número redactado]",
+        evidence_utterance,
+    )
     incident = result.get("incident") if isinstance(result.get("incident"), dict) else {}
     receipt = incident.get("receipt") if isinstance(incident.get("receipt"), dict) else None
     prepared = (
@@ -369,10 +385,14 @@ async def simulated_alexa(request: Request) -> Response:
         intent = (
             "prepare_pbx_callback"
             if prepared.get("action") == "voiceops_owner_callback"
+            else "prepare_unifi_restart"
+            if str(prepared.get("action") or "").startswith("unifi_restart:")
             else "prepare_action"
         )
         if prepared.get("action") == "voiceops_owner_callback":
             systems.append("VoiceOps (prepare only)")
+        elif str(prepared.get("action") or "").startswith("unifi_restart:"):
+            systems.append("Home Assistant + UniFi (prepare only)")
     physical_verified = (
         os.getenv("AMBIENT_GUARDIAN_PHYSICAL_ALEXA_VERIFIED", "0") == "1"
     )
@@ -380,7 +400,7 @@ async def simulated_alexa(request: Request) -> Response:
         "REAL" if skill_bridge and physical_verified else "CODE_READY" if skill_bridge else "SIMULATED"
     )
     STATE.record_live_evidence(
-        utterance=utterance,
+        utterance=evidence_utterance,
         intent=intent,
         systems_consulted=systems,
         incident_receipt=receipt,
@@ -403,7 +423,10 @@ async def simulated_alexa(request: Request) -> Response:
                 "REAL" if reasoning_mode == "local-qwen-vllm" or reasoning_mode.startswith("strands") else "CODE_READY"
             ),
             "action": (
-                "SIMULATED"
+                "REAL"
+                if prepared
+                and str(prepared.get("action") or "").startswith("unifi_restart:")
+                else "SIMULATED"
                 if prepared and prepared.get("action") != "voiceops_owner_callback"
                 else str((STATE.voiceops.status() or {}).get("truth_label") or "CODE_READY")
                 if prepared
@@ -411,7 +434,7 @@ async def simulated_alexa(request: Request) -> Response:
             ),
         },
     )
-    if prepared and prepared.get("action") == "voiceops_owner_callback":
+    if prepared and STATE.action_requires_owner(str(prepared.get("action") or "")):
         result = {
             **result,
             "prepared_action": public_prepared,
@@ -423,12 +446,15 @@ async def simulated_alexa(request: Request) -> Response:
 async def approve_http_action(request: Request) -> Response:
     """Trusted human-demo approval surface. It is intentionally absent from MCP tools."""
     token = str(request.path_params.get("token", ""))
-    if (
-        STATE.pending_action_name(token) == "voiceops_owner_callback"
-        and not _owner_authorized(request)
-    ):
+    pending_action = STATE.pending_action_name(token)
+    if (pending_action or "").startswith("unifi_restart:"):
         return JSONResponse(
-            {"detail": "owner authorization required for PBX callback"},
+            {"detail": "UniFi actions can only be approved by the authenticated owner WhatsApp channel"},
+            status_code=405,
+        )
+    if STATE.action_requires_owner(pending_action) and not _owner_authorized(request):
+        return JSONResponse(
+            {"detail": "owner authorization required for this sensitive action"},
             status_code=401,
         )
     try:
@@ -502,7 +528,7 @@ async def integrations(request: Request) -> Response:
     return JSONResponse(
         {
             **STATE.integration_status(),
-            "approval_channel": "human-only web/API route; not exposed as an MCP tool",
+            "approval_channel": "authenticated owner WhatsApp; not exposed as an MCP tool",
             "aws_strands": aws_strands.status(),
         }
     )
@@ -598,11 +624,39 @@ def build_app():
 app = build_app()
 
 
+def _approval_worker() -> None:
+    interval = max(
+        1.0,
+        min(float(os.getenv("AMBIENT_GUARDIAN_APPROVAL_POLL_SECONDS", "3")), 30.0),
+    )
+    while True:
+        try:
+            STATE.process_whatsapp_approvals()
+        except Exception:
+            # Fail closed. The durable record remains pending or failed and is
+            # inspected again; this worker never fabricates an approval.
+            pass
+        time.sleep(interval)
+
+
+def _start_approval_worker() -> threading.Thread | None:
+    if not STATE.approval_bridge.enabled:
+        return None
+    worker = threading.Thread(
+        target=_approval_worker,
+        name="ambient-guardian-whatsapp-approval",
+        daemon=True,
+    )
+    worker.start()
+    return worker
+
+
 def main() -> None:
     import uvicorn
 
+    _start_approval_worker()
     uvicorn.run(
-        "ambient_guardian.official_server:app",
+        app,
         host=os.getenv("HOST", "0.0.0.0"),
         port=int(os.getenv("PORT", "8787")),
         reload=False,

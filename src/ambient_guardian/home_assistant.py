@@ -178,6 +178,63 @@ class HomeAssistantBridge:
                     normalized.append(entity_id)
                 self.dmx_power_map[target.strip()] = normalized
 
+        raw_history = os.getenv("AMBIENT_GUARDIAN_HISTORY_ENTITY_ALLOWLIST", "")
+        self.history_entity_allowlist = {
+            item.strip() for item in raw_history.split(",") if item.strip()
+        }
+        raw_labels = os.getenv("AMBIENT_GUARDIAN_HISTORY_LABELS", "").strip()
+        self.history_labels: dict[str, str] = {}
+        if raw_labels:
+            try:
+                parsed_labels = json.loads(raw_labels)
+            except json.JSONDecodeError as exc:
+                raise ValueError("AMBIENT_GUARDIAN_HISTORY_LABELS must be valid JSON") from exc
+            if not isinstance(parsed_labels, dict):
+                raise ValueError("AMBIENT_GUARDIAN_HISTORY_LABELS must be an object")
+            self.history_labels = {
+                str(entity_id).strip(): str(label).strip()
+                for entity_id, label in parsed_labels.items()
+                if str(entity_id).strip() and str(label).strip()
+            }
+
+        self.unifi_restart_enabled = os.getenv(
+            "AMBIENT_GUARDIAN_UNIFI_RESTART_ENABLED", "0"
+        ) == "1"
+        raw_unifi = os.getenv("AMBIENT_GUARDIAN_UNIFI_RESTART_TARGETS", "").strip()
+        self.unifi_restart_targets: dict[str, dict[str, str]] = {}
+        if raw_unifi:
+            try:
+                parsed_unifi = json.loads(raw_unifi)
+            except json.JSONDecodeError as exc:
+                raise ValueError(
+                    "AMBIENT_GUARDIAN_UNIFI_RESTART_TARGETS must be valid JSON"
+                ) from exc
+            if not isinstance(parsed_unifi, dict):
+                raise ValueError("AMBIENT_GUARDIAN_UNIFI_RESTART_TARGETS must be an object")
+            for alias, raw_target in parsed_unifi.items():
+                if not isinstance(raw_target, dict):
+                    raise ValueError("UniFi restart targets must be objects")
+                button = str(raw_target.get("button") or "").strip()
+                status_entity = str(raw_target.get("status") or "").strip()
+                uptime_entity = str(raw_target.get("uptime") or "").strip()
+                label = str(raw_target.get("label") or alias).strip()
+                if not button.startswith("button."):
+                    raise ValueError("UniFi restart targets require a Home Assistant button")
+                if status_entity and not (
+                    status_entity.startswith("sensor.")
+                    or status_entity.startswith("device_tracker.")
+                    or status_entity.startswith("binary_sensor.")
+                ):
+                    raise ValueError("UniFi status entity has an unsupported domain")
+                if uptime_entity and not uptime_entity.startswith("sensor."):
+                    raise ValueError("UniFi uptime entity must be a Home Assistant sensor")
+                self.unifi_restart_targets[str(alias).strip().lower()] = {
+                    "button": button,
+                    "status": status_entity,
+                    "uptime": uptime_entity,
+                    "label": label,
+                }
+
     @property
     def configured(self) -> bool:
         return bool(self.url and self.token)
@@ -203,6 +260,296 @@ class HomeAssistantBridge:
             "state": payload.get("state"),
             "attributes": payload.get("attributes", {}),
             "last_updated": payload.get("last_updated"),
+        }
+
+    def _expanded_history_entities(self) -> tuple[list[str], dict[str, str]]:
+        """Expand explicitly allowlisted prefixes without exposing all HA entities."""
+        exact = sorted(
+            entity_id
+            for entity_id in self.history_entity_allowlist
+            if not entity_id.endswith("*")
+        )
+        prefixes = sorted(
+            entity_id[:-1]
+            for entity_id in self.history_entity_allowlist
+            if entity_id.endswith("*")
+        )
+        labels = dict(self.history_labels)
+        if prefixes:
+            response = httpx.get(
+                f"{self.url}/api/states",
+                headers=self._headers(),
+                timeout=max(self.timeout, 5.0),
+            )
+            response.raise_for_status()
+            for item in response.json():
+                entity_id = str(item.get("entity_id") or "")
+                if any(entity_id.startswith(prefix) for prefix in prefixes):
+                    exact.append(entity_id)
+                    friendly_name = str(
+                        (item.get("attributes") or {}).get("friendly_name") or ""
+                    ).strip()
+                    if friendly_name:
+                        labels.setdefault(entity_id, friendly_name)
+        return sorted(set(exact))[:64], labels
+
+    @staticmethod
+    def _history_category(entity_id: str) -> str:
+        if entity_id.startswith("alarm_control_panel.") or "_zona_" in entity_id:
+            return "security"
+        if entity_id.startswith("light."):
+            return "lighting"
+        if any(
+            marker in entity_id
+            for marker in ("solar_", "grid_present", "battery_mode", "breaker_")
+        ):
+            return "energy"
+        if any(
+            marker in entity_id
+            for marker in ("unifi", "gateway", "_online", "_state", "connectivity")
+        ):
+            return "network"
+        return "home"
+
+    @staticmethod
+    def _history_message(entity_id: str, label: str, state: str) -> str:
+        category = HomeAssistantBridge._history_category(entity_id)
+        if "grid_present" in entity_id:
+            return (
+                "Se restableció la red eléctrica"
+                if state == "on"
+                else "Se perdió la red eléctrica"
+            )
+        if "battery_mode" in entity_id:
+            return (
+                "El inversor entró en modo batería"
+                if state == "on"
+                else "El inversor salió del modo batería"
+            )
+        if entity_id.endswith("solar_mode"):
+            modes = {
+                "battery_backup": "El inversor cambió a respaldo por batería",
+                "utility_present_solar_charging": "El inversor detectó red y carga solar",
+                "utility_present_backup_float": "El inversor detectó red y batería en flotación",
+            }
+            return modes.get(state, f"{label} cambió a {state}")
+        if entity_id.startswith("alarm_control_panel."):
+            alarm_states = {
+                "disarmed": "desarmada",
+                "armed_away": "armada fuera de casa",
+                "armed_home": "armada en casa",
+                "armed_night": "armada en modo noche",
+                "triggered": "disparada",
+                "unavailable": "sin conexión",
+            }
+            return f"La alarma quedó {alarm_states.get(state, state)}"
+        if "_zona_" in entity_id:
+            return (
+                f"{label} se activó o abrió"
+                if state == "on"
+                else f"{label} se restableció o cerró"
+                if state == "off"
+                else f"{label} quedó {state}"
+            )
+        if category == "lighting" and state in {"on", "off"}:
+            return f"{label} se {'encendió' if state == 'on' else 'apagó'}"
+        if category == "network":
+            offline = state in {"off", "not_home", "unavailable", "disconnected"}
+            return f"{label} quedó {'fuera de línea' if offline else state}"
+        return f"{label} cambió a {state}"
+
+    def history_timeline(
+        self,
+        start: datetime,
+        end: datetime,
+        *,
+        max_events: int = 60,
+    ) -> dict[str, Any]:
+        """Read a bounded, truth-labeled timeline from Home Assistant Recorder."""
+        if not self.configured:
+            raise RuntimeError("Home Assistant bridge is not configured")
+        if not self.history_entity_allowlist:
+            raise PermissionError("Home Assistant history allowlist is empty")
+        if start.tzinfo is None or end.tzinfo is None:
+            raise ValueError("history timestamps must include a timezone")
+        if end <= start:
+            raise ValueError("history end must be after start")
+        if (end - start).total_seconds() > 48 * 3600:
+            raise ValueError("history window cannot exceed 48 hours")
+        max_events = max(1, min(int(max_events), 100))
+
+        entities, labels = self._expanded_history_entities()
+        if not entities:
+            raise PermissionError("Home Assistant history allowlist matched no entities")
+        response = httpx.get(
+            f"{self.url}/api/history/period/{start.isoformat()}",
+            headers=self._headers(),
+            params={
+                "filter_entity_id": ",".join(entities),
+                "end_time": end.isoformat(),
+                "minimal_response": "1",
+                "no_attributes": "1",
+                "significant_changes_only": "1",
+            },
+            timeout=max(self.timeout, 12.0),
+        )
+        response.raise_for_status()
+        payload = response.json()
+        if not isinstance(payload, list):
+            raise RuntimeError("Home Assistant history response was invalid")
+
+        events: list[dict[str, Any]] = []
+        current: dict[str, str] = {}
+        start_utc = start.astimezone(timezone.utc)
+        for series in payload:
+            if not isinstance(series, list) or not series:
+                continue
+            fallback_entity = str(series[0].get("entity_id") or "")
+            previous_state = None
+            for index, item in enumerate(series):
+                entity_id = str(item.get("entity_id") or fallback_entity)
+                state = str(item.get("state") or "").strip()
+                if not entity_id or not state:
+                    continue
+                current[entity_id] = state
+                changed_raw = str(
+                    item.get("last_changed") or item.get("last_updated") or ""
+                )
+                try:
+                    changed = datetime.fromisoformat(changed_raw.replace("Z", "+00:00"))
+                    if changed.tzinfo is None:
+                        changed = changed.replace(tzinfo=timezone.utc)
+                except ValueError:
+                    previous_state = state
+                    continue
+                is_baseline = index == 0 and abs(
+                    (changed.astimezone(timezone.utc) - start_utc).total_seconds()
+                ) <= 2
+                try:
+                    float(state)
+                    continuous_numeric = self._history_category(entity_id) == "energy"
+                except ValueError:
+                    continuous_numeric = False
+                if not is_baseline and state != previous_state and not continuous_numeric:
+                    label = labels.get(entity_id) or entity_id.split(".", 1)[-1].replace(
+                        "_", " "
+                    )
+                    events.append(
+                        {
+                            "entity_id": entity_id,
+                            "label": label,
+                            "category": self._history_category(entity_id),
+                            "state": state,
+                            "timestamp": changed.astimezone(timezone.utc).isoformat(),
+                            "summary": self._history_message(entity_id, label, state),
+                            "source": "home-assistant-recorder",
+                            "truth": "REAL",
+                        }
+                    )
+                previous_state = state
+        events.sort(key=lambda item: str(item["timestamp"]))
+        if len(events) > max_events:
+            priority = [
+                event
+                for event in events
+                if event.get("category") in {"energy", "network"}
+                or str(event.get("entity_id") or "").startswith(
+                    "alarm_control_panel."
+                )
+            ]
+            priority_ids = {id(event) for event in priority}
+            remaining = [event for event in events if id(event) not in priority_ids]
+            keep_remaining = max(0, max_events - min(len(priority), max_events))
+            selected_remaining = remaining[-keep_remaining:] if keep_remaining else []
+            events = sorted(
+                priority[:max_events] + selected_remaining,
+                key=lambda item: str(item["timestamp"]),
+            )
+        return {
+            "source": "home-assistant-recorder",
+            "truth": "REAL",
+            "start": start.astimezone(timezone.utc).isoformat(),
+            "end": end.astimezone(timezone.utc).isoformat(),
+            "event_count": len(events),
+            "events": events,
+            "current_states": current,
+            "entities_consulted": len(entities),
+        }
+
+    def resolve_unifi_restart_target(self, utterance: str) -> tuple[str, dict[str, str]] | None:
+        text = " ".join(utterance.lower().split())
+        matches = [
+            (alias, target)
+            for alias, target in self.unifi_restart_targets.items()
+            if alias and alias in text
+        ]
+        if not matches:
+            return None
+        return max(matches, key=lambda item: len(item[0]))
+
+    def restart_unifi_device(self, alias: str) -> dict[str, Any]:
+        """Execute one pre-approved UniFi restart and verify via state/uptime change."""
+        alias = alias.strip().lower()
+        if not self.configured:
+            raise RuntimeError("Home Assistant bridge is not configured")
+        if not self.unifi_restart_enabled:
+            raise PermissionError("UniFi restart is disabled")
+        target = self.unifi_restart_targets.get(alias)
+        if not target:
+            raise PermissionError("UniFi restart target is not allowlisted")
+
+        status_entity = target.get("status") or ""
+        uptime_entity = target.get("uptime") or ""
+        before_status = self.get_entity_state(status_entity) if status_entity else None
+        before_uptime = self.get_entity_state(uptime_entity) if uptime_entity else None
+        self._press_button(target["button"])
+
+        verify_seconds = max(
+            0.0,
+            min(
+                float(os.getenv("AMBIENT_GUARDIAN_UNIFI_VERIFY_SECONDS", "0")),
+                90.0,
+            ),
+        )
+        verified = False
+        observed_status = before_status
+        observed_uptime = before_uptime
+        deadline = time.monotonic() + verify_seconds
+        while time.monotonic() < deadline and (status_entity or uptime_entity):
+            time.sleep(1.0)
+            try:
+                if status_entity:
+                    observed_status = self.get_entity_state(status_entity)
+                if uptime_entity:
+                    observed_uptime = self.get_entity_state(uptime_entity)
+            except Exception:
+                continue
+            status_changed = bool(
+                before_status
+                and observed_status
+                and observed_status.get("state") != before_status.get("state")
+            )
+            uptime_changed = bool(
+                before_uptime
+                and observed_uptime
+                and observed_uptime.get("state") != before_uptime.get("state")
+            )
+            if status_changed or uptime_changed:
+                verified = True
+                break
+        return {
+            "status": "restart_verified" if verified else "restart_command_accepted",
+            "executed": True,
+            "verified": verified,
+            "adapter": "home-assistant-unifi",
+            "truth_label": "REAL",
+            "target_alias": alias,
+            "target_label": target["label"],
+            "button_entity": target["button"],
+            "before_status": before_status,
+            "observed_status": observed_status,
+            "before_uptime": before_uptime,
+            "observed_uptime": observed_uptime,
         }
 
     def home_context(self) -> dict[str, Any]:
