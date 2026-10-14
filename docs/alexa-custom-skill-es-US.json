@@ -48,6 +48,8 @@
           "name": "PBXCallbackIntent",
           "slots": [],
           "samples": [
+            "prepara el reporte del último incidente para voice ops",
+            "prepara el reporte del último incidente para la central",
             "prepárame una llamada por la central con el último incidente",
             "llámame por la central con el reporte del incidente",
             "hazme una llamada por grandstream con el informe del incidente"
