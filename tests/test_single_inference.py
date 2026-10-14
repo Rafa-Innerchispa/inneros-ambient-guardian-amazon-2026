@@ -95,3 +95,32 @@ def test_strands_single_inference_keeps_prepare_only_boundary(monkeypatch):
     assert prepared["executed"] is False
     assert prepared["approval_token"] in state.pending
     assert state.evidence_snapshot() == []
+
+
+def test_temporal_incident_uses_one_local_qwen_synthesis_and_keeps_receipt(monkeypatch):
+    monkeypatch.setenv("AWS_STRANDS_ENABLED", "0")
+    state = GuardianState()
+    state.events = []
+    state.add_ring_demo_event(
+        "motion",
+        timestamp="2026-10-06T03:04:00-05:00",
+        summary="Motion at the front door.",
+    )
+    reasoner = GuardianReasoner()
+    calls = []
+
+    def answer(utterance, status, events):
+        calls.append((utterance, status, events))
+        return {
+            "answer": "At 3:04 AM, motion was recorded at the front door.",
+            "status": status["status"],
+            "reasoning_mode": "local-qwen-vllm",
+        }
+
+    monkeypatch.setattr(reasoner, "answer", answer)
+    result = simulated_alexa_turn("Alexa, what happened at 3 AM?", state, reasoner)
+
+    assert len(calls) == 1
+    assert result["response"]["reasoning_mode"] == "local-qwen-vllm"
+    assert result["incident"]["receipt"]["algorithm"] == "sha256"
+    assert len(result["incident"]["receipt"]["digest"]) == 64

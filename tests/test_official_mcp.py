@@ -21,10 +21,12 @@ def test_official_mcp_sdk_discovers_and_calls_guardian_tools():
                 "incident_receipt",
                 "ask_guardian",
                 "prepare_action",
+                "prepare_pbx_callback",
                 "verification_evidence",
                 "integration_status",
             } <= names
             assert "approve_action" not in names
+            assert not any("execute" in name for name in names)
             assert not any("speak" in name for name in names)
 
             incident = await client.call_tool(

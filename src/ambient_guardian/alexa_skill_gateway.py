@@ -50,6 +50,39 @@ def _speaker_context(payload: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def _access_token(payload: dict[str, Any]) -> str:
+    context_user = (
+        (((payload.get("context") or {}).get("System") or {}).get("user") or {})
+    )
+    session_user = ((payload.get("session") or {}).get("user") or {})
+    return str(
+        context_user.get("accessToken")
+        or session_user.get("accessToken")
+        or ""
+    ).strip()
+
+
+def _account_linked(payload: dict[str, Any]) -> bool:
+    token = _access_token(payload)
+    if not token:
+        return False
+    userinfo_url = os.getenv(
+        "AMBIENT_GUARDIAN_ACCOUNT_USERINFO_URL",
+        "https://auth.pcdoctor.ai/userinfo",
+    ).strip()
+    try:
+        response = httpx.get(
+            userinfo_url,
+            headers={"Authorization": f"Bearer {token}"},
+            timeout=float(os.getenv("AMBIENT_GUARDIAN_ACCOUNT_TIMEOUT", "5")),
+        )
+        response.raise_for_status()
+        userinfo = response.json()
+    except Exception:
+        return False
+    return bool(isinstance(userinfo, dict) and userinfo.get("sub"))
+
+
 def _capture_speaker_candidate(payload: dict[str, Any]) -> dict[str, Any] | None:
     """Persist a recognized Alexa personId locally for explicit owner enrollment.
 
@@ -93,15 +126,31 @@ def _capture_speaker_candidate(payload: dict[str, Any]) -> dict[str, Any] | None
     return record
 
 
-def _backend_turn(query: str, speaker_context: dict[str, Any] | None = None) -> str:
+def _backend_turn(
+    query: str,
+    speaker_context: dict[str, Any] | None = None,
+    *,
+    request_id: str = "",
+) -> str:
     query = " ".join((query or "").split())
     if not query:
         raise ValueError("query is required")
     if len(query) > MAX_QUERY_CHARS:
         raise ValueError("query is too long")
+    headers: dict[str, str] = {}
+    bridge_token = os.getenv("AMBIENT_GUARDIAN_SKILL_BRIDGE_TOKEN", "").strip()
+    if bridge_token:
+        headers["X-Ambient-Skill-Bridge"] = bridge_token
+    context = dict(speaker_context or {})
+    request_id = request_id or str(context.pop("_request_id", ""))
     response = httpx.post(
         _backend_url(),
-        json={"utterance": query, "speaker_context": speaker_context or {}},
+        json={
+            "utterance": query,
+            "speaker_context": context,
+            "request_id": request_id[:160],
+        },
+        headers=headers,
         timeout=float(os.getenv("AMBIENT_GUARDIAN_SKILL_TIMEOUT", "12")),
     )
     response.raise_for_status()
@@ -260,12 +309,16 @@ def _pin_confirmation_response(query: str) -> dict[str, Any]:
     }
 
 
-def _resume_after_pin(payload: dict[str, Any]) -> dict[str, Any]:
+def _resume_after_pin(
+    payload: dict[str, Any], *, account_linked: bool = False
+) -> dict[str, Any]:
     request_payload = payload.get("request") or {}
     cause = request_payload.get("cause") or {}
     status = cause.get("status") or {}
     result = cause.get("result") or {}
     speaker = _speaker_context(payload)
+    speaker["account_linked"] = account_linked
+    speaker["_request_id"] = str(request_payload.get("requestId") or "")
 
     if str(status.get("code") or "") != "200":
         return _plain_response(
@@ -310,6 +363,15 @@ def _plain_response(
     return {"version": "1.0", "response": response}
 
 
+def _link_account_response() -> dict[str, Any]:
+    response = _plain_response(
+        "Please link your InnerOS owner account in the Alexa app before using Ambient Guardian.",
+        end_session=True,
+    )
+    response["response"]["card"] = {"type": "LinkAccount"}
+    return response
+
+
 def _slot_value(request_payload: dict[str, Any], slot_name: str) -> str:
     intent = request_payload.get("intent") or {}
     slot = (intent.get("slots") or {}).get(slot_name) or {}
@@ -320,6 +382,16 @@ def _dispatch(payload: dict[str, Any]) -> dict[str, Any]:
     _capture_speaker_candidate(payload)
     request_payload = payload.get("request") or {}
     request_type = str(request_payload.get("type") or "")
+    account_linking_required = (
+        os.getenv("AMBIENT_GUARDIAN_ACCOUNT_LINKING_REQUIRED", "0") == "1"
+    )
+    linked = (
+        _account_linked(payload)
+        if account_linking_required or _access_token(payload)
+        else False
+    )
+    if account_linking_required and not linked:
+        return _link_account_response()
     if request_type == "LaunchRequest":
         return _plain_response(
             "Ambient Guardian is ready. Ask me if everything is okay at home, "
@@ -329,7 +401,7 @@ def _dispatch(payload: dict[str, Any]) -> dict[str, Any]:
     if request_type == "SessionEndedRequest":
         return _plain_response("", end_session=True)
     if request_type == "SessionResumedRequest":
-        return _resume_after_pin(payload)
+        return _resume_after_pin(payload, account_linked=linked)
     if request_type != "IntentRequest":
         return _plain_response(
             "I cannot handle that Alexa request. No action was taken.",
@@ -340,6 +412,8 @@ def _dispatch(payload: dict[str, Any]) -> dict[str, Any]:
     if intent_name == "AskGuardianIntent":
         query = _slot_value(request_payload, "query")
         speaker = _speaker_context(payload)
+        speaker["account_linked"] = linked
+        speaker["_request_id"] = str(request_payload.get("requestId") or "")
         if _alarm_query(query) and int(speaker.get("authentication_confidence") or 0) < 400:
             return _pin_confirmation_response(query)
         try:

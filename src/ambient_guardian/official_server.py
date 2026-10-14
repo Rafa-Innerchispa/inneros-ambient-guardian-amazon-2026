@@ -79,6 +79,16 @@ def prepare_action(action: str, reason: str = "") -> dict[str, Any]:
 
 
 @mcp.tool()
+def prepare_pbx_callback() -> dict[str, Any]:
+    """Prepare an owner PBX callback linked to the latest Incident Receipt.
+
+    This tool never places a call. Execution requires the owner-authenticated
+    HTTP approval route, which is intentionally absent from MCP.
+    """
+    return STATE.prepare_action("voiceops_owner_callback")
+
+
+@mcp.tool()
 def verification_evidence() -> dict[str, Any]:
     """Return evidence generated only after human-approved actions were verified."""
     return {"evidence": STATE.evidence_snapshot()}
@@ -129,6 +139,7 @@ def _state_payload() -> dict[str, Any]:
         "events": STATE.recent_events(12),
         "evidence": STATE.evidence_snapshot(),
         "incident_receipts": STATE.incident_receipts(6),
+        "live_evidence": STATE.live_evidence_snapshot(),
         "integrations": {
             **STATE.integration_status(),
             "approval_channel": "human-only web/API route; not exposed as an MCP tool",
@@ -310,28 +321,138 @@ async def simulated_alexa(request: Request) -> Response:
             raise ValueError("utterance is too long")
     except ValueError as exc:
         return JSONResponse({"detail": str(exc)}, status_code=400)
-    speaker_context = payload.get("speaker_context")
+    skill_bridge = _skill_bridge_authorized(request)
+    speaker_context = payload.get("speaker_context") if skill_bridge else {}
     if not isinstance(speaker_context, dict):
         speaker_context = {}
-    return JSONResponse(
-        simulated_alexa_turn(
-            utterance,
-            STATE,
-            REASONER,
-            speaker_context=speaker_context,
-        )
+    result = simulated_alexa_turn(
+        utterance,
+        STATE,
+        REASONER,
+        speaker_context=speaker_context,
     )
+    incident = result.get("incident") if isinstance(result.get("incident"), dict) else {}
+    receipt = incident.get("receipt") if isinstance(incident.get("receipt"), dict) else None
+    prepared = (
+        result.get("prepared_action")
+        if isinstance(result.get("prepared_action"), dict)
+        else None
+    )
+    public_prepared = (
+        {key: value for key, value in prepared.items() if key != "approval_token"}
+        if prepared
+        else None
+    )
+    response_payload = result.get("response") if isinstance(result.get("response"), dict) else {}
+    reasoning_mode = str(response_payload.get("reasoning_mode") or "unknown")
+    systems = ["Ambient Guardian"]
+    if skill_bridge:
+        systems.insert(0, "Alexa Custom Skill Gateway")
+    if receipt:
+        systems.append("Incident Store")
+    if reasoning_mode == "local-qwen-vllm" or reasoning_mode.startswith("strands"):
+        systems.append("InnerOS Qwen/vLLM")
+    else:
+        systems.append("Deterministic Safety Layer")
+    intent = "guardian_query"
+    if receipt:
+        intent = "incident_summary"
+    if prepared:
+        intent = (
+            "prepare_pbx_callback"
+            if prepared.get("action") == "voiceops_owner_callback"
+            else "prepare_action"
+        )
+        if prepared.get("action") == "voiceops_owner_callback":
+            systems.append("VoiceOps (prepare only)")
+    physical_verified = (
+        os.getenv("AMBIENT_GUARDIAN_PHYSICAL_ALEXA_VERIFIED", "0") == "1"
+    )
+    channel_truth = (
+        "REAL" if skill_bridge and physical_verified else "CODE_READY" if skill_bridge else "SIMULATED"
+    )
+    STATE.record_live_evidence(
+        utterance=utterance,
+        intent=intent,
+        systems_consulted=systems,
+        incident_receipt=receipt,
+        prepared_action=public_prepared,
+        approval_state="WAITING_FOR_OWNER" if prepared else "NOT_REQUIRED",
+        request_id=(
+            str(payload.get("request_id") or "")[:160] or None
+            if skill_bridge
+            else None
+        ),
+        truth={
+            "channel": channel_truth,
+            "reasoning": (
+                "REAL" if reasoning_mode == "local-qwen-vllm" or reasoning_mode.startswith("strands") else "CODE_READY"
+            ),
+            "action": (
+                "SIMULATED"
+                if prepared and prepared.get("action") != "voiceops_owner_callback"
+                else str((STATE.voiceops.status() or {}).get("truth_label") or "CODE_READY")
+                if prepared
+                else "CODE_READY"
+            ),
+        },
+    )
+    if prepared and prepared.get("action") == "voiceops_owner_callback":
+        result = {
+            **result,
+            "prepared_action": public_prepared,
+        }
+    return JSONResponse(result)
 
 
 @mcp.custom_route("/api/actions/{token}/approve", methods=["POST"])
 async def approve_http_action(request: Request) -> Response:
     """Trusted human-demo approval surface. It is intentionally absent from MCP tools."""
     token = str(request.path_params.get("token", ""))
+    if (
+        STATE.pending_action_name(token) == "voiceops_owner_callback"
+        and not _owner_authorized(request)
+    ):
+        return JSONResponse(
+            {"detail": "owner authorization required for PBX callback"},
+            status_code=401,
+        )
     try:
         evidence = STATE.approve_action(token)
     except ValueError as exc:
         return JSONResponse({"detail": str(exc)}, status_code=409)
-    return JSONResponse({"status": "executed_and_verified", "evidence": evidence})
+    if evidence.get("executed") and evidence.get("verified"):
+        status = "executed_and_verified"
+    elif evidence.get("executed"):
+        status = "executed_unverified"
+    else:
+        status = "not_executed"
+    return JSONResponse({"status": status, "evidence": evidence})
+
+
+@mcp.custom_route("/api/pbx/actions/{action_id}/approve", methods=["POST"])
+async def approve_pbx_action(request: Request) -> Response:
+    """Owner-authenticated PBX approval without exposing the one-time token."""
+    if not _owner_authorized(request):
+        return JSONResponse(
+            {"detail": "owner authorization required for PBX callback"},
+            status_code=401,
+        )
+    action_id = str(request.path_params.get("action_id") or "").strip()
+    try:
+        evidence = STATE.approve_action_id(
+            action_id,
+            expected_action="voiceops_owner_callback",
+        )
+    except ValueError as exc:
+        return JSONResponse({"detail": str(exc)}, status_code=409)
+    if evidence.get("executed") and evidence.get("verified"):
+        status = "executed_and_verified"
+    elif evidence.get("executed"):
+        status = "executed_unverified"
+    else:
+        status = "not_executed"
+    return JSONResponse({"status": status, "evidence": evidence})
 
 
 @mcp.custom_route("/api/evidence", methods=["GET"])
@@ -344,6 +465,12 @@ async def evidence(request: Request) -> Response:
 async def incidents(request: Request) -> Response:
     del request
     return JSONResponse({"receipts": STATE.incident_receipts(20)})
+
+
+@mcp.custom_route("/api/live-evidence", methods=["GET"])
+async def live_evidence(request: Request) -> Response:
+    del request
+    return JSONResponse(STATE.live_evidence_snapshot())
 
 
 @mcp.custom_route("/api/incidents/{incident_id}", methods=["GET"])
@@ -370,6 +497,12 @@ async def integrations(request: Request) -> Response:
 def _owner_authorized(request: Request) -> bool:
     expected = os.getenv("AMBIENT_GUARDIAN_OWNER_TOKEN", "")
     supplied = request.headers.get("x-owner-token", "")
+    return bool(expected and supplied and secrets.compare_digest(expected, supplied))
+
+
+def _skill_bridge_authorized(request: Request) -> bool:
+    expected = os.getenv("AMBIENT_GUARDIAN_SKILL_BRIDGE_TOKEN", "")
+    supplied = request.headers.get("x-ambient-skill-bridge", "")
     return bool(expected and supplied and secrets.compare_digest(expected, supplied))
 
 

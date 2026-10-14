@@ -13,13 +13,16 @@ def test_judge_ui_declares_truth_boundaries_and_three_scenarios():
     html = client.get("/").text
     assert "Judge Mode" in html
     assert "REAL: MCP Streamable HTTP runtime" in html
-    assert "SIMULATED: Alexa+ voice experience" in html
+    assert "CODE_READY: Alexa Custom Skill gateway" in html
+    assert "Alexa+ MCP entitlement NOT_PROVEN" in html
     assert "SIMULATED: Ring-compatible demo edge" in html
     assert "1. Home status" in html
     assert "2. What happened at 3 AM?" in html
     assert "3. Prepare lock" in html
     assert "model cannot approve or execute" in html
     assert "Persistent incident receipts" in html
+    assert "Live Evidence Console" in html
+    assert "PBX result" in html
 
 
 def test_scenario_one_home_status_is_read_only(monkeypatch):

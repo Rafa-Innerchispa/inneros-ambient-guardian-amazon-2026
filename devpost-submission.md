@@ -1,155 +1,105 @@
-# Title
-InnerOS Ambient Guardian
+# InnerOS Ambient Guardian
 
-## One-line Summary
-Alexa+ becomes the voice of a local-first AI guardian that understands home events, prepares bounded actions, requires human approval, and returns verified evidence.
+## One-line summary
 
-## Problem
-Smart-home systems produce many isolated alerts but leave people to reconstruct what happened, decide whether it matters, and verify whether a physical action actually succeeded. Giving a language model direct actuator authority would make that convenience unsafe.
+Alexa becomes the voice of a local-first home guardian that explains incidents, prepares bounded actions, requires separate human approval, and proves the result.
 
-## Solution
-Ambient Guardian exposes an official MCP Streamable HTTP surface for Alexa+ while keeping physical authority outside the model. It correlates property events, reasons locally with Qwen/vLLM, uses AWS Strands as a read-only orchestration layer, prepares only allowlisted actions, waits for a separate human approval, executes through a safe adapter, verifies observed state, and emits evidence.
+## Inspiration
 
-## Why This Matters
-Ambient interfaces should reduce investigation work without turning probabilistic reasoning into physical authority. Ambient Guardian demonstrates a practical pattern for homes, buildings, caretaking, access control, and other physical systems: models can understand and propose, while deterministic policy, human confirmation, verification, and audit evidence govern effects.
+Smart-home systems generate isolated alerts, but people still have to reconstruct what happened, decide whether it matters, and trust that an automation worked. Giving a probabilistic model direct authority over physical systems would solve the inconvenience by creating a safety problem.
 
-## Product Positioning
-Ambient Guardian is designed as a premium local-first intelligence layer for smart homes that already own fragmented cameras, Alexa devices, locks, alarms, access control, sensors and automation. The first natural market is premium residences and residential communities in Samborondón and Guayaquil, Ecuador, with a global path to similar high-value homes and vacation properties.
+## What it does
 
-The customer does not need another isolated device or dashboard. The customer needs the hardware already installed in the home to behave like one coherent system.
+Ambient Guardian turns normalized home events into a coherent incident story. A user can ask, “What happened at 3 AM?” and receive a concise answer backed by a persistent Incident Receipt. The receipt records immutable event context and a SHA-256 digest.
 
-This is not only a lab concept. The local control layer is already being validated in a real home in Ecuador, with physical integrations kept clearly separate from the public Judge Mode simulator and from any provider path that is not yet live-verified.
+The user can then ask Alexa to prepare an escalation. The model may prepare an allowlisted action, but it cannot approve or execute it. A separate owner-authenticated channel approves the action. After execution, Ambient Guardian verifies provider readback and links the evidence digest to the action and original Incident Receipt.
 
-## How We Used AI
-- Local Qwen/vLLM provides private, local-first contextual reasoning through an OpenAI-compatible endpoint.
-- AWS Strands Agents SDK provides real agent orchestration/synthesis using an explicit local OpenAI-compatible model provider.
-- Strands is deliberately tool-less for physical actions. It receives context but cannot approve or execute an actuator operation.
-- A deterministic fallback keeps the demo functional if the model endpoint is unavailable.
+The final demo path is:
 
-## Development Assistance
-Earlier development used coding agents for architecture review, MCP migration, safety hardening, test design and runtime debugging. The final no-device Judge Mode, submission readiness package and live local runtime validation were completed locally without external model spend. The project evidence and claims are based on reproducible code/tests rather than the development assistant used to produce them.
+`physical Echo Custom Skill → Ambient Guardian → local Qwen → Incident Receipt → PBX callback PREPARE → separate owner approval → VoiceOps/UCM → verified evidence`
 
-## Key Features
-- Official MCP Python SDK v2 server over Streamable HTTP
-- No-terminal Judge Mode with a clearly labeled simulated Alexa+ experience
-- Local Qwen/vLLM reasoning
-- Real AWS Strands Agent integration
-- Ring-compatible simulated event boundary for Judge Mode plus a separate official Ring/Amazon Vision adapter that remains CODE_READY until provider-live verification
-- Fail-closed deterministic action parser
-- One-time expiring approval proposals
-- Human approval kept outside MCP tools
-- Atomic replay/concurrency protection
-- Post-action verification and evidence
-- Persistent Home Flight Recorder / Incident Receipts with immutable IDs and SHA-256 digests
-- Cross-session incident lookup through MCP/HTTP
-- Docker packaging and GitHub Actions CI
+The repository also includes a deterministic Judge Mode and Live Evidence Console so judges can reproduce the story without access to the private home or PBX.
 
-## Architecture
-`Alexa+ / simulated Alexa+ -> official MCP Streamable HTTP -> property context -> AWS Strands + local Qwen read-only reasoning -> deterministic proposal policy -> human approval outside MCP -> simulator adapter -> verification -> evidence`
+## How we built it
 
-## Judge Mode
-The browser demo exposes three reproducible scenarios without requiring a terminal:
+- Official MCP Python SDK v2 over Streamable HTTP.
+- Signed Alexa Custom Skill gateway with Amazon certificate-chain, timestamp, and Skill ID verification.
+- InnerOS owner OAuth Account Linking with bearer-token validation.
+- Local Qwen/vLLM through an OpenAI-compatible endpoint.
+- AWS Strands as a read-only synthesis layer.
+- Deterministic parsers and policy outside the model.
+- SQLite Home Flight Recorder / Incident Receipts.
+- VoiceOps adapter that supplies no destination and exposes no extension or SIP/PBX credential.
+- Separate owner-authenticated approval route intentionally absent from MCP.
+- Live Evidence Console with truth labels and digest linkage.
 
-1. **Home status** — asks whether everything is okay at home.
-2. **Front-door context** — injects a truth-labeled Ring-compatible simulated event and asks what happened.
-3. **Prepare lock** — creates an approval-required proposal that remains `executed=false` until a separate human approval step.
+## Safety architecture
 
-The UI explicitly labels the truth boundary:
+The most important design choice is separation of understanding from authority.
 
-- REAL MCP Streamable HTTP runtime
-- REAL Ambient Guardian policy/backend
-- REAL AWS Strands -> local Qwen reasoning
-- SIMULATED Alexa+ browser interaction
-- SIMULATED Ring-compatible event source
-- OPTIONAL physical Echo/Ring validation
+- The model reads context and proposes.
+- Deterministic code restricts the action.
+- A human approves through a different channel.
+- A provider adapter executes.
+- Independent readback verifies.
+- Evidence is persisted and digest-linked.
 
-## Testing Instructions
+There is no `approve_action`, execution, or speaker tool in MCP. A public `/api/alexa` caller cannot forge Alexa `personId` or PIN confidence because identity context is accepted only from the authenticated loopback Skill gateway.
+
+## Truth boundaries
+
+- `REAL`: MCP runtime, incident reconstruction, persistence, policy, and evidence chain.
+- `REAL` only when observed: local Qwen, physical Echo response, and VoiceOps/UCM callback.
+- `SIMULATED`: browser voice, Ring-compatible demo events, and simulator adapters.
+- `CODE_READY`: implemented integration without live provider/device evidence.
+- Direct Alexa+ MCP entitlement is `NOT_PROVEN`; we do not call it live.
+- Ring stays `CODE_READY` until official provider-live evidence exists.
+- Google Home private resources remain OAuth-gated.
+
+## Challenges
+
+The hard part was not generating a conversational answer. It was preserving a trustworthy boundary across Amazon request verification, local reasoning, persisted incident facts, expiring proposals, a separately authenticated approval, PBX dispatch, provider readback, and UI truth labels—without leaking a phone number, extension, SIP token, or infrastructure secret.
+
+We also encountered a shared host with an older MCP package. We treated that as an environment defect, created an isolated project runtime, installed the repository’s declared MCP v2 and Strands dependencies, and reran the entire suite rather than weakening the implementation.
+
+## Accomplishments
+
+- Persistent “What happened at 3 AM?” receipt before model synthesis.
+- Physical-Alexa Custom Skill path with Account Linking and gateway authentication.
+- Receipt-pinned PBX callback preparation and sanitized verification evidence.
+- Existing three Judge Mode scenarios preserved.
+- Live Evidence Console added to the existing frontend.
+- **112 automated tests passed**.
+- `compileall` passed.
+- Official MCP client connected over real Streamable HTTP.
+- Tool discovery proved MCP cannot approve or execute physical actions.
+
+## What we learned
+
+Ambient systems need an evidence model, not just an intent model. A useful answer should reveal which systems were consulted. A consequential action needs a proposal boundary. A success claim needs readback. A live demo needs explicit REAL, SIMULATED, and CODE_READY labels.
+
+## What is next
+
+- Complete and record the physical Echo consent/enablement step.
+- Record one separately approved real PBX callback when VoiceOps is reachable.
+- Obtain official Ring provider evidence before claiming Ring live.
+- Keep direct Alexa+ MCP as `NOT_PROVEN` until entitlement is available.
+
+## Reproduction
+
 ```bash
 python -m venv .venv
 source .venv/bin/activate
 python -m pip install -r requirements.txt
 PYTHONPATH=src pytest -q
 PYTHONPATH=src python scripts/runtime_smoke.py
+docker build -t inneros-ambient-guardian .
 ```
 
-CI installs dependencies in a clean environment, runs the complete suite, boots the real server, connects using the official MCP HTTP client, and builds the Docker image.
+Public repository: https://github.com/Rafa-Innerchispa/inneros-ambient-guardian-amazon-2026
 
-Final verification evidence:
-- **98 tests PASS on the previous provider verification candidate**
-- Current main includes additional Incident Receipt persistence regressions; the final post-merge full-suite count is being re-verified
-- GitHub Actions PASS on the previous provider candidate
-- `compileall` PASS
-- `git diff --check` PASS
-- real Streamable HTTP MCP smoke PASS
-- official MCP tool discovery/calls PASS
-- explicit proof that `approve_action` is absent from MCP
-- AWS Strands -> local Qwen/vLLM live calls PASS
-- all three Judge Mode scenarios exercised through browser QA
-- bounded proposal -> separate approval -> verification -> evidence flow PASS
+Demo video: TODO — owner-controlled public URL, English, under three minutes.
 
-Canonical engineering main for this submission-doc refresh:
-`1dc81ab8e922567564a1130c43c7214bfc4c2a53`
+## Submission control
 
-## Public Demo Link
-A secure public Judge Mode URL is optional and is not yet published. The local model endpoint remains private and must never be exposed directly.
-
-## Public Repository Link
-https://github.com/Rafa-Innerchispa/inneros-ambient-guardian-amazon-2026
-
-GitHub reports the repository as public and detects the MIT License.
-
-## Demo Video
-TODO — public YouTube or Vimeo URL, English, under 3 minutes.
-
-Recording references:
-- `docs/DEMO_SCRIPT.md`
-- `docs/DEMO_SHOTLIST.md`
-
-## Screenshot / Video Shot List
-1. Judge Mode landing view and REAL/SIMULATED truth badges.
-2. Home-status scenario with Strands/local-Qwen response.
-3. Front-door simulated event and contextual explanation.
-4. Prepared lock action showing `executed=false` and approval required.
-5. Separate human approval followed by verified evidence.
-6. Fail-closed `unlock` request.
-7. GitHub Actions green + public MIT license + friction log.
-
-## Submission Readiness
-Engineering demo is READY. The local canonical submission copy is newer than the currently visible Devpost project page and is waiting for connector/manual sync. Technical answers, AWS Builder response, Open Source response, feature requests, feedback answers, friction log and judge-oriented demo material are prepared.
-
-The final submission remains intentionally blocked on owner-controlled fields and the final public video.
-
-See:
-- `docs/DEVPOST_FORM_ANSWERS.md`
-- `docs/SUBMISSION_READINESS.md`
-
-## Known Limitations
-- Public action adapter is simulator-only; no real lock or alarm is controlled.
-- The official Ring/Amazon Vision adapter is implemented and tested in code, but Ring track eligibility remains unclaimed until Developer Playground, test-account, token, or other official provider evidence is completed.
-- Incident receipts are durable across service/state restarts. The public demo's transient proposal/action-evidence list is still process-local; production deployment would persist that full approval/evidence ledger.
-- Bedrock currently returns `ValidationException: Operation not allowed`; it is optional and not part of the functional safety path.
-- Physical Echo/Alexa+ MCP Toolkit validation remains optional product validation, not a hackathon blocker.
-- Real-device production use would require authentication, tenant policy, durable audit storage, rate limiting, secrets management, and device-specific verification.
-
-## Remaining Owner-Controlled Form Inputs
-1. Submitter Type.
-2. Organization Name or `N/A`.
-3. Country of Residence.
-4. Canadian province field or `N/A`.
-5. Age certification.
-6. Eligible Jurisdiction certification.
-7. Employee certification.
-8. Public demo video URL.
-9. Explicit final authorization to submit.
-
-Do not call Devpost final submission actions until those items are explicitly resolved.
-
-
-## Final Sprint Note — 2026-10-12
-- Official deadline: 2026-10-23 12:00 PM Pacific Time.
-- Internal target: feature freeze by 2026-10-16; final submission ready by 2026-10-21/22.
-- Project naming is under review. Do not rename the Devpost project or repository until the owner approves a bilingual English/Spanish-friendly name.
-- Primary judging story: cross-system incident reconstruction ("What happened at 3 AM?") -> bounded human-approved action -> verified evidence.
-- Implemented enhancement: the Home Flight Recorder / Incident Receipt now persists incident snapshots across sessions with immutable IDs and SHA-256 digests; verified action evidence links back to the latest incident receipt.
-- Google Home MCP is product expansion and should not displace Amazon-track work.
-- Ring Developer Playground is the preferred path to obtain official Ring track evidence without hardware, if available to the account.
+This file is the engineering draft. Do not perform final Devpost submission or modify owner/legal answers without explicit owner authorization.

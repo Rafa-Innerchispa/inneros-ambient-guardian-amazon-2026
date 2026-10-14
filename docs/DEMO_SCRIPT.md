@@ -1,94 +1,79 @@
-# Demo video script — under 3 minutes
+# Final Demo Script — Ambient Guardian
 
-Canonical recording path for the Amazon Developer Hackathon. The video must be public on YouTube or Vimeo and in English.
+Target: under three minutes, in English. Use the physical Echo only after the Custom Skill and Account Linking test succeeds. Otherwise record Judge Mode and keep the voice edge labeled `SIMULATED`.
 
-## Truth shown on screen
+## Before recording
 
-- **REAL:** self-hosted MCP Python SDK v2 / Streamable HTTP
-- **REAL:** Ambient Guardian policy, normalized event pipeline, temporal correlation and evidence
-- **REAL:** AWS Strands orchestration with local Qwen/vLLM when enabled
-- **SIMULATED:** Alexa+ browser interaction
-- **SIMULATED:** Ring-compatible demo edge for the public Judge Mode; the separate official Ring adapter is CODE_READY but not yet provider-live verified
-- **SAFE:** the model cannot approve or execute its own consequential action
+- Start Ambient Guardian with persistent SQLite storage and the local Qwen/vLLM endpoint.
+- Start the signed Custom Skill gateway with Account Linking required and a runtime-only bridge token.
+- Configure VoiceOps real mode only with its private runtime URL/token; never display them.
+- Confirm the Live Evidence Console starts empty.
+- Confirm direct Alexa+ MCP still says `NOT_PROVEN` unless entitlement was actually verified.
+- Create no Devpost submission during the recording.
 
-## 0:00–0:22 — Problem and promise
+## 0:00–0:20 — The problem
 
-“Smart homes are full of devices but still make the homeowner reconstruct incidents manually. InnerOS Ambient Guardian gives the home one local-first intelligence layer that can answer what happened, recommend what to do next, keep the human in control, and prove the result.”
+Camera on Rafael in the living room and the Echo.
 
-Show the main screen, not a terminal.
+“Smart homes can alert us, but they still make us reconstruct what happened and trust that an automation worked. Ambient Guardian lets the home explain the incident, keeps the human in control, and proves the result.”
 
-## 0:22–0:45 — Required Amazon technology
+## 0:20–0:55 — Physical Alexa and the incident
 
-Show the architecture strip and say:
+Rafael says:
 
-“This is a self-hosted MCP server over Streamable HTTP, using the official MCP Python SDK. AWS Strands can synthesize context through our local Qwen/vLLM node. Physical consequences remain behind deterministic policy and a separate human approval channel.”
+> “Alexa, ask Ambient Guardian what happened at 3 AM.”
 
-Briefly show the MCP tool list, including `incident_summary`. Do not linger on code.
+Expected:
 
-## 0:45–1:32 — Standout scenario: What happened at 3 AM?
+1. Amazon sends a signed Custom Skill request.
+2. The gateway validates certificate chain, timestamp, Skill ID, and linked owner account.
+3. Ambient Guardian reconstructs the time window and persists the Incident Receipt.
+4. One local Qwen/Strands synthesis makes the response conversational.
+5. Alexa speaks the result.
 
-Click **2. What happened at 3 AM?**
+Cut to the Live Evidence Console showing the utterance, `incident_summary`, consulted systems, receipt ID/digest, and truthful channel/reasoning labels.
 
-The demo injects three truth-labeled Ring-compatible demo events:
-- 03:04 motion at the front door
-- 03:07 person detected
-- 03:11 front door remained secured
+If physical proof is unavailable, use the matching Judge Mode scenario and say: “This voice edge is simulated; the backend, MCP transport, incident pipeline, persistence, and evidence are real.”
 
-Then the interface asks:
+## 0:55–1:35 — Prepare the PBX escalation
 
-**“Alexa, what happened at 3 AM?”**
+Rafael says:
 
-Point to the time-ordered answer, event IDs and sources. Then point to the **Home Flight Recorder** receipt: immutable incident ID, SHA-256 digest and `persistent=true`.
+> “Alexa, call me through my PBX and give me the incident report.”
 
-Key line:
+Alexa must say the callback was **prepared**, not placed. The console must show:
 
-“The Ring edge in this demo is simulated and labeled as such. The normalized event pipeline, time-window correlation and MCP tool are real. The incident is also written to a persistent receipt, so the home can recover the same evidence in a later session instead of inventing memory.”
+- action `voiceops_owner_callback`;
+- the same linked Incident Receipt ID/digest;
+- an action digest;
+- approval `WAITING_FOR_OWNER`;
+- no number or extension.
 
-## 1:32–2:12 — Human-controlled action
+Narration: “The model can prepare this action, but MCP has no approval or execution tool.”
 
-Click **3. Prepare lock**.
+## 1:35–2:10 — Separate approval and real call
 
-Show:
-- proposal created
-- `executed=false`
-- no evidence receipt yet
-- no MCP approval or execution tool
+Rafael approves from the owner-authenticated surface. Do not show the token.
 
-Then click the separate **Approve simulated bounded action** button.
+VoiceOps selects its server-side `voiceops.owner` destination, asks the existing UCM/Grandstream path to place the call, and reads its receipt back. Answer the real call and let the incident summary play.
 
-Show the resulting verified Evidence Receipt.
+The console then shows the sanitized PBX result, verified evidence, and Incident Receipt → action → evidence digest chain.
 
-Key line:
+If the private service is unavailable, run simulator mode and keep its result labeled `SIMULATED`; do not cut it as a real PBX call.
 
-“No human approval, no consequential action. No verification, no success claim.”
+## 2:10–2:40 — Engineering proof
 
-## 2:12–2:32 — Real-home proof
+Show briefly:
 
-Say:
+- **112 tests passed**;
+- official Streamable HTTP MCP smoke PASS;
+- tool discovery with `prepare_pbx_callback` and no approval/execution/speaker tool;
+- persistent Incident Receipt after restart;
+- Docker/CI result when available;
+- REAL / SIMULATED / CODE_READY labels.
 
-**“This is not only a lab demo. The local control layer is already running in a real home in Ecuador, where we validate the physical integrations separately from the public simulator.”**
+## 2:40–3:00 — Close
 
-Very briefly show the integration truth panel and mention that the product has separately validated:
-- real Echo/Fire speech through Home Assistant Alexa Devices
-- Intelbras alarm state and bounded owner-authenticated controls
-- allowlisted Home Assistant lighting
-- local DMX/Art-Net control
+“Ambient Guardian uses local Qwen as the brain, deterministic policy for authority, and evidence for trust. The home can explain what happened, ask before acting, and prove what happened next.”
 
-Do not imply those private-home integrations are part of the public simulator.
-
-## 2:32–2:50 — Engineering proof
-
-Flash:
-- public GitHub repository + MIT license
-- GitHub Actions PASS
-- previous provider candidate: **98 automated tests PASS**
-- current Incident Receipt build: final regression count to be shown only after the current-main rerun completes
-- real Streamable HTTP MCP smoke PASS
-- Docker build PASS
-- friction log
-
-## 2:50–3:00 — Close
-
-“Alerts tell you that something happened. Ambient Guardian explains what happened, keeps you in control of what happens next, and verifies the outcome.”
-
-End on the current working title **InnerOS Ambient Guardian**. Final submission name is intentionally pending owner approval.
+End on the Live Evidence Console. Do not claim Alexa+ MCP, Ring provider-live, physical Alexa, or a real PBX call unless that exact evidence was recorded.

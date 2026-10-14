@@ -12,7 +12,7 @@ from ambient_guardian import alexa_skill_gateway as gateway
 SKILL_ID = "amzn1.ask.skill.test-ambient-guardian"
 
 
-def request_payload(request, *, person=None):
+def request_payload(request, *, person=None, access_token=None):
     system = {
         "application": {"applicationId": SKILL_ID},
         "user": {"userId": "test-user"},
@@ -21,6 +21,8 @@ def request_payload(request, *, person=None):
     }
     if person is not None:
         system["person"] = person
+    if access_token is not None:
+        system["user"]["accessToken"] = access_token
     return {
         "version": "1.0",
         "session": {
@@ -143,6 +145,42 @@ def test_guardian_intent_calls_local_backend(monkeypatch):
     response = gateway._dispatch(request_payload(intent_request()))
     assert "Guardian answer for: is everything okay at home" in response["response"]["outputSpeech"]["text"]
     assert response["response"]["shouldEndSession"] is False
+
+
+def test_required_account_linking_returns_alexa_link_account_card(monkeypatch):
+    called = []
+    monkeypatch.setenv("AMBIENT_GUARDIAN_ACCOUNT_LINKING_REQUIRED", "1")
+    monkeypatch.setattr(
+        gateway,
+        "_backend_turn",
+        lambda query, speaker_context=None: called.append(query) or "unsafe",
+    )
+
+    response = gateway._dispatch(request_payload(intent_request()))
+
+    assert response["response"]["card"] == {"type": "LinkAccount"}
+    assert response["response"]["shouldEndSession"] is True
+    assert called == []
+
+
+def test_linked_owner_token_is_validated_but_never_forwarded(monkeypatch):
+    calls = []
+    monkeypatch.setenv("AMBIENT_GUARDIAN_ACCOUNT_LINKING_REQUIRED", "1")
+    monkeypatch.setattr(gateway, "_account_linked", lambda payload: True)
+    monkeypatch.setattr(
+        gateway,
+        "_backend_turn",
+        lambda query, speaker_context=None: calls.append((query, speaker_context))
+        or "Linked owner response.",
+    )
+
+    response = gateway._dispatch(
+        request_payload(intent_request(), access_token="owner-oauth-secret")
+    )
+
+    assert response["response"]["outputSpeech"]["text"] == "Linked owner response."
+    assert calls[0][1]["account_linked"] is True
+    assert "owner-oauth-secret" not in str(calls)
 
 
 def test_alarm_intent_requests_voice_pin_before_backend(monkeypatch):

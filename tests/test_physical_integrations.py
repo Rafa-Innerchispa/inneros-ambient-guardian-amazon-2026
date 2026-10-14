@@ -6,8 +6,15 @@ def test_integration_status_is_honest_about_physical_alexa_and_ring():
     state = GuardianState()
     status = state.integration_status()
 
-    assert "Home Assistant Alexa Devices" in status["physical_alexa"]
-    assert "not-linked" in status["physical_alexa"]
+    assert status["physical_alexa"].startswith("CODE_READY:")
+    assert status["alexa_custom_skill"] == {
+        "truth_label": "CODE_READY",
+        "physical_echo_verified": False,
+    }
+    assert status["alexa_plus_mcp"] == {
+        "truth_label": "CODE_READY",
+        "entitlement": "NOT_PROVEN",
+    }
     assert "demo simulator" in status["ring"]
     assert status["ring_device_verification"] == "pending_real_or_official_test_account"
     assert "OAuth" in status["ring_official_path"]
