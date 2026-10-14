@@ -77,6 +77,28 @@
           ]
         },
         {
+          "name": "MusicStatusIntent",
+          "slots": [],
+          "samples": [
+            "está listo youtube music",
+            "cómo está music assistant",
+            "puedes reproducir youtube music"
+          ]
+        },
+        {
+          "name": "PlayMusicIntent",
+          "slots": [
+            {
+              "name": "musicQuery",
+              "type": "AMAZON.SearchQuery"
+            }
+          ],
+          "samples": [
+            "reproduce {musicQuery}",
+            "pon {musicQuery}"
+          ]
+        },
+        {
           "name": "UnifiRestartIntent",
           "slots": [
             {

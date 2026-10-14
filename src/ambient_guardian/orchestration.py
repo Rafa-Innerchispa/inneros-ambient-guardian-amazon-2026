@@ -85,6 +85,17 @@ _UNIFI_RESTART_QUERY = re.compile(
     re.I,
 )
 
+_MUSIC_STATUS_QUERY = re.compile(
+    r"\b(?:youtube\s+music|music\s+assistant)\b[^.]*\b(?:estado|status|list[oa]|ready|"
+    r"disponible|available|configurad[oa]|configured)\b"
+    r"|\b(?:estado|status|list[oa]|ready|disponible|available)\b[^.]*"
+    r"\b(?:youtube\s+music|music\s+assistant)\b",
+    re.I,
+)
+_MUSIC_PLAY_PREFIX = re.compile(
+    r"^(?:reproduce|reproducir|pon|poner|toca|tocar|play)\s+(.+)$", re.I
+)
+
 _ANTIGRAVITY_DRAFT = re.compile(
     r"^(?:prepara|preparar|crea|crear|draft|prepare|create)\s+"
     r"(?:(?:una|un|a)\s+)?(?:tarea|brief|solicitud|request)?\s*"
@@ -894,7 +905,21 @@ def localize_alexa_result(result: dict[str, Any], locale: str) -> dict[str, Any]
             "security zones, lights, solar power, battery mode, internet, and UniFi. I can "
             "correlate it with a clearly simulated Ring demo, check VoiceOps and Grandstream, "
             "prepare an owner callback, prepare approved UniFi restarts, and control professional "
-            "DMX lighting over Art-Net. Sensitive actions still require independent approval."
+            "DMX lighting over Art-Net. I can also play YouTube Music through Music Assistant "
+            "on explicitly allowlisted speakers once that account is configured. Sensitive "
+            "actions still require independent approval."
+        )
+    elif mode == "deterministic-music-assistant-status":
+        response["answer"] = (
+            "YouTube Music is ready through Music Assistant on explicitly allowlisted speakers."
+            if response.get("status") == "all_clear"
+            else "The safe YouTube Music path is integrated, but Music Assistant, its provider, or the speaker allowlist still needs setup. I played nothing."
+        )
+    elif mode == "deterministic-music-assistant-playback":
+        playback = result.get("music_playback") or {}
+        response["answer"] = (
+            f"I sent {playback.get('query', 'the requested music')} to "
+            f"{playback.get('player_alias', 'the approved speaker')} through YouTube Music."
         )
     elif mode == "deterministic-ring-demo":
         response["answer"] = (
@@ -1006,13 +1031,74 @@ def _inneros_capabilities_response() -> dict[str, Any]:
             "correlacionarlo con un demo Ring claramente simulado, consultar VoiceOps y la "
             "central Grandstream, preparar una llamada al alias privado del propietario, "
             "preparar reinicios UniFi permitidos y controlar escenas profesionales DMX por "
-            "Art-Net en tiempo real. La alarma, la sirena, los reinicios y las llamadas reales "
+            "Art-Net en tiempo real. También puedo reproducir YouTube Music mediante Music "
+            "Assistant en altavoces expresamente permitidos cuando esa cuenta esté configurada. "
+            "La alarma, la sirena, los reinicios y las llamadas reales "
             "mantienen verificación y aprobación; no marco números arbitrarios. "
             "También puedo preparar un borrador de tarea para Antigravity. Ese borrador "
             "no se envía ni ejecuta sin una revisión separada."
         ),
         "status": "all_clear",
         "reasoning_mode": "deterministic-inneros-capabilities",
+    }
+
+
+def _music_request(utterance: str) -> dict[str, str] | None:
+    """Parse a bounded bilingual music command produced by the Alexa model."""
+    match = _MUSIC_PLAY_PREFIX.match(" ".join(utterance.strip().split()))
+    if not match:
+        return None
+    remainder = match.group(1).strip()
+    lowered = remainder.lower()
+    provider_markers = (
+        " usando youtube music",
+        " con youtube music",
+        " using youtube music",
+    )
+    marker_found = False
+    for marker in provider_markers:
+        if lowered.endswith(marker):
+            remainder = remainder[: -len(marker)].strip()
+            lowered = remainder.lower()
+            marker_found = True
+            break
+    if not marker_found and "youtube music" not in lowered:
+        return None
+    player = ""
+    for separator in (" en ", " on "):
+        index = lowered.rfind(separator)
+        if index > 0:
+            player = remainder[index + len(separator) :].strip()
+            remainder = remainder[:index].strip()
+            break
+    query = remainder.replace("YouTube Music", "").replace("youtube music", "").strip()
+    if not query:
+        return None
+    return {"query": query, "player": player}
+
+
+def _music_status_response(state: GuardianState) -> dict[str, Any]:
+    status = state.music_assistant.status().as_dict()
+    ready = all(
+        (
+            status["reachable"],
+            status["integration_available"],
+            status["youtube_music_ready"],
+            status["control_enabled"],
+            bool(status["players"]),
+        )
+    )
+    answer = (
+        "YouTube Music está listo mediante Music Assistant. Puedo reproducir contenido "
+        "solo en los altavoces permitidos."
+        if ready
+        else "La ruta segura para YouTube Music está integrada, pero todavía falta terminar "
+        "Music Assistant, el proveedor de YouTube Music o la lista de altavoces. No reproduje nada."
+    )
+    return {
+        "answer": answer,
+        "status": "all_clear" if ready else "attention_required",
+        "reasoning_mode": "deterministic-music-assistant-status",
     }
 
 
@@ -1105,6 +1191,52 @@ def simulated_alexa_turn(
             "utterance": utterance,
             "response": _inneros_capabilities_response(),
             "prepared_action": None,
+            "evidence_count": len(state.evidence_snapshot()),
+        }
+
+    if _MUSIC_STATUS_QUERY.search(normalized_utterance):
+        return {
+            "utterance": utterance,
+            "response": _music_status_response(state),
+            "prepared_action": None,
+            "music_assistant": state.music_assistant.status().as_dict(),
+            "evidence_count": len(state.evidence_snapshot()),
+        }
+
+    music_request = _music_request(normalized_utterance)
+    if music_request is not None:
+        try:
+            playback = state.music_assistant.play(
+                music_request["query"], music_request["player"]
+            )
+        except (ValueError, RuntimeError, PermissionError) as exc:
+            return {
+                "utterance": utterance,
+                "response": {
+                    "answer": (
+                        "YouTube Music todavía no está listo para reproducir en ese altavoz. "
+                        "No reproduje nada."
+                    ),
+                    "status": "attention_required",
+                    "reasoning_mode": "deterministic-music-assistant-status",
+                },
+                "prepared_action": None,
+                "music_error": type(exc).__name__,
+                "music_assistant": state.music_assistant.status().as_dict(),
+                "evidence_count": len(state.evidence_snapshot()),
+            }
+        return {
+            "utterance": utterance,
+            "response": {
+                "answer": (
+                    f"Envié {playback['query']} a {playback['player_alias']} mediante "
+                    "YouTube Music y Music Assistant."
+                ),
+                "status": "all_clear",
+                "reasoning_mode": "deterministic-music-assistant-playback",
+            },
+            "prepared_action": None,
+            "music_playback": playback,
             "evidence_count": len(state.evidence_snapshot()),
         }
 

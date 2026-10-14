@@ -16,6 +16,7 @@ from .dmx import DMXBridge
 from .google_home import GoogleHomeBridge, GoogleHomeStatus
 from .home_assistant import HomeAssistantBridge
 from .incident_store import IncidentStore
+from .music_assistant import MusicAssistantBridge
 from .ring import RingAdapterStatus, RingOfficialAdapter, RingSimulatorAdapter
 from .voiceops import OWNER_TARGET_ALIAS, VoiceOpsBridge
 from .whatsapp_approval import WhatsAppApprovalBridge
@@ -95,6 +96,7 @@ class GuardianState:
         self.home_assistant = HomeAssistantBridge()
         self.dmx = DMXBridge()
         self.google_home = GoogleHomeBridge()
+        self.music_assistant = MusicAssistantBridge(self.home_assistant)
         self.voiceops = VoiceOpsBridge()
         self.events: list[dict[str, Any]] = []
         self.pending: dict[str, PendingAction] = {}
@@ -140,6 +142,7 @@ class GuardianState:
             self.ring_adapter = RingSimulatorAdapter()
             self.ring_official = RingOfficialAdapter()
             self.google_home = GoogleHomeBridge()
+            self.music_assistant = MusicAssistantBridge(self.home_assistant)
         if not preserve_durable_actions:
             for item in self.approval_store.list_pending():
                 self.approval_store.finish(str(item["action_id"]), "cancelled")
