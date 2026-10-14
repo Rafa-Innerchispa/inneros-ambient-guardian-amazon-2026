@@ -147,6 +147,27 @@ def test_guardian_intent_calls_local_backend(monkeypatch):
     assert response["response"]["shouldEndSession"] is False
 
 
+def test_pin_confirmation_is_opt_in_by_default(monkeypatch):
+    calls = []
+    monkeypatch.delenv("AMBIENT_GUARDIAN_PIN_CONFIRMATION_ENABLED", raising=False)
+    monkeypatch.setattr(
+        gateway,
+        "_backend_turn",
+        lambda query, speaker_context=None: calls.append((query, speaker_context))
+        or "Sensitive request was not executed by the gateway.",
+    )
+    payload = request_payload(
+        intent_request("activa la alarma"),
+        person={
+            "personId": "person-owner",
+            "authenticationConfidenceLevel": {"level": 300},
+        },
+    )
+    response = gateway._dispatch(payload)
+    assert "directives" not in response["response"]
+    assert calls and calls[0][0] == "activa la alarma"
+
+
 def test_required_account_linking_returns_alexa_link_account_card(monkeypatch):
     called = []
     monkeypatch.setenv("AMBIENT_GUARDIAN_ACCOUNT_LINKING_REQUIRED", "1")
@@ -185,6 +206,7 @@ def test_linked_owner_token_is_validated_but_never_forwarded(monkeypatch):
 
 def test_alarm_intent_requests_voice_pin_before_backend(monkeypatch):
     called = []
+    monkeypatch.setenv("AMBIENT_GUARDIAN_PIN_CONFIRMATION_ENABLED", "1")
     monkeypatch.setattr(
         gateway,
         "_backend_turn",
@@ -257,6 +279,7 @@ def test_backend_url_must_stay_loopback(monkeypatch):
 
 def test_siren_intent_requests_voice_pin_before_backend(monkeypatch):
     called = []
+    monkeypatch.setenv("AMBIENT_GUARDIAN_PIN_CONFIRMATION_ENABLED", "1")
     monkeypatch.setattr(
         gateway,
         "_backend_turn",

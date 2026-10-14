@@ -258,6 +258,10 @@ def _verify_request(headers: dict[str, str], body: bytes) -> dict[str, Any]:
     return payload
 
 
+def _pin_confirmation_enabled() -> bool:
+    return os.getenv("AMBIENT_GUARDIAN_PIN_CONFIRMATION_ENABLED", "0") == "1"
+
+
 def _alarm_query(query: str) -> bool:
     text = " ".join((query or "").lower().split())
     return bool(
@@ -414,7 +418,11 @@ def _dispatch(payload: dict[str, Any]) -> dict[str, Any]:
         speaker = _speaker_context(payload)
         speaker["account_linked"] = linked
         speaker["_request_id"] = str(request_payload.get("requestId") or "")
-        if _alarm_query(query) and int(speaker.get("authentication_confidence") or 0) < 400:
+        if (
+            _pin_confirmation_enabled()
+            and _alarm_query(query)
+            and int(speaker.get("authentication_confidence") or 0) < 400
+        ):
             return _pin_confirmation_response(query)
         try:
             speech = _backend_turn(query, speaker)
