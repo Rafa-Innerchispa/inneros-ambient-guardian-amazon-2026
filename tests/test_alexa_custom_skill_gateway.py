@@ -1,5 +1,7 @@
 import base64
 import json
+import os
+import stat
 from datetime import datetime, timedelta, timezone
 
 import pytest
@@ -352,6 +354,20 @@ def test_backend_url_must_stay_loopback(monkeypatch):
     )
     with pytest.raises(RuntimeError, match="loopback-only"):
         gateway._backend_url()
+
+
+def test_gateway_error_log_is_minimal_and_private(monkeypatch, tmp_path):
+    error_file = tmp_path / "alexa_gateway_errors.jsonl"
+    monkeypatch.setenv("AMBIENT_GUARDIAN_GATEWAY_ERROR_FILE", str(error_file))
+
+    gateway._record_gateway_error(ValueError("certificate rejected\nsecret-body"))
+
+    record = json.loads(error_file.read_text(encoding="utf-8"))
+    assert record["error_type"] == "ValueError"
+    assert record["error"] == "certificate rejected secret-body"
+    assert set(record) == {"timestamp", "error_type", "error"}
+    if os.name != "nt":
+        assert stat.S_IMODE(error_file.stat().st_mode) == 0o600
 
 
 def test_siren_intent_requests_voice_pin_before_backend(monkeypatch):
