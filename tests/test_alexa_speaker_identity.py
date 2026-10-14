@@ -1,3 +1,4 @@
+import os
 from pathlib import Path
 
 from ambient_guardian.alexa_skill_gateway import (
@@ -52,7 +53,11 @@ def test_candidate_capture_is_local_and_does_not_authorize(monkeypatch, tmp_path
     assert record["person_id"] == "amzn1.ask.person.owner"
     assert record["authorized"] is False
     assert candidate.exists()
-    assert candidate.stat().st_mode & 0o777 == 0o600
+    # The production gateway runs on Linux, where the candidate file must be
+    # owner-only. Windows reports synthesized POSIX mode bits and cannot prove
+    # this chmod invariant through ``stat``.
+    if os.name != "nt":
+        assert candidate.stat().st_mode & 0o777 == 0o600
 
 
 def test_candidate_capture_ignores_unrecognized_speaker(monkeypatch, tmp_path):
