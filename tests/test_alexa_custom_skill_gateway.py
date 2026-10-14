@@ -54,6 +54,7 @@ def intent_request(
     locale="en-US",
     when=None,
     task=None,
+    target=None,
 ):
     slots = {}
     if query is not None:
@@ -72,6 +73,12 @@ def intent_request(
         slots["task"] = {
             "name": "task",
             "value": task,
+            "confirmationStatus": "NONE",
+        }
+    if target is not None:
+        slots["target"] = {
+            "name": "target",
+            "value": target,
             "confirmationStatus": "NONE",
         }
     return {
@@ -191,6 +198,13 @@ def test_spanish_launch_presents_inneros_as_voice_front_door(monkeypatch):
             "PBXCallbackIntent",
             "prepárame una llamada por la central con el reporte del último incidente",
         ),
+        ("HomeHistoryIntent", "dame los eventos reales de la madrugada"),
+        ("RingDemoStatusIntent", "qué detectó Ring en el demo"),
+        ("DMXStatusIntent", "qué puede hacer el sistema DMX por Art-Net"),
+        (
+            "PBXPrivateDestinationIntent",
+            "llama a mi celular usando la central Grandstream",
+        ),
     ],
 )
 def test_stable_intents_map_to_bounded_backend_queries(
@@ -212,6 +226,26 @@ def test_stable_intents_map_to_bounded_backend_queries(
         )
     )
     assert calls == [expected]
+
+
+def test_unifi_restart_intent_preserves_only_target_alias(monkeypatch):
+    calls = []
+    monkeypatch.setattr(
+        gateway,
+        "_backend_turn",
+        lambda query, speaker_context=None: calls.append(query) or "respuesta",
+    )
+    gateway._dispatch(
+        request_payload(
+            intent_request(
+                None,
+                intent_name="UnifiRestartIntent",
+                locale="es-US",
+                target="U7 Living",
+            )
+        )
+    )
+    assert calls == ["prepara reiniciar el UniFi U7 Living"]
 
 
 def test_time_slot_becomes_deterministic_temporal_query(monkeypatch):

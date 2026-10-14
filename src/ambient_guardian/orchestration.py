@@ -4,8 +4,10 @@ import json
 import os
 import re
 import secrets
-from datetime import datetime, timezone
+from collections import Counter
+from datetime import datetime, time as clock_time, timedelta, timezone
 from typing import Any
+from zoneinfo import ZoneInfo
 
 from . import aws_strands
 from .core import GuardianReasoner, GuardianState
@@ -37,6 +39,11 @@ _PBX_NEGATED = re.compile(
     r"|\b(?:no\s+me\s+llames|no\s+llames|cancela)\b",
     re.I,
 )
+_PBX_DIRECT_PHONE_REQUEST = re.compile(
+    r"\b(?:llama|llamar|ll[aá]mame|marca|marcar|call)\b[^.]*"
+    r"\b(?:celular|tel[eé]fono|n[uú]mero)\b",
+    re.I,
+)
 
 _CAPABILITIES_QUERY = re.compile(
     r"\b(?:qu[eé]\s+puedes\s+hacer|c[oó]mo\s+me\s+puedes\s+ayudar|qu[eé]\s+controla\s+inneros|"
@@ -47,6 +54,29 @@ _VOICEOPS_STATUS_QUERY = re.compile(
     r"\b(?:c[oó]mo\s+est[aá]|estado\s+de|est[aá]\s+lista|funciona)\b[^.]*"
     r"\b(?:voice\s*ops|central|pbx|grandstream|sistema\s+de\s+llamadas)\b"
     r"|\b(?:voice\s*ops|pbx|grandstream)\b[^.]*\b(?:status|ready|working)\b",
+    re.I,
+)
+
+_HOME_HISTORY_QUERY = re.compile(
+    r"\b(?:novedades?|historial|eventos?|madrugada|anoche|esta noche|"
+    r"qu[eé]\s+pas[oó]\s+(?:en|con)\s+(?:la\s+)?casa|reporte\s+de\s+la\s+casa|"
+    r"modo\s+bater[ií]a|corte\s+de\s+(?:luz|energ[ií]a)|se\s+fue\s+la\s+luz|"
+    r"ca[ií]da\s+de\s+(?:internet|wifi)|luces?\s+se\s+(?:encendieron|apagaron))\b",
+    re.I,
+)
+_RING_DEMO_QUERY = re.compile(
+    r"\b(?:ring|timbre)\b[^.]*\b(?:demo|simulad[oa]|vio|detect[oó]|pas[oó]|evento|estado)\b"
+    r"|\b(?:demo|simula)\b[^.]*\bring\b",
+    re.I,
+)
+_DMX_STATUS_QUERY = re.compile(
+    r"\b(?:qu[eé]\s+puede\s+hacer|estado|status|capacidades?|efectos?)\b[^.]*"
+    r"\b(?:dmx|art[ -]?net|luces?\s+de\s+discoteca)\b",
+    re.I,
+)
+_UNIFI_RESTART_QUERY = re.compile(
+    r"\b(?:reinicia|reiniciar|reinicio|reboot|restart)\b[^.]*\b(?:unifi|u7|gateway|wifi|"
+    r"access\s+point|punto\s+de\s+acceso|estudio|cuarto|living)\b",
     re.I,
 )
 
@@ -363,6 +393,11 @@ _DMX_SCENES: dict[str, str] = {
     "morado uv": "morado_uv",
     "purple uv": "morado_uv",
     "rojo sangre": "rojo_sangre",
+    "discoteca": "rainbow",
+    "modo discoteca": "rainbow",
+    "fiesta": "rainbow",
+    "modo fiesta": "rainbow",
+    "party": "rainbow",
     "blackout": "blackout",
 }
 
@@ -567,13 +602,214 @@ def _deterministic_fallback(
     }
 
 
+def _history_window(utterance: str) -> tuple[datetime, datetime, str]:
+    timezone_name = os.getenv(
+        "AMBIENT_GUARDIAN_HOME_TIMEZONE", "America/Guayaquil"
+    ).strip() or "America/Guayaquil"
+    try:
+        local_zone = ZoneInfo(timezone_name)
+    except Exception:
+        local_zone = timezone(timedelta(hours=-5))
+    now = datetime.now(timezone.utc).astimezone(local_zone)
+    text = utterance.lower()
+    if "madrugada" in text:
+        start = datetime.combine(now.date(), clock_time(0, 0), local_zone)
+        six_am = datetime.combine(now.date(), clock_time(6, 0), local_zone)
+        end = min(now, six_am)
+        label = "la madrugada"
+    elif "anoche" in text or "esta noche" in text:
+        start = datetime.combine(
+            now.date() - timedelta(days=1), clock_time(20, 0), local_zone
+        )
+        end = min(
+            now,
+            datetime.combine(now.date(), clock_time(8, 0), local_zone),
+        )
+        label = "la noche y la madrugada"
+    elif "hoy" in text:
+        start = datetime.combine(now.date(), clock_time(0, 0), local_zone)
+        end = now
+        label = "hoy"
+    else:
+        hours_match = re.search(r"(?:[uú]ltimas?)\s+(\d{1,2})\s+horas?", text)
+        hours = max(1, min(int(hours_match.group(1)), 24)) if hours_match else 12
+        end = now
+        start = end - timedelta(hours=hours)
+        label = f"las últimas {hours} horas"
+    if end <= start:
+        end = now
+    return start, end, label
+
+
+def _format_local_time(raw: str) -> str:
+    timezone_name = os.getenv(
+        "AMBIENT_GUARDIAN_HOME_TIMEZONE", "America/Guayaquil"
+    ).strip() or "America/Guayaquil"
+    try:
+        local_zone = ZoneInfo(timezone_name)
+    except Exception:
+        local_zone = timezone(timedelta(hours=-5))
+    observed = datetime.fromisoformat(raw.replace("Z", "+00:00"))
+    if observed.tzinfo is None:
+        observed = observed.replace(tzinfo=timezone.utc)
+    return observed.astimezone(local_zone).strftime("%H:%M")
+
+
+def _home_history_response(utterance: str, state: GuardianState) -> dict[str, Any]:
+    start, end, window_label = _history_window(utterance)
+    try:
+        timeline = state.home_assistant.history_timeline(start, end, max_events=80)
+    except Exception as exc:
+        return {
+            "response": {
+                "answer": (
+                    "No pude consultar ahora el historial real de Home Assistant. "
+                    "No usaré los eventos simulados de Ring como sustituto."
+                ),
+                "status": "attention_required",
+                "reasoning_mode": "deterministic-home-assistant-history",
+            },
+            "timeline": {
+                "truth": "UNAVAILABLE",
+                "error": type(exc).__name__,
+                "events": [],
+            },
+        }
+
+    events = list(timeline.get("events") or [])
+    if not events:
+        answer = (
+            f"Home Assistant no registró cambios relevantes durante {window_label}. "
+            "Este resultado usa el historial real de la casa; no incluye el demo de Ring."
+        )
+        status = "all_clear"
+    else:
+        important = [
+            event
+            for event in events
+            if event.get("category") in {"energy", "security", "network"}
+            or event.get("state") in {"unavailable", "triggered"}
+        ]
+        if not important:
+            important = events
+        zone_activations = Counter(
+            str(event.get("label") or event.get("entity_id"))
+            for event in events
+            if "_zona_" in str(event.get("entity_id") or "")
+            and event.get("state") == "on"
+        )
+        details = []
+        for event in important[:8]:
+            try:
+                at = _format_local_time(str(event.get("timestamp") or ""))
+            except ValueError:
+                at = "hora desconocida"
+            details.append(f"A las {at}, {str(event.get('summary') or '').lower()}")
+        if zone_activations:
+            zones = ", ".join(
+                f"{label}, {count} veces"
+                for label, count in zone_activations.most_common(4)
+            )
+            details.append(f"Zonas más activas: {zones}")
+        current = dict(timeline.get("current_states") or {})
+        electrical_snapshot = []
+        for entity_id, suffix in (
+            ("sensor.inneros_pi01_solar_grid_voltage", "voltios de red"),
+            ("sensor.inneros_pi01_solar_battery_capacity", "por ciento de batería"),
+            ("sensor.inneros_pi01_solar_output_power", "vatios de salida"),
+            ("sensor.breaker_phase_a_voltage", "voltios en el breaker"),
+        ):
+            value = current.get(entity_id)
+            if value not in {None, "", "unknown", "unavailable"}:
+                electrical_snapshot.append(f"{value} {suffix}")
+        if electrical_snapshot and re.search(
+            r"\b(?:luz|energ[ií]a|el[eé]ctric|solar|inversor|bater[ií]a|breaker)\b",
+            utterance,
+            re.I,
+        ):
+            details.append("Lectura actual: " + ", ".join(electrical_snapshot))
+        categories = Counter(str(event.get("category") or "home") for event in events)
+        answer = (
+            f"Informe real de {window_label}: Home Assistant registró {len(events)} cambios. "
+            + ". ".join(details)
+            + ". No mezclé eventos simulados de Ring."
+        )
+        status = (
+            "attention_required"
+            if categories.get("energy") or categories.get("security") or categories.get("network")
+            else "all_clear"
+        )
+    return {
+        "response": {
+            "answer": answer[:1800],
+            "status": status,
+            "reasoning_mode": "deterministic-home-assistant-history",
+        },
+        "timeline": timeline,
+    }
+
+
+def _ring_demo_response(state: GuardianState) -> dict[str, Any]:
+    ring_events = [
+        event
+        for event in state.recent_events(50)
+        if str((event.get("metadata") or {}).get("provider") or "") == "ring"
+        and str((event.get("metadata") or {}).get("truth") or "") == "SIMULATED"
+    ]
+    if not ring_events:
+        answer = (
+            "El adaptador Ring está listo en modo demo, pero no hay un evento simulado "
+            "activo. Puedo inyectar movimiento, persona, timbre o paquete y correlacionarlo "
+            "con los sensores reales de la casa. Ring seguirá rotulado como simulado."
+        )
+    else:
+        latest = ring_events[-1]
+        answer = (
+            f"Demo Ring simulado: {latest.get('summary')} Hay {len(ring_events)} eventos "
+            "Ring de demostración en la sesión. El análisis de InnerOS es real, pero la "
+            "fuente Ring es simulada."
+        )
+    return {
+        "answer": answer,
+        "status": "all_clear",
+        "reasoning_mode": "deterministic-ring-demo",
+    }
+
+
+def _dmx_status_response(state: GuardianState) -> dict[str, Any]:
+    status = state.dmx.status().as_dict()
+    scenes = sorted(state.dmx.scene_allowlist)
+    targets = sorted(state.dmx.target_allowlist)
+    if status.get("reachable"):
+        answer = (
+            "El motor profesional DMX está en línea por protocolo Art-Net. Puedo manejar "
+            f"escenas {', '.join(scene.replace('_', ' ') for scene in scenes)} y grupos "
+            f"{', '.join(target.replace('_', ' ') for target in targets)}. También puedo "
+            "cambiar color y nivel en tiempo real. La aceptación del motor se verifica; "
+            "la luz física de cada fixture no tiene sensor de retorno."
+        )
+        response_status = "all_clear"
+    else:
+        answer = (
+            "La integración DMX y Art-Net está configurada, pero el motor local no responde ahora."
+        )
+        response_status = "attention_required"
+    return {
+        "answer": answer,
+        "status": response_status,
+        "reasoning_mode": "deterministic-dmx-status",
+    }
+
+
 def _inneros_capabilities_response() -> dict[str, Any]:
     return {
         "answer": (
-            "Soy la entrada de voz de InnerOS. Puedo revisar el estado de la casa, "
-            "resumir incidentes de Ring, consultar VoiceOps y la central Grandstream, "
-            "preparar una llamada al propietario con el último reporte, y controlar "
-            "luces o escenas DMX permitidas. La alarma, la sirena y las llamadas reales "
+            "Soy la entrada de voz de InnerOS. Puedo leer el historial real de Home Assistant: "
+            "alarma, zonas, luces, energía solar, modo batería, internet y UniFi. Puedo "
+            "correlacionarlo con un demo Ring claramente simulado, consultar VoiceOps y la "
+            "central Grandstream, preparar una llamada al alias privado del propietario, "
+            "preparar reinicios UniFi permitidos y controlar escenas profesionales DMX por "
+            "Art-Net en tiempo real. La alarma, la sirena, los reinicios y las llamadas reales "
             "mantienen verificación y aprobación; no marco números arbitrarios. "
             "También puedo preparar un borrador de tarea para Antigravity. Ese borrador "
             "no se envía ni ejecuta sin una revisión separada."
@@ -672,6 +908,110 @@ def simulated_alexa_turn(
             "utterance": utterance,
             "response": _inneros_capabilities_response(),
             "prepared_action": None,
+            "evidence_count": len(state.evidence_snapshot()),
+        }
+
+    if _PBX_DIRECT_PHONE_REQUEST.search(normalized_utterance):
+        return {
+            "utterance": "[solicitud de llamada con destino redactado]",
+            "response": {
+                "answer": (
+                    "Por privacidad y seguridad no uso ni guardo números dictados por voz. "
+                    "VoiceOps llama únicamente al alias privado del propietario ya configurado. "
+                    "Di: prepara una llamada por Grandstream con el último incidente. La llamada "
+                    "quedará pendiente de aprobación y no se ejecutará todavía."
+                ),
+                "status": "attention_required",
+                "reasoning_mode": "deterministic-private-voiceops-destination",
+            },
+            "prepared_action": None,
+            "evidence_count": len(state.evidence_snapshot()),
+        }
+
+    if _RING_DEMO_QUERY.search(normalized_utterance):
+        return {
+            "utterance": utterance,
+            "response": _ring_demo_response(state),
+            "prepared_action": None,
+            "ring_truth": "SIMULATED",
+            "evidence_count": len(state.evidence_snapshot()),
+        }
+
+    if _HOME_HISTORY_QUERY.search(normalized_utterance):
+        history = _home_history_response(normalized_utterance, state)
+        return {
+            "utterance": utterance,
+            "response": history["response"],
+            "prepared_action": None,
+            "home_timeline": history["timeline"],
+            "evidence_count": len(state.evidence_snapshot()),
+        }
+
+    if _DMX_STATUS_QUERY.search(normalized_utterance):
+        return {
+            "utterance": utterance,
+            "response": _dmx_status_response(state),
+            "prepared_action": None,
+            "dmx": state.dmx.status().as_dict(),
+            "evidence_count": len(state.evidence_snapshot()),
+        }
+
+    if _UNIFI_RESTART_QUERY.search(normalized_utterance):
+        resolved = state.home_assistant.resolve_unifi_restart_target(
+            normalized_utterance
+        )
+        if resolved is None:
+            labels = [
+                target["label"]
+                for target in state.home_assistant.unifi_restart_targets.values()
+            ]
+            targets = ", ".join(labels) if labels else "ninguno"
+            return {
+                "utterance": utterance,
+                "response": {
+                    "answer": (
+                        "Indica un equipo UniFi permitido. Los objetivos disponibles son: "
+                        f"{targets}. No reinicié ningún equipo."
+                    ),
+                    "status": "attention_required",
+                    "reasoning_mode": "deterministic-unifi-restart",
+                },
+                "prepared_action": None,
+                "evidence_count": len(state.evidence_snapshot()),
+            }
+        alias, target = resolved
+        try:
+            prepared = state.prepare_action(
+                f"unifi_restart:{alias}",
+                "Explicit owner voice request; separate authenticated approval required",
+            )
+        except ValueError as exc:
+            return {
+                "utterance": utterance,
+                "response": {
+                    "answer": (
+                        "Ese reinicio UniFi no está habilitado en la lista segura. "
+                        "No reinicié ningún equipo."
+                    ),
+                    "status": "attention_required",
+                    "reasoning_mode": "deterministic-unifi-restart",
+                    "prepare_error": str(exc),
+                },
+                "prepared_action": None,
+                "evidence_count": len(state.evidence_snapshot()),
+            }
+        return {
+            "utterance": utterance,
+            "response": {
+                "answer": (
+                    f"Preparé el reinicio controlado de {target['label']} por UniFi y Home "
+                    "Assistant. No se ejecutó todavía; requiere la aprobación autenticada "
+                    "del propietario y después verificaré su estado o tiempo de actividad."
+                ),
+                "status": "attention_required",
+                "reasoning_mode": "deterministic-unifi-restart",
+            },
+            "prepared_action": prepared,
             "evidence_count": len(state.evidence_snapshot()),
         }
 
@@ -911,8 +1251,10 @@ def simulated_alexa_turn(
                 "utterance": utterance,
                 "response": {
                     "answer": (
-                        f"The local DMX engine accepted {subject} after the fixture power preflight. "
-                        "The command was sent through Art-Net; fixture light output is not sensor-verified."
+                        f"El motor DMX profesional aceptó {subject} después de verificar la "
+                        "alimentación de los fixtures. Envié la orden en tiempo real por protocolo "
+                        "Art-Net. El motor confirmó la orden, aunque la luz física no tiene sensor "
+                        "de retorno independiente."
                     ),
                     "status": "all_clear",
                     "reasoning_mode": "deterministic-local-dmx",
@@ -927,7 +1269,8 @@ def simulated_alexa_turn(
                 "utterance": utterance,
                 "response": {
                     "answer": (
-                        "I could not safely verify fixture power, so I did not send the DMX command."
+                        "No pude verificar de forma segura la alimentación de los fixtures, "
+                        "así que no envié la orden DMX por Art-Net."
                     ),
                     "status": "attention_required",
                     "reasoning_mode": "deterministic-local-dmx",

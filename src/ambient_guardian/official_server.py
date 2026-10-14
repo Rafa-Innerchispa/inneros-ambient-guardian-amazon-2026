@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import re
 import secrets
 from pathlib import Path
 from typing import Any
@@ -331,6 +332,12 @@ async def simulated_alexa(request: Request) -> Response:
         REASONER,
         speaker_context=speaker_context,
     )
+    evidence_utterance = str(result.get("utterance") or utterance)
+    evidence_utterance = re.sub(
+        r"\+?\d[\d\s().-]{5,}",
+        "[número redactado]",
+        evidence_utterance,
+    )
     incident = result.get("incident") if isinstance(result.get("incident"), dict) else {}
     receipt = incident.get("receipt") if isinstance(incident.get("receipt"), dict) else None
     prepared = (
@@ -369,10 +376,14 @@ async def simulated_alexa(request: Request) -> Response:
         intent = (
             "prepare_pbx_callback"
             if prepared.get("action") == "voiceops_owner_callback"
+            else "prepare_unifi_restart"
+            if str(prepared.get("action") or "").startswith("unifi_restart:")
             else "prepare_action"
         )
         if prepared.get("action") == "voiceops_owner_callback":
             systems.append("VoiceOps (prepare only)")
+        elif str(prepared.get("action") or "").startswith("unifi_restart:"):
+            systems.append("Home Assistant + UniFi (prepare only)")
     physical_verified = (
         os.getenv("AMBIENT_GUARDIAN_PHYSICAL_ALEXA_VERIFIED", "0") == "1"
     )
@@ -380,7 +391,7 @@ async def simulated_alexa(request: Request) -> Response:
         "REAL" if skill_bridge and physical_verified else "CODE_READY" if skill_bridge else "SIMULATED"
     )
     STATE.record_live_evidence(
-        utterance=utterance,
+        utterance=evidence_utterance,
         intent=intent,
         systems_consulted=systems,
         incident_receipt=receipt,
@@ -403,7 +414,10 @@ async def simulated_alexa(request: Request) -> Response:
                 "REAL" if reasoning_mode == "local-qwen-vllm" or reasoning_mode.startswith("strands") else "CODE_READY"
             ),
             "action": (
-                "SIMULATED"
+                "REAL"
+                if prepared
+                and str(prepared.get("action") or "").startswith("unifi_restart:")
+                else "SIMULATED"
                 if prepared and prepared.get("action") != "voiceops_owner_callback"
                 else str((STATE.voiceops.status() or {}).get("truth_label") or "CODE_READY")
                 if prepared
@@ -411,7 +425,7 @@ async def simulated_alexa(request: Request) -> Response:
             ),
         },
     )
-    if prepared and prepared.get("action") == "voiceops_owner_callback":
+    if prepared and STATE.action_requires_owner(str(prepared.get("action") or "")):
         result = {
             **result,
             "prepared_action": public_prepared,
@@ -423,12 +437,11 @@ async def simulated_alexa(request: Request) -> Response:
 async def approve_http_action(request: Request) -> Response:
     """Trusted human-demo approval surface. It is intentionally absent from MCP tools."""
     token = str(request.path_params.get("token", ""))
-    if (
-        STATE.pending_action_name(token) == "voiceops_owner_callback"
-        and not _owner_authorized(request)
+    if STATE.action_requires_owner(STATE.pending_action_name(token)) and not _owner_authorized(
+        request
     ):
         return JSONResponse(
-            {"detail": "owner authorization required for PBX callback"},
+            {"detail": "owner authorization required for this sensitive action"},
             status_code=401,
         )
     try:
@@ -466,6 +479,35 @@ async def approve_pbx_action(request: Request) -> Response:
         status = "executed_unverified"
     else:
         status = "not_executed"
+    return JSONResponse({"status": status, "evidence": evidence})
+
+
+@mcp.custom_route("/api/unifi/actions/{action_id}/approve", methods=["POST"])
+async def approve_unifi_action(request: Request) -> Response:
+    """Owner-authenticated UniFi approval without exposing the one-time token."""
+    if not _owner_authorized(request):
+        return JSONResponse(
+            {"detail": "owner authorization required for UniFi restart"},
+            status_code=401,
+        )
+    action_id = str(request.path_params.get("action_id") or "").strip()
+    matching = STATE.pending_action_name_by_id(action_id)
+    if matching is None or not matching.startswith("unifi_restart:"):
+        return JSONResponse(
+            {"detail": "Unknown, expired, or already-used UniFi action id"},
+            status_code=409,
+        )
+    try:
+        evidence = STATE.approve_action_id(action_id, expected_action=matching)
+    except ValueError as exc:
+        return JSONResponse({"detail": str(exc)}, status_code=409)
+    status = (
+        "executed_and_verified"
+        if evidence.get("executed") and evidence.get("verified")
+        else "executed_unverified"
+        if evidence.get("executed")
+        else "not_executed"
+    )
     return JSONResponse({"status": status, "evidence": evidence})
 
 

@@ -97,16 +97,19 @@ class GuardianState:
 
     def reset_demo(self) -> None:
         with self._lock:
-            self.events = [
-                {
-                    "id": "evt-package-demo",
-                    "source": "ring-compatible-simulator",
-                    "type": "package_detected",
-                    "summary": "A package was detected at the front door.",
-                    "severity": "info",
-                    "timestamp": iso_now(),
-                }
-            ]
+            self.events = []
+            if os.getenv("AMBIENT_GUARDIAN_SEED_DEMO_EVENTS", "0") == "1":
+                self.events.append(
+                    {
+                        "id": "evt-package-demo",
+                        "source": "ring-compatible-simulator",
+                        "type": "package_detected",
+                        "summary": "A package was detected at the front door.",
+                        "severity": "info",
+                        "timestamp": iso_now(),
+                        "metadata": {"provider": "ring", "truth": "SIMULATED"},
+                    }
+                )
             self.pending = {}
             self.evidence = []
             self.live_evidence = {
@@ -406,7 +409,15 @@ class GuardianState:
         }
 
     def prepare_action(self, action: str, reason: str = "") -> dict[str, Any]:
-        if action not in self.ACTIONS:
+        unifi_alias = None
+        if action.startswith("unifi_restart:"):
+            unifi_alias = action.split(":", 1)[1].strip().lower()
+            if (
+                not self.home_assistant.unifi_restart_enabled
+                or unifi_alias not in self.home_assistant.unifi_restart_targets
+            ):
+                raise ValueError("UniFi restart target is outside the owner allowlist")
+        elif action not in self.ACTIONS:
             raise ValueError("Action is outside the public demo allowlist")
         linked_incident = self.incident_store.latest_receipt()
         if action == "voiceops_owner_callback":
@@ -416,6 +427,12 @@ class GuardianState:
             reason = " ".join(
                 f"Incident report {linked_incident['incident_id']}: {incident.get('summary') or 'Review the recorded incident.'}".split()
             )[:600]
+        elif unifi_alias:
+            target = self.home_assistant.unifi_restart_targets[unifi_alias]
+            reason = (
+                f"Owner requested a controlled restart of {target['label']} through "
+                "Home Assistant; separate authenticated approval is still required."
+            )
         token = secrets.token_urlsafe(24)
         action_id = f"act-{secrets.token_hex(8)}"
         prepared = utc_now()
@@ -469,6 +486,11 @@ class GuardianState:
         }
         if action == "voiceops_owner_callback":
             prepared_result["target_alias"] = OWNER_TARGET_ALIAS
+        elif unifi_alias:
+            prepared_result["target_alias"] = unifi_alias
+            prepared_result["target_label"] = self.home_assistant.unifi_restart_targets[
+                unifi_alias
+            ]["label"]
         self.record_live_evidence(
             prepared_action={
                 key: value
@@ -481,17 +503,37 @@ class GuardianState:
                 **dict(self.live_evidence.get("truth") or {}),
                 "action": (
                     "SIMULATED"
-                    if action == "voiceops_owner_callback"
-                    and self.voiceops.mode == "simulator"
+                    if action == "voiceops_owner_callback" and self.voiceops.mode == "simulator"
+                    else "REAL"
+                    if unifi_alias
                     else "CODE_READY"
                 ),
             },
         )
         return prepared_result
 
+    @staticmethod
+    def action_requires_owner(action: str | None) -> bool:
+        return bool(
+            action == "voiceops_owner_callback"
+            or (action or "").startswith("unifi_restart:")
+        )
+
     def pending_action_name(self, token: str) -> str | None:
         with self._lock:
             item = self.pending.get(token)
+            return item.action if item else None
+
+    def pending_action_name_by_id(self, action_id: str) -> str | None:
+        with self._lock:
+            item = next(
+                (
+                    pending
+                    for pending in self.pending.values()
+                    if pending.action_id == action_id
+                ),
+                None,
+            )
             return item.action if item else None
 
     def approve_action_id(
@@ -529,6 +571,11 @@ class GuardianState:
             after = self.voiceops.request_owner_callback(
                 correlation_id=item.action_id,
                 reason=item.reason,
+            )
+            verified = bool(after.get("verified"))
+        elif item.action.startswith("unifi_restart:"):
+            after = self.home_assistant.restart_unifi_device(
+                item.action.split(":", 1)[1]
             )
             verified = bool(after.get("verified"))
         else:

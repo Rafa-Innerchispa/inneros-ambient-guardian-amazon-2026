@@ -34,6 +34,8 @@ The public hackathon build controls only a simulator. Private customer/device co
 - Ring-compatible normalized demo ingress for safe public testing, plus a separate official Ring/Amazon Vision adapter with fail-closed signed webhook verification. Demo events remain explicitly SIMULATED unless a real provider session/signature is verified.
 - Optional **Home Assistant + Alexa Devices** bridge for real Echo/Fire endpoints, read-only alarm context, owner-authorized speech, and allowlisted reversible lighting; direct Alexa+ MCP Toolkit linking remains separate and unclaimed
 - **InnerOS DMX / Art-Net bridge** to the existing loopback-only lighting engine for allowlisted colors/scenes Alexa does not natively understand
+- **Real Home Assistant timeline** for alarm zones, lights, solar/battery transitions, and network availability, kept separate from truth-labeled Ring demo events
+- **Two-phase UniFi restart** for explicitly allowlisted devices: Alexa prepares; an owner-authenticated route executes and checks state/uptime evidence
 - Local Qwen/vLLM reasoning using an OpenAI-compatible endpoint
 - Deterministic local fallback if the LLM is unavailable
 - **AWS Strands Agents SDK** as a real read-only orchestration/synthesis layer against the local OpenAI-compatible Qwen endpoint
@@ -203,6 +205,12 @@ See [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md) for production host/origin settin
 | `VOICEOPS_RUNTIME_TOKEN` | unset | Optional runtime-only VoiceOps bearer token; never exposed in UI/MCP/Git |
 | `AMBIENT_GUARDIAN_LIGHT_CONTROL_ENABLED` | `0` | Enables bounded, reversible Home Assistant light control |
 | `AMBIENT_GUARDIAN_LIGHT_ALLOWLIST` | unset | Comma-separated allowlist of Home Assistant `light.*` entities |
+| `AMBIENT_GUARDIAN_HISTORY_ENTITY_ALLOWLIST` | unset | Comma-separated HA Recorder entities; a trailing `*` expands only that explicit prefix |
+| `AMBIENT_GUARDIAN_HISTORY_LABELS` | unset | JSON object mapping history entity IDs to safe spoken labels |
+| `AMBIENT_GUARDIAN_HOME_TIMEZONE` | `America/Guayaquil` | Timezone used for deterministic overnight/today summaries |
+| `AMBIENT_GUARDIAN_UNIFI_RESTART_ENABLED` | `0` | Enables only the two-phase owner-approved UniFi restart path |
+| `AMBIENT_GUARDIAN_UNIFI_RESTART_TARGETS` | unset | JSON allowlist mapping spoken aliases to HA restart, status, and uptime entities |
+| `AMBIENT_GUARDIAN_UNIFI_VERIFY_SECONDS` | `0` | Bounded post-approval state/uptime verification window, maximum 90 seconds |
 | `AMBIENT_GUARDIAN_DMX_URL` | unset | Loopback-only InnerOS DMX API base URL |
 | `AMBIENT_GUARDIAN_DMX_CONTROL_ENABLED` | `0` | Enables bounded DMX/Art-Net lighting control |
 | `AMBIENT_GUARDIAN_DMX_SCENE_ALLOWLIST` | unset | Comma-separated safe scene allowlist |

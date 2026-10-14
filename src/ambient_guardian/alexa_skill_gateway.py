@@ -425,6 +425,17 @@ def _guardian_query(request_payload: dict[str, Any]) -> str:
     intent_name = str(((request_payload.get("intent") or {}).get("name") or ""))
     if intent_name == "CapabilitiesIntent":
         return "qué puedes hacer dentro de InnerOS"
+    if intent_name == "HomeHistoryIntent":
+        return "dame los eventos reales de la madrugada"
+    if intent_name == "RingDemoStatusIntent":
+        return "qué detectó Ring en el demo"
+    if intent_name == "DMXStatusIntent":
+        return "qué puede hacer el sistema DMX por Art-Net"
+    if intent_name == "UnifiRestartIntent":
+        target = _slot_value(request_payload, "target")
+        return f"prepara reiniciar el UniFi {target}" if target else "reinicia un equipo UniFi"
+    if intent_name == "PBXPrivateDestinationIntent":
+        return "llama a mi celular usando la central Grandstream"
     if intent_name == "VoiceOpsStatusIntent":
         return "cómo está el sistema de llamadas VoiceOps y la central Grandstream"
     if intent_name == "PBXCallbackIntent":
@@ -480,6 +491,11 @@ def _dispatch(payload: dict[str, Any]) -> dict[str, Any]:
     if intent_name in {
         "AskGuardianIntent",
         "CapabilitiesIntent",
+        "HomeHistoryIntent",
+        "RingDemoStatusIntent",
+        "DMXStatusIntent",
+        "UnifiRestartIntent",
+        "PBXPrivateDestinationIntent",
         "VoiceOpsStatusIntent",
         "PBXCallbackIntent",
         "AntigravityDraftIntent",
