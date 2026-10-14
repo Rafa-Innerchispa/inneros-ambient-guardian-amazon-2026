@@ -186,6 +186,39 @@ def test_spanish_launch_presents_inneros_as_voice_front_door(monkeypatch):
     assert "incidentes" in speech
 
 
+def test_spanish_fallback_ends_session_instead_of_reprompt_loop():
+    response = gateway._dispatch(
+        request_payload(
+            intent_request(
+                None,
+                intent_name="AMAZON.FallbackIntent",
+                locale="es-US",
+            )
+        )
+    )
+
+    assert response["response"]["shouldEndSession"] is True
+    assert "reprompt" not in response["response"]
+    speech = response["response"]["outputSpeech"]["text"]
+    assert "No entendí" in speech
+    assert "se fue la luz" in speech
+
+
+@pytest.mark.parametrize(
+    "intent_name",
+    ["AMAZON.StopIntent", "AMAZON.CancelIntent", "AMAZON.NavigateHomeIntent"],
+)
+def test_spanish_exit_intents_close_skill(intent_name):
+    response = gateway._dispatch(
+        request_payload(
+            intent_request(None, intent_name=intent_name, locale="es-US")
+        )
+    )
+
+    assert response["response"]["shouldEndSession"] is True
+    assert response["response"]["outputSpeech"]["text"] == "InnerOS queda en espera."
+
+
 @pytest.mark.parametrize(
     ("intent_name", "expected"),
     [
@@ -226,6 +259,48 @@ def test_stable_intents_map_to_bounded_backend_queries(
         )
     )
     assert calls == [expected]
+
+
+@pytest.mark.parametrize(
+    ("intent_name", "expected"),
+    [
+        ("CapabilitiesIntent", "what can you do inside InnerOS"),
+        (
+            "HomeHistoryIntent",
+            "show me the real overnight home events and tell me if the power went out",
+        ),
+        ("RingDemoStatusIntent", "what did Ring detect in the demo"),
+        ("DMXStatusIntent", "what can the DMX system do over Art-Net"),
+        ("VoiceOpsStatusIntent", "is VoiceOps and the Grandstream PBX ready"),
+        (
+            "PBXCallbackIntent",
+            "prepare a call through Grandstream with the latest incident report",
+        ),
+        (
+            "PBXPrivateDestinationIntent",
+            "call my cell phone using the Grandstream PBX",
+        ),
+    ],
+)
+def test_english_stable_intents_use_english_backend_queries(
+    monkeypatch, intent_name, expected
+):
+    calls = []
+    monkeypatch.setattr(
+        gateway,
+        "_backend_turn",
+        lambda query, speaker_context=None: calls.append((query, speaker_context))
+        or "answer",
+    )
+
+    gateway._dispatch(
+        request_payload(
+            intent_request(None, intent_name=intent_name, locale="en-US")
+        )
+    )
+
+    assert calls[0][0] == expected
+    assert calls[0][1]["response_locale"] == "en-US"
 
 
 def test_unifi_restart_intent_preserves_only_target_alias(monkeypatch):

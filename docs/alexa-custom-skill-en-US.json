@@ -19,6 +19,8 @@
             "ask guardian {query}",
             "tell me {query}",
             "check {query}",
+            "review {query}",
+            "query {query}",
             "what happened at {when}",
             "check the home at {when}"
           ]
@@ -27,6 +29,68 @@
           "name": "CapabilitiesIntent",
           "slots": [],
           "samples": ["what can you do", "how can you help", "what does inner os control"]
+        },
+        {
+          "name": "HomeHistoryIntent",
+          "slots": [],
+          "samples": [
+            "give me the real home updates",
+            "what happened overnight",
+            "give me the overnight events",
+            "was there a power outage overnight",
+            "was there an electrical outage",
+            "was there a power failure",
+            "did the power go out",
+            "when did the power go out",
+            "what happened to the electricity",
+            "check the power outage",
+            "are we running on battery",
+            "check the inverter",
+            "tell me the inverter status",
+            "tell me today's home history"
+          ]
+        },
+        {
+          "name": "RingDemoStatusIntent",
+          "slots": [],
+          "samples": [
+            "how is the ring demo",
+            "what did ring detect in the demo",
+            "show me the simulated ring event"
+          ]
+        },
+        {
+          "name": "DMXStatusIntent",
+          "slots": [],
+          "samples": [
+            "what can the dmx system do",
+            "what nightclub lighting effects do you have",
+            "how is art net",
+            "tell me the dmx capabilities"
+          ]
+        },
+        {
+          "name": "UnifiRestartIntent",
+          "slots": [
+            {
+              "name": "target",
+              "type": "AMAZON.SearchQuery"
+            }
+          ],
+          "samples": [
+            "prepare to restart unifi {target}",
+            "restart the unifi device {target}",
+            "prepare to restart access point {target}"
+          ]
+        },
+        {
+          "name": "PBXPrivateDestinationIntent",
+          "slots": [],
+          "samples": [
+            "call my cell phone using grandstream",
+            "call my phone through the PBX",
+            "call this number through the PBX"
+          ]
         },
         {
           "name": "VoiceOpsStatusIntent",

@@ -15,7 +15,7 @@ from starlette.responses import HTMLResponse, JSONResponse, Response
 
 from . import aws_strands
 from .core import GuardianReasoner, GuardianState
-from .orchestration import simulated_alexa_turn
+from .orchestration import localize_alexa_result, simulated_alexa_turn
 
 APP_VERSION = "0.6.0"
 STATE = GuardianState(
@@ -340,6 +340,10 @@ async def simulated_alexa(request: Request) -> Response:
         STATE,
         REASONER,
         speaker_context=speaker_context,
+    )
+    result = localize_alexa_result(
+        result,
+        str(speaker_context.get("response_locale") or ""),
     )
     evidence_utterance = str(result.get("utterance") or utterance)
     evidence_utterance = re.sub(

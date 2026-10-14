@@ -61,16 +61,21 @@ _HOME_HISTORY_QUERY = re.compile(
     r"\b(?:novedades?|historial|eventos?|madrugada|anoche|esta noche|"
     r"qu[eé]\s+pas[oó]\s+(?:en|con)\s+(?:la\s+)?casa|reporte\s+de\s+la\s+casa|"
     r"modo\s+bater[ií]a|corte\s+de\s+(?:luz|energ[ií]a)|se\s+fue\s+la\s+luz|"
-    r"ca[ií]da\s+de\s+(?:internet|wifi)|luces?\s+se\s+(?:encendieron|apagaron))\b",
+    r"ca[ií]da\s+(?:el[eé]ctrica|de\s+(?:energ[ií]a|internet|wifi))|"
+    r"luces?\s+se\s+(?:encendieron|apagaron)|overnight|history|events?|"
+    r"power\s+(?:outage|failure)|power\s+went\s+out|lost\s+(?:utility\s+)?power|"
+    r"battery\s+(?:backup|mode)|inverter|internet\s+(?:outage|went\s+down)|"
+    r"lights?\s+turned\s+(?:on|off))\b",
     re.I,
 )
 _RING_DEMO_QUERY = re.compile(
-    r"\b(?:ring|timbre)\b[^.]*\b(?:demo|simulad[oa]|vio|detect[oó]|pas[oó]|evento|estado)\b"
+    r"\b(?:ring|timbre)\b[^.]*\b(?:demo|simulat(?:ed|ion)|simulad[oa]|saw|detected|status|"
+    r"vio|detect[oó]|pas[oó]|evento|estado)\b"
     r"|\b(?:demo|simula)\b[^.]*\bring\b",
     re.I,
 )
 _DMX_STATUS_QUERY = re.compile(
-    r"\b(?:qu[eé]\s+puede\s+hacer|estado|status|capacidades?|efectos?)\b[^.]*"
+    r"\b(?:qu[eé]\s+puede\s+hacer|what\s+can|estado|status|capabilit(?:y|ies)|capacidades?|effects?|efectos?)\b[^.]*"
     r"\b(?:dmx|art[ -]?net|luces?\s+de\s+discoteca)\b",
     re.I,
 )
@@ -612,7 +617,7 @@ def _history_window(utterance: str) -> tuple[datetime, datetime, str]:
         local_zone = timezone(timedelta(hours=-5))
     now = datetime.now(timezone.utc).astimezone(local_zone)
     text = utterance.lower()
-    if "madrugada" in text:
+    if "madrugada" in text or "overnight" in text or "early morning" in text:
         start = datetime.combine(now.date(), clock_time(0, 0), local_zone)
         six_am = datetime.combine(now.date(), clock_time(6, 0), local_zone)
         end = min(now, six_am)
@@ -769,6 +774,176 @@ def _home_history_response(utterance: str, state: GuardianState) -> dict[str, An
         },
         "timeline": timeline,
     }
+
+
+def _english_history_answer(timeline: dict[str, Any]) -> str:
+    """Render the real HA timeline in concise English for an en-US Alexa turn."""
+    if str(timeline.get("truth") or "") == "UNAVAILABLE":
+        return (
+            "I could not query the real Home Assistant history right now. "
+            "I did not substitute simulated Ring events."
+        )
+    events = list(timeline.get("events") or [])
+    if not events:
+        return (
+            "Home Assistant recorded no relevant changes overnight. "
+            "This uses the real home history and excludes the Ring demo."
+        )
+
+    zone_activations = Counter(
+        str(event.get("label") or event.get("entity_id"))
+        for event in events
+        if "_zona_" in str(event.get("entity_id") or "")
+        and event.get("state") == "on"
+    )
+    selected: list[dict[str, Any]] = []
+    quotas = {"energy": 3, "network": 2, "security": 1, "lighting": 1}
+    seen: set[tuple[str, str]] = set()
+    for category in ("energy", "network", "security", "lighting"):
+        for event in events:
+            if event.get("category") != category:
+                continue
+            entity_id = str(event.get("entity_id") or "")
+            state_value = str(event.get("state") or "")
+            if category == "security" and "_zona_" in entity_id:
+                continue
+            if category == "lighting" and state_value != "unavailable":
+                continue
+            if category == "network" and state_value not in {
+                "off",
+                "unavailable",
+                "unknown",
+            }:
+                continue
+            key = (entity_id, state_value)
+            if key in seen:
+                continue
+            seen.add(key)
+            selected.append(event)
+            if sum(1 for chosen in selected if chosen.get("category") == category) >= quotas[category]:
+                break
+    if not selected:
+        selected = events[:3]
+
+    details: list[str] = []
+    for event in selected[:5]:
+        entity_id = str(event.get("entity_id") or "")
+        label = str(event.get("label") or entity_id).replace("_", " ")
+        state_value = str(event.get("state") or "")
+        try:
+            at = _format_local_time(str(event.get("timestamp") or ""))
+        except ValueError:
+            at = "an unknown time"
+        if entity_id.endswith("solar_grid_present") and state_value == "off":
+            summary = "utility power was lost"
+        elif entity_id.endswith("solar_battery_mode") and state_value == "on":
+            summary = "the inverter entered battery mode"
+        elif entity_id.endswith("solar_mode") and state_value == "battery_backup":
+            summary = "the inverter switched to battery backup"
+        elif event.get("category") == "network" and state_value in {"off", "unavailable", "unknown"}:
+            summary = f"{label} went offline"
+        elif event.get("category") == "lighting" and state_value == "unavailable":
+            summary = f"{label} became unavailable"
+        elif event.get("category") == "security" and state_value == "on":
+            summary = f"{label} activated or opened"
+        else:
+            summary = f"{label} changed to {state_value}"
+        details.append(f"At {at}, {summary}")
+
+    if zone_activations:
+        zones = ", ".join(
+            f"{label}, {count} times"
+            for label, count in zone_activations.most_common(4)
+        )
+        details.append(f"Most active zones: {zones}")
+
+    current = dict(timeline.get("current_states") or {})
+    electrical_snapshot = []
+    for entity_id, suffix in (
+        ("sensor.inneros_pi01_solar_grid_voltage", "grid volts"),
+        ("sensor.inneros_pi01_solar_battery_capacity", "percent battery"),
+        ("sensor.inneros_pi01_solar_output_power", "watts output"),
+        ("sensor.breaker_phase_a_voltage", "breaker volts"),
+    ):
+        value = current.get(entity_id)
+        if value not in {None, "", "unknown", "unavailable"}:
+            electrical_snapshot.append(f"{value} {suffix}")
+    if electrical_snapshot:
+        details.append("Current reading: " + ", ".join(electrical_snapshot))
+
+    return (
+        f"Real overnight report: Home Assistant recorded {len(events)} changes. "
+        + ". ".join(details)
+        + ". I did not mix in simulated Ring events."
+    )[:950]
+
+
+def localize_alexa_result(result: dict[str, Any], locale: str) -> dict[str, Any]:
+    """Localize stable demo responses without using a model or changing safety policy."""
+    if not str(locale or "").lower().startswith("en"):
+        return result
+    response = result.get("response")
+    if not isinstance(response, dict):
+        return result
+    mode = str(response.get("reasoning_mode") or "")
+    if mode == "deterministic-home-assistant-history":
+        response["answer"] = _english_history_answer(dict(result.get("home_timeline") or {}))
+    elif mode == "deterministic-inneros-capabilities":
+        response["answer"] = (
+            "I am the voice gateway to InnerOS. I can read real Home Assistant history for "
+            "security zones, lights, solar power, battery mode, internet, and UniFi. I can "
+            "correlate it with a clearly simulated Ring demo, check VoiceOps and Grandstream, "
+            "prepare an owner callback, prepare approved UniFi restarts, and control professional "
+            "DMX lighting over Art-Net. Sensitive actions still require independent approval."
+        )
+    elif mode == "deterministic-ring-demo":
+        response["answer"] = (
+            "The Ring adapter is available as a clearly labeled simulation. InnerOS can "
+            "correlate simulated Ring motion, person, doorbell, or package events with real "
+            "home sensors. Ring data is never presented as real."
+        )
+    elif mode == "deterministic-dmx-status":
+        response["answer"] = (
+            "The professional DMX engine is online over Art-Net. I can control approved scenes, "
+            "groups, colors, and levels in real time. The engine confirms commands, while each "
+            "physical fixture does not provide direct visual feedback."
+            if response.get("status") == "all_clear"
+            else "The DMX and Art-Net integration is configured, but the local engine is not responding right now."
+        )
+    elif mode == "deterministic-voiceops-status":
+        response["answer"] = (
+            "VoiceOps and the Grandstream PBX are ready to prepare a call to the owner's private "
+            "contact. I did not place a call."
+            if response.get("status") == "all_clear"
+            else "VoiceOps or the Grandstream PBX is not available right now. I did not place a call."
+        )
+    elif mode == "deterministic-private-voiceops-destination":
+        response["answer"] = (
+            "For privacy and safety, I do not use or store phone numbers spoken aloud. VoiceOps "
+            "can call only the owner's configured private contact after separate approval."
+        )
+    elif mode == "deterministic-antigravity-draft":
+        response["answer"] = (
+            "I prepared an Antigravity task draft. I did not send it or execute code; it requires "
+            "a separate owner review."
+        )
+    elif mode == "deterministic-unifi-restart":
+        prepared = result.get("prepared_action")
+        if isinstance(prepared, dict) and prepared.get("approval_delivery") == "sent":
+            response["answer"] = (
+                "I prepared the controlled UniFi restart and sent an authorization request to "
+                "the owner's WhatsApp. Nothing has restarted yet."
+            )
+        elif isinstance(prepared, dict):
+            response["answer"] = (
+                "I prepared the controlled UniFi restart, but I could not deliver the WhatsApp "
+                "authorization. Nothing was restarted."
+            )
+        else:
+            response["answer"] = (
+                "Tell me which approved UniFi device to restart. I did not restart anything."
+            )
+    return result
 
 
 def _ring_demo_response(state: GuardianState) -> dict[str, Any]:

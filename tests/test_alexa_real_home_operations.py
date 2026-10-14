@@ -1,5 +1,5 @@
 from ambient_guardian.core import GuardianReasoner, GuardianState
-from ambient_guardian.orchestration import simulated_alexa_turn
+from ambient_guardian.orchestration import localize_alexa_result, simulated_alexa_turn
 
 
 class FailIfReasonerRuns:
@@ -124,6 +124,21 @@ def test_overnight_report_uses_real_history_without_ring_demo():
     assert "se perdió la red eléctrica" in answer
     assert "inversor" in answer
     assert "simulados de Ring" in answer
+
+
+def test_overnight_report_can_be_rendered_in_english():
+    result = simulated_alexa_turn(
+        "show me the real overnight home events and tell me if the power went out",
+        _state(),
+        FailIfReasonerRuns(),
+    )
+
+    localized = localize_alexa_result(result, "en-US")
+    answer = localized["response"]["answer"]
+    assert "Real overnight report" in answer
+    assert "utility power was lost" in answer
+    assert "inverter entered battery mode" in answer
+    assert "simulated Ring events" in answer
 
 
 def test_spoken_phone_number_is_rejected_and_redacted():
