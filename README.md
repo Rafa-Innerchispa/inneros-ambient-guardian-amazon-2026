@@ -35,7 +35,7 @@ The public hackathon build controls only a simulator. Private customer/device co
 - Optional **Home Assistant + Alexa Devices** bridge for real Echo/Fire endpoints, read-only alarm context, owner-authorized speech, and allowlisted reversible lighting; direct Alexa+ MCP Toolkit linking remains separate and unclaimed
 - **InnerOS DMX / Art-Net bridge** to the existing loopback-only lighting engine for allowlisted colors/scenes Alexa does not natively understand
 - **Real Home Assistant timeline** for alarm zones, lights, solar/battery transitions, and network availability, kept separate from truth-labeled Ring demo events
-- **Two-phase UniFi restart** for explicitly allowlisted devices: Alexa prepares; an owner-authenticated route executes and checks state/uptime evidence
+- **Two-phase UniFi restart** for explicitly allowlisted devices: Alexa prepares; InnerOS sends an authenticated WhatsApp approval; only the owner confirmation executes and checks state/uptime evidence
 - Local Qwen/vLLM reasoning using an OpenAI-compatible endpoint
 - Deterministic local fallback if the LLM is unavailable
 - **AWS Strands Agents SDK** as a real read-only orchestration/synthesis layer against the local OpenAI-compatible Qwen endpoint
@@ -62,8 +62,8 @@ Official MCP Python SDK v2 / Streamable HTTP
         +--> prepare_action (never executes)
                     |
                     v
-            HUMAN APPROVAL CHANNEL
-              (not an MCP tool)
+       INNEROS OWNER WHATSAPP APPROVAL
+              (not an MCP/web tool)
                     |
                     v
               adapter.execute()
@@ -138,6 +138,7 @@ The strongest Judge Mode path is a three-part story rather than a feature tour:
 2. **What happened at 3 AM?:** the demo injects truth-labeled Ring-compatible events at 03:04, 03:07 and 03:11, then reconstructs the incident through the real normalized event pipeline and the read-only `incident_summary` MCP tool.
 3. **Prepare lock:** ask `Alexa, prepare to lock the front door`. The system returns an expiring proposal with `executed=false`. Only the separate human approval surface may execute the bounded simulator action and emit verification evidence.
 4. **PBX escalation:** ask `Alexa, call me through my PBX and give me the incident report`. Ambient Guardian only prepares a callback tied to that Incident Receipt. A separate owner-authenticated HTTP approval asks VoiceOps to call its preconfigured `voiceops.owner` alias, then records sanitized verification evidence.
+5. **Governed UniFi restart:** ask Alexa to restart an allowlisted UniFi device. Alexa only prepares it; InnerOS sends Confirm/Cancel to the enrolled owner's WhatsApp. Approval is durable, expires after a bounded interval, executes at most once, and sends verified completion back to WhatsApp.
 
 The demo always distinguishes the **SIMULATED Ring edge** from the **REAL MCP/runtime, temporal correlation, policy and evidence pipeline**. The 3 AM scenario also writes a persistent Incident Receipt so the same incident can be recovered in a later session.
 
@@ -211,6 +212,11 @@ See [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md) for production host/origin settin
 | `AMBIENT_GUARDIAN_UNIFI_RESTART_ENABLED` | `0` | Enables only the two-phase owner-approved UniFi restart path |
 | `AMBIENT_GUARDIAN_UNIFI_RESTART_TARGETS` | unset | JSON allowlist mapping spoken aliases to HA restart, status, and uptime entities |
 | `AMBIENT_GUARDIAN_UNIFI_VERIFY_SECONDS` | `0` | Bounded post-approval state/uptime verification window, maximum 90 seconds |
+| `AMBIENT_GUARDIAN_WHATSAPP_APPROVAL_ENABLED` | `0` | Uses the existing authenticated InnerOS WhatsApp owner lane for UniFi decisions |
+| `AMBIENT_GUARDIAN_APPROVAL_TTL_SECONDS` | `900` in production server | Expiry for a prepared physical action |
+| `AMBIENT_GUARDIAN_ACTION_DB` | `var/ambient_guardian_actions.sqlite3` | Durable, single-consumer action state and replay protection |
+| `AMBIENT_GUARDIAN_INNEROS_PLATFORM_DIR` | InnerOS platform path | Existing approval runtime; no WhatsApp credentials are copied into this project |
+| `AMBIENT_GUARDIAN_INNEROS_APPROVAL_PYTHON` | platform virtualenv Python | Executes the narrow local approval adapter |
 | `AMBIENT_GUARDIAN_DMX_URL` | unset | Loopback-only InnerOS DMX API base URL |
 | `AMBIENT_GUARDIAN_DMX_CONTROL_ENABLED` | `0` | Enables bounded DMX/Art-Net lighting control |
 | `AMBIENT_GUARDIAN_DMX_SCENE_ALLOWLIST` | unset | Comma-separated safe scene allowlist |
@@ -228,7 +234,7 @@ CI performs all of the following from a clean environment:
 6. verifies tool discovery and calls,
 7. builds the Docker image.
 
-The security regression suite includes `unlock`/negation parsing, token expiration, replay, and concurrent approval consumption.
+The security regression suite includes `unlock`/negation parsing, token expiration, replay, concurrent approval consumption, durable action recovery, and WhatsApp approve/reject behavior.
 
 Final-sprint reproducible result on 2026-10-13: **112 tests passed**, `compileall` passed, and `scripts/runtime_smoke.py` connected to the running Streamable HTTP server with the official MCP client. Tool discovery confirmed that MCP exposes preparation but no approval, execution, or speaker tool.
 

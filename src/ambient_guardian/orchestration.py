@@ -1005,8 +1005,12 @@ def simulated_alexa_turn(
             "response": {
                 "answer": (
                     f"Preparé el reinicio controlado de {target['label']} por UniFi y Home "
-                    "Assistant. No se ejecutó todavía; requiere la aprobación autenticada "
-                    "del propietario y después verificaré su estado o tiempo de actividad."
+                    "Assistant. Te envié la autorización al WhatsApp del propietario. "
+                    "No se ejecutó todavía; si la confirmas allí, reiniciaré solamente ese "
+                    "equipo y después verificaré su estado o tiempo de actividad."
+                    if prepared.get("approval_delivery") == "sent"
+                    else f"Preparé el reinicio controlado de {target['label']}, pero no pude "
+                    "entregar la autorización por WhatsApp. No reinicié ningún equipo."
                 ),
                 "status": "attention_required",
                 "reasoning_mode": "deterministic-unifi-restart",

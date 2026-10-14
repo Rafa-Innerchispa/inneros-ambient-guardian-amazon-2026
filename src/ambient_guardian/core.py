@@ -11,12 +11,14 @@ from typing import Any
 
 import httpx
 
+from .approval_store import ApprovalStore
 from .dmx import DMXBridge
 from .google_home import GoogleHomeBridge, GoogleHomeStatus
 from .home_assistant import HomeAssistantBridge
 from .incident_store import IncidentStore
 from .ring import RingAdapterStatus, RingOfficialAdapter, RingSimulatorAdapter
 from .voiceops import OWNER_TARGET_ALIAS, VoiceOpsBridge
+from .whatsapp_approval import WhatsAppApprovalBridge
 
 
 def utc_now() -> datetime:
@@ -38,6 +40,7 @@ class PendingAction:
     expires_at: str
     linked_incident_id: str | None = None
     linked_incident_digest: str | None = None
+    approval_task_id: str | None = None
 
 
 class SimulatorAdapter:
@@ -78,10 +81,14 @@ class GuardianState:
         self,
         action_ttl_seconds: int = 120,
         incident_db_path: str | None = None,
+        action_db_path: str | None = None,
+        approval_bridge: WhatsAppApprovalBridge | None = None,
     ) -> None:
         self._lock = threading.RLock()
         self._ttl = action_ttl_seconds
         self.incident_store = IncidentStore(incident_db_path)
+        self.approval_store = ApprovalStore(action_db_path)
+        self.approval_bridge = approval_bridge or WhatsAppApprovalBridge()
         self.adapter = SimulatorAdapter()
         self.ring_adapter = RingSimulatorAdapter()
         self.ring_official = RingOfficialAdapter()
@@ -93,9 +100,10 @@ class GuardianState:
         self.pending: dict[str, PendingAction] = {}
         self.evidence: list[dict[str, Any]] = []
         self.live_evidence: dict[str, Any] = {}
-        self.reset_demo()
+        self.reset_demo(preserve_durable_actions=True)
+        self._restore_pending_actions()
 
-    def reset_demo(self) -> None:
+    def reset_demo(self, *, preserve_durable_actions: bool = False) -> None:
         with self._lock:
             self.events = []
             if os.getenv("AMBIENT_GUARDIAN_SEED_DEMO_EVENTS", "0") == "1":
@@ -132,6 +140,38 @@ class GuardianState:
             self.ring_adapter = RingSimulatorAdapter()
             self.ring_official = RingOfficialAdapter()
             self.google_home = GoogleHomeBridge()
+        if not preserve_durable_actions:
+            for item in self.approval_store.list_pending():
+                self.approval_store.finish(str(item["action_id"]), "cancelled")
+
+    @staticmethod
+    def _pending_payload(item: PendingAction) -> dict[str, Any]:
+        return {
+            "token": item.token,
+            "action_id": item.action_id,
+            "action_digest": item.action_digest,
+            "action": item.action,
+            "reason": item.reason,
+            "prepared_at": item.prepared_at,
+            "expires_at": item.expires_at,
+            "linked_incident_id": item.linked_incident_id,
+            "linked_incident_digest": item.linked_incident_digest,
+            "approval_task_id": item.approval_task_id,
+        }
+
+    def _restore_pending_actions(self) -> None:
+        restored: dict[str, PendingAction] = {}
+        for payload in self.approval_store.list_pending():
+            try:
+                item = PendingAction(**payload)
+            except (TypeError, ValueError):
+                continue
+            if datetime.fromisoformat(item.expires_at) < utc_now():
+                self.approval_store.finish(item.action_id, "expired")
+                continue
+            restored[item.token] = item
+        with self._lock:
+            self.pending.update(restored)
 
     def add_event(
         self,
@@ -471,6 +511,7 @@ class GuardianState:
         )
         with self._lock:
             self.pending[token] = item
+        self.approval_store.save_pending(self._pending_payload(item))
         prepared_result = {
             "status": "approval_required",
             "executed": False,
@@ -491,6 +532,28 @@ class GuardianState:
             prepared_result["target_label"] = self.home_assistant.unifi_restart_targets[
                 unifi_alias
             ]["label"]
+            delivery = self.approval_bridge.request(
+                {
+                    "action_id": action_id,
+                    "action_digest": action_digest,
+                    "target_alias": unifi_alias,
+                    "target_label": prepared_result["target_label"],
+                    "expires_at": item.expires_at,
+                }
+            )
+            prepared_result["approval_channel"] = "whatsapp"
+            prepared_result["approval_delivery"] = (
+                "sent" if delivery.get("ok") else "failed"
+            )
+            if delivery.get("ok"):
+                item.approval_task_id = str(delivery.get("task_id") or "") or None
+                prepared_result["approval_task_id"] = item.approval_task_id
+                if item.approval_task_id:
+                    self.approval_store.bind_task(action_id, item.approval_task_id)
+            else:
+                prepared_result["approval_delivery_error"] = str(
+                    delivery.get("error") or "whatsapp_delivery_failed"
+                )
         self.record_live_evidence(
             prepared_action={
                 key: value
@@ -561,26 +624,39 @@ class GuardianState:
 
     def approve_action(self, token: str) -> dict[str, Any]:
         with self._lock:
-            item = self.pending.pop(token, None)
+            item = self.pending.get(token)
         if item is None:
             raise ValueError("Unknown, expired, or already-used approval token")
         if datetime.fromisoformat(item.expires_at) < utc_now():
+            with self._lock:
+                self.pending.pop(token, None)
+            self.approval_store.finish(item.action_id, "expired")
             raise ValueError("Approval token expired; action was not executed")
 
-        if item.action == "voiceops_owner_callback":
-            after = self.voiceops.request_owner_callback(
-                correlation_id=item.action_id,
-                reason=item.reason,
-            )
-            verified = bool(after.get("verified"))
-        elif item.action.startswith("unifi_restart:"):
-            after = self.home_assistant.restart_unifi_device(
-                item.action.split(":", 1)[1]
-            )
-            verified = bool(after.get("verified"))
-        else:
-            after = self.adapter.execute(item.action)
-            verified = self._verify(item.action, after)
+        if not self.approval_store.transition(item.action_id, "pending", "executing"):
+            raise ValueError("Action is already executing or has already been closed")
+
+        try:
+            if item.action == "voiceops_owner_callback":
+                after = self.voiceops.request_owner_callback(
+                    correlation_id=item.action_id,
+                    reason=item.reason,
+                )
+                verified = bool(after.get("verified"))
+            elif item.action.startswith("unifi_restart:"):
+                after = self.home_assistant.restart_unifi_device(
+                    item.action.split(":", 1)[1]
+                )
+                verified = bool(after.get("verified"))
+            else:
+                after = self.adapter.execute(item.action)
+                verified = self._verify(item.action, after)
+        except Exception:
+            with self._lock:
+                self.pending.pop(token, None)
+            self.approval_store.finish(item.action_id, "failed")
+            self.record_live_evidence(approval_state="EXECUTION_FAILED_NO_RETRY")
+            raise
         evidence = {
             "evidence_id": f"evd-{secrets.token_hex(6)}",
             "action_id": item.action_id,
@@ -603,7 +679,13 @@ class GuardianState:
         ).encode("utf-8")
         evidence["evidence_digest"] = hashlib.sha256(evidence_payload).hexdigest()
         with self._lock:
+            self.pending.pop(token, None)
             self.evidence.append(evidence)
+        self.approval_store.finish(
+            item.action_id,
+            "completed" if evidence["executed"] and verified else "failed",
+            evidence,
+        )
         self.record_live_evidence(
             approval_state="VERIFIED" if verified else "FAILED_VERIFICATION",
             pbx_result=after if item.action == "voiceops_owner_callback" else None,
@@ -621,6 +703,74 @@ class GuardianState:
             },
         )
         return evidence
+
+    def process_whatsapp_approvals(self) -> list[dict[str, Any]]:
+        """Consume authenticated WhatsApp decisions without exposing an approval API."""
+        outcomes: list[dict[str, Any]] = []
+        with self._lock:
+            pending_items = list(self.pending.values())
+        for item in pending_items:
+            if not item.action.startswith("unifi_restart:") or not item.approval_task_id:
+                continue
+            if datetime.fromisoformat(item.expires_at) < utc_now():
+                with self._lock:
+                    self.pending.pop(item.token, None)
+                self.approval_store.finish(item.action_id, "expired")
+                self.approval_bridge.close(item.approval_task_id, "expired")
+                outcomes.append({"action_id": item.action_id, "status": "expired"})
+                continue
+            decision = self.approval_bridge.status(item.approval_task_id)
+            if not decision.get("ok"):
+                continue
+            if decision.get("rejected"):
+                with self._lock:
+                    self.pending.pop(item.token, None)
+                self.approval_store.finish(item.action_id, "cancelled")
+                self.approval_bridge.close(item.approval_task_id, "cancelled")
+                self.record_live_evidence(approval_state="REJECTED_BY_OWNER")
+                outcomes.append({"action_id": item.action_id, "status": "cancelled"})
+                continue
+            if not decision.get("approved"):
+                continue
+            try:
+                evidence = self.approve_action_id(
+                    item.action_id,
+                    expected_action=item.action,
+                )
+            except Exception as exc:
+                failure_notice = self.approval_bridge.complete(
+                    item.approval_task_id,
+                    {
+                        "action_id": item.action_id,
+                        "action": item.action,
+                        "executed": False,
+                        "verified": False,
+                        "adapter": "home-assistant-unifi",
+                        "verified_at": iso_now(),
+                    },
+                )
+                outcomes.append(
+                    {
+                        "action_id": item.action_id,
+                        "status": "failed",
+                        "error": str(exc),
+                        "completion_notified": bool(failure_notice.get("ok")),
+                    }
+                )
+                continue
+            completion = self.approval_bridge.complete(
+                item.approval_task_id,
+                evidence,
+            )
+            outcomes.append(
+                {
+                    "action_id": item.action_id,
+                    "status": "completed" if evidence.get("verified") else "failed",
+                    "verified": bool(evidence.get("verified")),
+                    "completion_notified": bool(completion.get("ok")),
+                }
+            )
+        return outcomes
 
     @staticmethod
     def _verify(action: str, state: dict[str, Any]) -> bool:

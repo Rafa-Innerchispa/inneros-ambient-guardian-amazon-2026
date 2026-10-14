@@ -222,6 +222,13 @@ HTTP approval asks the existing VoiceOps runtime to call its preconfigured
 `voiceops.owner` alias. The Live Evidence Console then shows a sanitized dispatch
 result and the Incident Receipt → action → evidence digest chain.
 
+UniFi restarts use a different, stricter approval path. Alexa prepares only an
+allowlisted Home Assistant restart button and InnerOS sends Confirm/Cancel to the
+enrolled owner's WhatsApp. The existing WhatsApp identity and inbound-command
+checks write the authenticated decision; Ambient Guardian consumes that durable
+decision once, invokes Home Assistant, verifies state/uptime, and reports the
+result back to WhatsApp. There is no UniFi approval route in MCP or the web demo.
+
 ## Antigravity programming brief
 
 Alexa can capture a bounded programming request as a local draft for later review:

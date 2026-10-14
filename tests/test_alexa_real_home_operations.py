@@ -75,8 +75,40 @@ class StubHomeAssistant:
         }
 
 
-def _state():
-    state = GuardianState()
+class StubWhatsAppApproval:
+    enabled = True
+
+    def __init__(self):
+        self.requests = []
+        self.decisions = {}
+        self.completions = []
+        self.closed = []
+
+    def request(self, payload):
+        self.requests.append(payload)
+        return {
+            "ok": True,
+            "task_id": "ops_abc123def456",
+            "channel": "whatsapp",
+        }
+
+    def status(self, task_id):
+        return self.decisions.get(
+            task_id,
+            {"ok": True, "approved": False, "rejected": False},
+        )
+
+    def complete(self, task_id, evidence):
+        self.completions.append((task_id, evidence))
+        return {"ok": True}
+
+    def close(self, task_id, status):
+        self.closed.append((task_id, status))
+        return {"ok": True}
+
+
+def _state(approval_bridge=None):
+    state = GuardianState(approval_bridge=approval_bridge)
     state.home_assistant = StubHomeAssistant()
     return state
 
@@ -106,7 +138,8 @@ def test_spoken_phone_number_is_rejected_and_redacted():
 
 
 def test_unifi_restart_is_prepared_then_executes_only_after_approval():
-    state = _state()
+    approval = StubWhatsAppApproval()
+    state = _state(approval)
     result = simulated_alexa_turn(
         "reinicia el UniFi U7 Living",
         state,
@@ -115,12 +148,49 @@ def test_unifi_restart_is_prepared_then_executes_only_after_approval():
     prepared = result["prepared_action"]
     assert prepared["action"] == "unifi_restart:u7 living"
     assert prepared["executed"] is False
+    assert prepared["approval_channel"] == "whatsapp"
+    assert prepared["approval_delivery"] == "sent"
+    assert prepared["approval_task_id"] == "ops_abc123def456"
+    assert "WhatsApp" in result["response"]["answer"]
+    assert len(approval.requests) == 1
     assert state.home_assistant.restart_calls == []
 
-    evidence = state.approve_action(prepared["approval_token"])
+    approval.decisions["ops_abc123def456"] = {
+        "ok": True,
+        "approved": True,
+        "rejected": False,
+        "authorization_channel": "whatsapp",
+    }
+    outcomes = state.process_whatsapp_approvals()
     assert state.home_assistant.restart_calls == ["u7 living"]
-    assert evidence["executed"] is True
-    assert evidence["verified"] is True
+    assert outcomes[0]["status"] == "completed"
+    assert approval.completions[0][0] == "ops_abc123def456"
+    assert approval.completions[0][1]["executed"] is True
+    assert approval.completions[0][1]["verified"] is True
+
+
+def test_unifi_rejection_from_whatsapp_never_restarts_device():
+    approval = StubWhatsAppApproval()
+    state = _state(approval)
+    result = simulated_alexa_turn(
+        "reinicia el UniFi U7 Living",
+        state,
+        FailIfReasonerRuns(),
+    )
+    task_id = result["prepared_action"]["approval_task_id"]
+    approval.decisions[task_id] = {
+        "ok": True,
+        "approved": False,
+        "rejected": True,
+    }
+
+    outcomes = state.process_whatsapp_approvals()
+
+    assert outcomes == [
+        {"action_id": result["prepared_action"]["action_id"], "status": "cancelled"}
+    ]
+    assert state.home_assistant.restart_calls == []
+    assert approval.closed == [(task_id, "cancelled")]
 
 
 def test_ring_demo_is_never_presented_as_real():
