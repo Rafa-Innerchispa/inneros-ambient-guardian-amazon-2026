@@ -77,6 +77,14 @@ Keep the exact Alexa Skill ID and bridge secrets in the host configuration;
 neither value belongs in Git. A healthy local gateway with a Cloudflare 1033
 response is a tunnel failure, not an Alexa locale or request-parser failure.
 
+Install `deploy/ambient-guardian-skill-bridge.conf` as a systemd user-service
+drop-in for **both** `ambient-guardian-alexa-gateway.service` and
+`inneros-ambient-guardian-demo.service`. Create the referenced environment file
+with mode `0600` and one independently generated random token. If the two
+processes do not share this token, the backend intentionally discards Alexa
+speaker and locale context; this prevents spoofed owner identity but also means
+an `en-US` request cannot receive its localized deterministic response.
+
 ## Alexa Developer Console
 
 Create a **Custom** skill:
