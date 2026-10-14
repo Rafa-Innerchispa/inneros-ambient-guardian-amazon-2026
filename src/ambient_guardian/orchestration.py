@@ -684,14 +684,6 @@ def _home_history_response(utterance: str, state: GuardianState) -> dict[str, An
         )
         status = "all_clear"
     else:
-        important = [
-            event
-            for event in events
-            if event.get("category") in {"energy", "security", "network"}
-            or event.get("state") in {"unavailable", "triggered"}
-        ]
-        if not important:
-            important = events
         zone_activations = Counter(
             str(event.get("label") or event.get("entity_id"))
             for event in events
@@ -699,7 +691,37 @@ def _home_history_response(utterance: str, state: GuardianState) -> dict[str, An
             and event.get("state") == "on"
         )
         details = []
-        for event in important[:8]:
+        selected: list[dict[str, Any]] = []
+        quotas = {"energy": 3, "network": 2, "security": 1, "lighting": 1}
+        seen: set[tuple[str, str]] = set()
+        for category in ("energy", "network", "security", "lighting"):
+            for event in events:
+                if event.get("category") != category:
+                    continue
+                entity_id = str(event.get("entity_id") or "")
+                state_value = str(event.get("state") or "")
+                if category == "security" and "_zona_" in entity_id:
+                    continue
+                if category == "lighting" and state_value != "unavailable":
+                    continue
+                if category == "network" and state_value not in {
+                    "off",
+                    "unavailable",
+                    "unknown",
+                }:
+                    continue
+                key = (entity_id, state_value)
+                if key in seen:
+                    continue
+                seen.add(key)
+                selected.append(event)
+                if sum(
+                    1 for chosen in selected if chosen.get("category") == category
+                ) >= quotas[category]:
+                    break
+        if not selected:
+            selected = events[:3]
+        for event in selected[:5]:
             try:
                 at = _format_local_time(str(event.get("timestamp") or ""))
             except ValueError:
@@ -741,7 +763,7 @@ def _home_history_response(utterance: str, state: GuardianState) -> dict[str, An
         )
     return {
         "response": {
-            "answer": answer[:1800],
+            "answer": answer[:950],
             "status": status,
             "reasoning_mode": "deterministic-home-assistant-history",
         },
