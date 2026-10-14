@@ -136,6 +136,30 @@ def test_pbx_requires_receipt_and_parser_rejects_destination_override():
         )
         is None
     )
+    assert (
+        parse_requested_action(
+            "prepárame una llamada por la central con el reporte del último incidente"
+        )
+        == "voiceops_owner_callback"
+    )
+    assert (
+        parse_requested_action(
+            "llámame a mi celular por Grandstream con el informe del incidente"
+        )
+        == "voiceops_owner_callback"
+    )
+    assert (
+        parse_requested_action(
+            "llama a la extensión 1004 por la central con el informe del incidente"
+        )
+        is None
+    )
+    assert (
+        parse_requested_action(
+            "no me llames por la central con el informe del incidente"
+        )
+        is None
+    )
 
 
 def test_voiceops_runtime_rejects_public_or_credentialed_destinations():

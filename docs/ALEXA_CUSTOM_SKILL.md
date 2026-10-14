@@ -51,13 +51,31 @@ export ALEXA_SKILL_ID=amzn1.ask.skill.REPLACE_ME
 export ALEXA_SKILL_HOST=127.0.0.1
 export ALEXA_SKILL_PORT=8795
 export AMBIENT_GUARDIAN_SKILL_BRIDGE_TOKEN=REPLACE_WITH_RUNTIME_SECRET
-export AMBIENT_GUARDIAN_ACCOUNT_LINKING_REQUIRED=1
+export AMBIENT_GUARDIAN_ACCOUNT_LINKING_REQUIRED=0
+export AMBIENT_GUARDIAN_PIN_CONFIRMATION_ENABLED=0
 python -m ambient_guardian.alexa_skill_gateway
 ```
 
 Health: `GET http://127.0.0.1:8795/health`
 
 Alexa requests: `POST /alexa/skill`
+
+### Persistent InnerOS host services
+
+The current InnerOS host already owns both processes as user services:
+
+- `inneros-ambient-guardian-demo.service`: orchestration backend on
+  `127.0.0.1:8794`.
+- `ambient-guardian-alexa-gateway.service`: signed Alexa gateway on
+  `127.0.0.1:8795`.
+- `opportunityops-cloudflared.service`: public tunnel whose `/alexa/skill*`
+  ingress targets `127.0.0.1:8795`.
+
+The deployed checkout lives in the InnerOS workspace at
+`~/inneros/inneros_core/workspaces/inneros-ambient-guardian-amazon-2026`.
+Keep the exact Alexa Skill ID and bridge secrets in the host configuration;
+neither value belongs in Git. A healthy local gateway with a Cloudflare 1033
+response is a tunnel failure, not an Alexa locale or request-parser failure.
 
 ## Alexa Developer Console
 
@@ -192,6 +210,12 @@ After an Incident Receipt exists, the owner can say:
 
 `Alexa, ask Ambient Guardian to call me through my PBX and give me the incident report`
 
+With the canonical Ecuador `es-US` model, the equivalent phrases include:
+
+- `Alexa, abre Guardián Ambiental y pregúntale qué puede hacer`
+- `Alexa, pregunta a Guardián Ambiental cómo está la central Grandstream`
+- `Alexa, pide a Guardián Ambiental que me prepare una llamada por la central con el último incidente`
+
 This request only prepares `voiceops_owner_callback`. It does not place a call
 and Alexa never receives a destination or extension. A separate owner-authenticated
 HTTP approval asks the existing VoiceOps runtime to call its preconfigured
@@ -227,3 +251,30 @@ Every siren action follows the same security gate as Intelbras arm/disarm:
 
 A successful Home Assistant HTTP response alone is never described as a
 verified physical siren activation.
+
+
+## Ecuador compatibility profile
+
+For a physical Echo used in Ecuador, the canonical compatibility profile is:
+
+- Alexa language / skill locale: `es-US` (Spanish - United States).
+- Marketplace path: Amazon.com-compatible skill locale.
+- Invocation: `guardián ambiental`.
+- Physical country does not require `es-MX` or `es-ES`.
+- Alexa+ is not required for this path; this is a standard Alexa Custom Skill.
+
+For hackathon/demo compatibility, keep PIN Confirmation and Skills Personalization
+out of the base invocation path. Set:
+
+```bash
+AMBIENT_GUARDIAN_PIN_CONFIRMATION_ENABLED=0
+AMBIENT_GUARDIAN_ACCOUNT_LINKING_REQUIRED=0
+```
+
+Read-only queries and PREPARE-only actions remain available. Consequential physical
+actions still fail closed in the backend without the enrolled owner identity and
+the required authentication confidence, or use the separate owner-authenticated
+approval route for PBX callbacks.
+
+After the physical `es-US` invocation is proven, PIN Confirmation can be
+re-enabled deliberately for supported owner-security flows.

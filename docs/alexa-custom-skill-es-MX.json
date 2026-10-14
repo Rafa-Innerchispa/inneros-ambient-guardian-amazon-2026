@@ -9,15 +9,36 @@
             {
               "name": "query",
               "type": "AMAZON.SearchQuery"
+            },
+            {
+              "name": "when",
+              "type": "AMAZON.TIME"
             }
           ],
           "samples": [
-            "{query}",
             "pregunta {query}",
             "dime {query}",
             "revisa {query}",
-            "consulta {query}"
+            "consulta {query}",
+            "qué pasó a las {when}",
+            "qué ocurrió a las {when}",
+            "revisa la casa a las {when}"
           ]
+        },
+        {
+          "name": "CapabilitiesIntent",
+          "slots": [],
+          "samples": ["qué puedes hacer", "cómo me puedes ayudar", "qué controla inner os"]
+        },
+        {
+          "name": "VoiceOpsStatusIntent",
+          "slots": [],
+          "samples": ["cómo está el sistema de llamadas", "está lista la central", "cómo está la central grandstream"]
+        },
+        {
+          "name": "PBXCallbackIntent",
+          "slots": [],
+          "samples": ["prepárame una llamada por la central con el último incidente", "llámame por la central con el reporte del incidente"]
         },
         {
           "name": "AMAZON.HelpIntent",

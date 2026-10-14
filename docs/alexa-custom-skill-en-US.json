@@ -9,14 +9,34 @@
             {
               "name": "query",
               "type": "AMAZON.SearchQuery"
+            },
+            {
+              "name": "when",
+              "type": "AMAZON.TIME"
             }
           ],
           "samples": [
-            "{query}",
             "ask guardian {query}",
             "tell me {query}",
-            "check {query}"
+            "check {query}",
+            "what happened at {when}",
+            "check the home at {when}"
           ]
+        },
+        {
+          "name": "CapabilitiesIntent",
+          "slots": [],
+          "samples": ["what can you do", "how can you help", "what does inner os control"]
+        },
+        {
+          "name": "VoiceOpsStatusIntent",
+          "slots": [],
+          "samples": ["is voice ops ready", "check the phone system", "is grandstream ready"]
+        },
+        {
+          "name": "PBXCallbackIntent",
+          "slots": [],
+          "samples": ["prepare a call through the PBX with the latest incident report", "call me through grandstream with the incident report"]
         },
         {
           "name": "AMAZON.HelpIntent",

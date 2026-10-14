@@ -36,31 +36,44 @@ def request_payload(request, *, person=None, access_token=None):
     }
 
 
-def launch_request(timestamp=None):
+def launch_request(timestamp=None, *, locale="en-US"):
     return {
         "type": "LaunchRequest",
         "requestId": "launch-1",
         "timestamp": timestamp or datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
-        "locale": "en-US",
+        "locale": locale,
     }
 
 
-def intent_request(query="is everything okay at home"):
+def intent_request(
+    query="is everything okay at home",
+    *,
+    intent_name="AskGuardianIntent",
+    locale="en-US",
+    when=None,
+):
+    slots = {}
+    if query is not None:
+        slots["query"] = {
+            "name": "query",
+            "value": query,
+            "confirmationStatus": "NONE",
+        }
+    if when is not None:
+        slots["when"] = {
+            "name": "when",
+            "value": when,
+            "confirmationStatus": "NONE",
+        }
     return {
         "type": "IntentRequest",
         "requestId": "intent-1",
         "timestamp": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
-        "locale": "en-US",
+        "locale": locale,
         "intent": {
-            "name": "AskGuardianIntent",
+            "name": intent_name,
             "confirmationStatus": "NONE",
-            "slots": {
-                "query": {
-                    "name": "query",
-                    "value": query,
-                    "confirmationStatus": "NONE",
-                }
-            },
+            "slots": slots,
         },
     }
 
@@ -147,6 +160,91 @@ def test_guardian_intent_calls_local_backend(monkeypatch):
     assert response["response"]["shouldEndSession"] is False
 
 
+def test_spanish_launch_presents_inneros_as_voice_front_door(monkeypatch):
+    monkeypatch.setenv("AMBIENT_GUARDIAN_VOICE_NAME", "InnerOS")
+    response = gateway._dispatch(
+        request_payload(launch_request(locale="es-US"))
+    )
+    speech = response["response"]["outputSpeech"]["text"]
+    assert "InnerOS" in speech
+    assert "incidentes" in speech
+
+
+@pytest.mark.parametrize(
+    ("intent_name", "expected"),
+    [
+        ("CapabilitiesIntent", "qué puedes hacer dentro de InnerOS"),
+        (
+            "VoiceOpsStatusIntent",
+            "cómo está el sistema de llamadas VoiceOps y la central Grandstream",
+        ),
+        (
+            "PBXCallbackIntent",
+            "prepárame una llamada por la central con el reporte del último incidente",
+        ),
+    ],
+)
+def test_stable_intents_map_to_bounded_backend_queries(
+    monkeypatch, intent_name, expected
+):
+    calls = []
+    monkeypatch.setattr(
+        gateway,
+        "_backend_turn",
+        lambda query, speaker_context=None: calls.append(query) or "respuesta",
+    )
+    gateway._dispatch(
+        request_payload(
+            intent_request(
+                None,
+                intent_name=intent_name,
+                locale="es-US",
+            )
+        )
+    )
+    assert calls == [expected]
+
+
+def test_time_slot_becomes_deterministic_temporal_query(monkeypatch):
+    calls = []
+    monkeypatch.setattr(
+        gateway,
+        "_backend_turn",
+        lambda query, speaker_context=None: calls.append(query) or "respuesta",
+    )
+    gateway._dispatch(
+        request_payload(
+            intent_request(
+                "texto libre ignorado",
+                locale="es-US",
+                when="03:00",
+            )
+        )
+    )
+    assert calls == ["qué pasó a las 03:00"]
+
+
+def test_pin_confirmation_is_opt_in_by_default(monkeypatch):
+    calls = []
+    monkeypatch.delenv("AMBIENT_GUARDIAN_PIN_CONFIRMATION_ENABLED", raising=False)
+    monkeypatch.setattr(
+        gateway,
+        "_backend_turn",
+        lambda query, speaker_context=None: calls.append((query, speaker_context))
+        or "Sensitive request was not executed by the gateway.",
+    )
+    payload = request_payload(
+        intent_request("activa la alarma"),
+        person={
+            "personId": "person-owner",
+            "authenticationConfidenceLevel": {"level": 300},
+        },
+    )
+    response = gateway._dispatch(payload)
+    assert "directives" not in response["response"]
+    assert calls and calls[0][0] == "activa la alarma"
+
+
 def test_required_account_linking_returns_alexa_link_account_card(monkeypatch):
     called = []
     monkeypatch.setenv("AMBIENT_GUARDIAN_ACCOUNT_LINKING_REQUIRED", "1")
@@ -185,6 +283,7 @@ def test_linked_owner_token_is_validated_but_never_forwarded(monkeypatch):
 
 def test_alarm_intent_requests_voice_pin_before_backend(monkeypatch):
     called = []
+    monkeypatch.setenv("AMBIENT_GUARDIAN_PIN_CONFIRMATION_ENABLED", "1")
     monkeypatch.setattr(
         gateway,
         "_backend_turn",
@@ -257,6 +356,7 @@ def test_backend_url_must_stay_loopback(monkeypatch):
 
 def test_siren_intent_requests_voice_pin_before_backend(monkeypatch):
     called = []
+    monkeypatch.setenv("AMBIENT_GUARDIAN_PIN_CONFIRMATION_ENABLED", "1")
     monkeypatch.setattr(
         gateway,
         "_backend_turn",
