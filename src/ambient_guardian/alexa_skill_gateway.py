@@ -423,25 +423,50 @@ def _voice_name() -> str:
 def _guardian_query(request_payload: dict[str, Any]) -> str:
     """Translate stable Alexa intents into the bounded InnerOS voice vocabulary."""
     intent_name = str(((request_payload.get("intent") or {}).get("name") or ""))
+    english = _request_locale(request_payload).lower().startswith("en")
     if intent_name == "CapabilitiesIntent":
-        return "qué puedes hacer dentro de InnerOS"
+        return "what can you do inside InnerOS" if english else "qué puedes hacer dentro de InnerOS"
     if intent_name == "HomeHistoryIntent":
-        return "dame los eventos reales de la madrugada"
+        return (
+            "show me the real overnight home events and tell me if the power went out"
+            if english
+            else "dame los eventos reales de la madrugada"
+        )
     if intent_name == "RingDemoStatusIntent":
-        return "qué detectó Ring en el demo"
+        return "what did Ring detect in the demo" if english else "qué detectó Ring en el demo"
     if intent_name == "DMXStatusIntent":
-        return "qué puede hacer el sistema DMX por Art-Net"
+        return (
+            "what can the DMX system do over Art-Net"
+            if english
+            else "qué puede hacer el sistema DMX por Art-Net"
+        )
     if intent_name == "UnifiRestartIntent":
         target = _slot_value(request_payload, "target")
+        if english:
+            return f"prepare to restart UniFi {target}" if target else "restart a UniFi device"
         return f"prepara reiniciar el UniFi {target}" if target else "reinicia un equipo UniFi"
     if intent_name == "PBXPrivateDestinationIntent":
-        return "llama a mi celular usando la central Grandstream"
+        return (
+            "call my cell phone using the Grandstream PBX"
+            if english
+            else "llama a mi celular usando la central Grandstream"
+        )
     if intent_name == "VoiceOpsStatusIntent":
-        return "cómo está el sistema de llamadas VoiceOps y la central Grandstream"
+        return (
+            "is VoiceOps and the Grandstream PBX ready"
+            if english
+            else "cómo está el sistema de llamadas VoiceOps y la central Grandstream"
+        )
     if intent_name == "PBXCallbackIntent":
-        return "prepárame una llamada por la central con el reporte del último incidente"
+        return (
+            "prepare a call through Grandstream with the latest incident report"
+            if english
+            else "prepárame una llamada por la central con el reporte del último incidente"
+        )
     if intent_name == "AntigravityDraftIntent":
         task = _slot_value(request_payload, "task")
+        if english:
+            return f"prepare for Antigravity: {task}" if task else ""
         return f"prepara una tarea para Antigravity: {task}" if task else ""
 
     query = _slot_value(request_payload, "query")
@@ -503,6 +528,7 @@ def _dispatch(payload: dict[str, Any]) -> dict[str, Any]:
         query = _guardian_query(request_payload)
         speaker = _speaker_context(payload)
         speaker["account_linked"] = linked
+        speaker["response_locale"] = _request_locale(request_payload)
         speaker["_request_id"] = str(request_payload.get("requestId") or "")
         if (
             _pin_confirmation_enabled()
@@ -552,11 +578,32 @@ def _dispatch(payload: dict[str, Any]) -> dict[str, Any]:
             "require separate human approval.",
             reprompt="What would you like to ask?",
         )
-    if intent_name in {"AMAZON.StopIntent", "AMAZON.CancelIntent"}:
-        return _plain_response("Ambient Guardian standing by.", end_session=True)
+    if intent_name in {
+        "AMAZON.StopIntent",
+        "AMAZON.CancelIntent",
+        "AMAZON.NavigateHomeIntent",
+    }:
+        speech = (
+            "InnerOS queda en espera."
+            if _request_locale(request_payload).lower().startswith("es")
+            else "Ambient Guardian standing by."
+        )
+        return _plain_response(speech, end_session=True)
+
+    # A fallback must never trap the user in a reprompt loop. Alexa does not expose
+    # the unmatched utterance to a custom skill, so there is nothing safe to route
+    # to the backend here. End the session and tell the user exactly how to retry.
+    if _request_locale(request_payload).lower().startswith("es"):
+        return _plain_response(
+            "No entendí esa frase y no realicé ninguna acción. Para salir, di salir. "
+            "Para consultar la energía, vuelve a abrir guardián ambiental y pregunta: "
+            "se fue la luz.",
+            end_session=True,
+        )
     return _plain_response(
-        "I did not understand that request. No action was taken.",
-        reprompt="Ask me a question about the home.",
+        "I did not understand that request. No action was taken. Please open "
+        "Ambient Guardian again and retry.",
+        end_session=True,
     )
 
 
