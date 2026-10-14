@@ -440,6 +440,20 @@ def _guardian_query(request_payload: dict[str, Any]) -> str:
             if english
             else "qué puede hacer el sistema DMX por Art-Net"
         )
+    if intent_name == "MusicStatusIntent":
+        return (
+            "is YouTube Music ready through Music Assistant"
+            if english
+            else "está listo YouTube Music con Music Assistant"
+        )
+    if intent_name == "PlayMusicIntent":
+        query = _slot_value(request_payload, "musicQuery")
+        player = _slot_value(request_payload, "speaker")
+        if not query:
+            return ""
+        if english:
+            return f"play {query}{f' on {player}' if player else ''} using YouTube Music"
+        return f"reproduce {query}{f' en {player}' if player else ''} usando YouTube Music"
     if intent_name == "UnifiRestartIntent":
         target = _slot_value(request_payload, "target")
         if english:
@@ -519,6 +533,8 @@ def _dispatch(payload: dict[str, Any]) -> dict[str, Any]:
         "HomeHistoryIntent",
         "RingDemoStatusIntent",
         "DMXStatusIntent",
+        "MusicStatusIntent",
+        "PlayMusicIntent",
         "UnifiRestartIntent",
         "PBXPrivateDestinationIntent",
         "VoiceOpsStatusIntent",

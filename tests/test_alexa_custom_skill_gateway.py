@@ -55,6 +55,8 @@ def intent_request(
     when=None,
     task=None,
     target=None,
+    music_query=None,
+    speaker=None,
 ):
     slots = {}
     if query is not None:
@@ -79,6 +81,18 @@ def intent_request(
         slots["target"] = {
             "name": "target",
             "value": target,
+            "confirmationStatus": "NONE",
+        }
+    if music_query is not None:
+        slots["musicQuery"] = {
+            "name": "musicQuery",
+            "value": music_query,
+            "confirmationStatus": "NONE",
+        }
+    if speaker is not None:
+        slots["speaker"] = {
+            "name": "speaker",
+            "value": speaker,
             "confirmationStatus": "NONE",
         }
     return {
@@ -234,6 +248,7 @@ def test_spanish_exit_intents_close_skill(intent_name):
         ("HomeHistoryIntent", "dame los eventos reales de la madrugada"),
         ("RingDemoStatusIntent", "qué detectó Ring en el demo"),
         ("DMXStatusIntent", "qué puede hacer el sistema DMX por Art-Net"),
+        ("MusicStatusIntent", "está listo YouTube Music con Music Assistant"),
         (
             "PBXPrivateDestinationIntent",
             "llama a mi celular usando la central Grandstream",
@@ -271,6 +286,7 @@ def test_stable_intents_map_to_bounded_backend_queries(
         ),
         ("RingDemoStatusIntent", "what did Ring detect in the demo"),
         ("DMXStatusIntent", "what can the DMX system do over Art-Net"),
+        ("MusicStatusIntent", "is YouTube Music ready through Music Assistant"),
         ("VoiceOpsStatusIntent", "is VoiceOps and the Grandstream PBX ready"),
         (
             "PBXCallbackIntent",
@@ -321,6 +337,27 @@ def test_unifi_restart_intent_preserves_only_target_alias(monkeypatch):
         )
     )
     assert calls == ["prepara reiniciar el UniFi U7 Living"]
+
+
+def test_play_music_intent_preserves_query_and_optional_speaker(monkeypatch):
+    calls = []
+    monkeypatch.setattr(
+        gateway,
+        "_backend_turn",
+        lambda query, speaker_context=None: calls.append(query) or "respuesta",
+    )
+    gateway._dispatch(
+        request_payload(
+            intent_request(
+                None,
+                intent_name="PlayMusicIntent",
+                locale="es-US",
+                music_query="Daft Punk",
+                speaker="estudio",
+            )
+        )
+    )
+    assert calls == ["reproduce Daft Punk en estudio usando YouTube Music"]
 
 
 def test_time_slot_becomes_deterministic_temporal_query(monkeypatch):

@@ -28,17 +28,119 @@
         {
           "name": "CapabilitiesIntent",
           "slots": [],
-          "samples": ["qué puedes hacer", "cómo me puedes ayudar", "qué controla inner os"]
+          "samples": [
+            "qué puedes hacer",
+            "cómo me puedes ayudar",
+            "qué controla inner os"
+          ]
+        },
+        {
+          "name": "HomeHistoryIntent",
+          "slots": [],
+          "samples": [
+            "dame las novedades reales de la casa",
+            "qué pasó en la madrugada",
+            "dame los eventos de la madrugada",
+            "hubo un corte de luz esta madrugada",
+            "hubo una caída eléctrica",
+            "hubo una caída de energía",
+            "se fue la luz",
+            "cuándo se fue la luz",
+            "a qué hora se fue la luz",
+            "qué pasó con la electricidad",
+            "qué pasó con la energía",
+            "revisa la caída eléctrica",
+            "estamos sin luz",
+            "estamos funcionando con batería",
+            "revisa el inversor",
+            "dime el estado del inversor",
+            "cuéntame el historial de hoy"
+          ]
+        },
+        {
+          "name": "RingDemoStatusIntent",
+          "slots": [],
+          "samples": [
+            "cómo está el demo de ring",
+            "qué detectó ring en el demo",
+            "muéstrame el evento simulado de ring"
+          ]
+        },
+        {
+          "name": "DMXStatusIntent",
+          "slots": [],
+          "samples": [
+            "qué puede hacer el sistema dmx",
+            "qué efectos de discoteca tienes",
+            "cómo está art net",
+            "dime las capacidades dmx"
+          ]
+        },
+        {
+          "name": "MusicStatusIntent",
+          "slots": [],
+          "samples": [
+            "está listo youtube music",
+            "cómo está music assistant",
+            "puedes reproducir youtube music"
+          ]
+        },
+        {
+          "name": "PlayMusicIntent",
+          "slots": [
+            {
+              "name": "musicQuery",
+              "type": "AMAZON.SearchQuery"
+            }
+          ],
+          "samples": [
+            "reproduce {musicQuery}",
+            "pon {musicQuery}"
+          ]
+        },
+        {
+          "name": "UnifiRestartIntent",
+          "slots": [
+            {
+              "name": "target",
+              "type": "AMAZON.SearchQuery"
+            }
+          ],
+          "samples": [
+            "prepara reiniciar unifi {target}",
+            "reinicia el equipo unifi {target}",
+            "prepara el reinicio del punto de acceso {target}"
+          ]
+        },
+        {
+          "name": "PBXPrivateDestinationIntent",
+          "slots": [],
+          "samples": [
+            "llama a mi celular usando grandstream",
+            "marca mi teléfono por la central",
+            "llama a este número por la central"
+          ]
         },
         {
           "name": "VoiceOpsStatusIntent",
           "slots": [],
-          "samples": ["cómo está el sistema de llamadas", "está lista la central", "cómo está la central grandstream"]
+          "samples": [
+            "cómo está el sistema de llamadas",
+            "está lista la central",
+            "puede llamarme voice ops",
+            "cómo está la central grandstream"
+          ]
         },
         {
           "name": "PBXCallbackIntent",
           "slots": [],
-          "samples": ["prepárame una llamada por la central con el último incidente", "llámame por la central con el reporte del incidente"]
+          "samples": [
+            "prepara el reporte del último incidente para voice ops",
+            "prepara el reporte del último incidente para la central",
+            "prepárame una llamada por la central con el último incidente",
+            "llámame por la central con el reporte del incidente",
+            "hazme una llamada por grandstream con el informe del incidente"
+          ]
         },
         {
           "name": "AntigravityDraftIntent",
@@ -48,7 +150,10 @@
               "type": "AMAZON.SearchQuery"
             }
           ],
-          "samples": ["prepara para antigravity {task}", "crea una tarea en antigravity {task}"]
+          "samples": [
+            "prepara para antigravity {task}",
+            "crea una tarea en antigravity {task}"
+          ]
         },
         {
           "name": "AMAZON.HelpIntent",
