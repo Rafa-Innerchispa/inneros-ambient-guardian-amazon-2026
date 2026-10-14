@@ -338,6 +338,11 @@ async def simulated_alexa(request: Request) -> Response:
         if isinstance(result.get("prepared_action"), dict)
         else None
     )
+    work_draft = (
+        result.get("work_request_draft")
+        if isinstance(result.get("work_request_draft"), dict)
+        else None
+    )
     public_prepared = (
         {key: value for key, value in prepared.items() if key != "approval_token"}
         if prepared
@@ -357,6 +362,9 @@ async def simulated_alexa(request: Request) -> Response:
     intent = "guardian_query"
     if receipt:
         intent = "incident_summary"
+    if work_draft:
+        intent = "draft_antigravity_task"
+        systems.append("Antigravity (draft only)")
     if prepared:
         intent = (
             "prepare_pbx_callback"
@@ -376,8 +384,14 @@ async def simulated_alexa(request: Request) -> Response:
         intent=intent,
         systems_consulted=systems,
         incident_receipt=receipt,
-        prepared_action=public_prepared,
-        approval_state="WAITING_FOR_OWNER" if prepared else "NOT_REQUIRED",
+        prepared_action=public_prepared or work_draft,
+        approval_state=(
+            "WAITING_FOR_OWNER"
+            if prepared
+            else "DRAFT_ONLY"
+            if work_draft
+            else "NOT_REQUIRED"
+        ),
         request_id=(
             str(payload.get("request_id") or "")[:160] or None
             if skill_bridge

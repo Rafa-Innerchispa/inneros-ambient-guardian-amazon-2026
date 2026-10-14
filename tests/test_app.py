@@ -73,6 +73,31 @@ def test_invalid_event_and_empty_utterance_fail_cleanly():
     assert empty.status_code == 400
 
 
+def test_antigravity_voice_draft_is_visible_but_never_dispatched(monkeypatch):
+    monkeypatch.setenv("AWS_STRANDS_ENABLED", "0")
+    response = client.post(
+        "/api/alexa",
+        json={
+            "utterance": (
+                "prepara una tarea para Antigravity: crear una automatización de bienvenida"
+            )
+        },
+    )
+
+    assert response.status_code == 200
+    draft = response.json()["work_request_draft"]
+    assert draft["status"] == "DRAFT_ONLY"
+    assert draft["dispatched"] is False
+    assert draft["executed"] is False
+    assert STATE.pending == {}
+
+    live = client.get("/api/live-evidence").json()
+    assert live["intent"] == "draft_antigravity_task"
+    assert live["approval_state"] == "DRAFT_ONLY"
+    assert live["prepared_action"]["target"] == "Antigravity"
+    assert "Antigravity (draft only)" in live["systems_consulted"]
+
+
 def test_integration_status_is_honest_about_ring_and_official_mcp():
     data = client.get("/api/integrations").json()
     assert data["mcp_transport"] == "official-streamable-http"

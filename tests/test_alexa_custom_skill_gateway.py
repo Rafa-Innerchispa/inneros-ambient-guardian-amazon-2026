@@ -53,6 +53,7 @@ def intent_request(
     intent_name="AskGuardianIntent",
     locale="en-US",
     when=None,
+    task=None,
 ):
     slots = {}
     if query is not None:
@@ -65,6 +66,12 @@ def intent_request(
         slots["when"] = {
             "name": "when",
             "value": when,
+            "confirmationStatus": "NONE",
+        }
+    if task is not None:
+        slots["task"] = {
+            "name": "task",
+            "value": task,
             "confirmationStatus": "NONE",
         }
     return {
@@ -224,6 +231,29 @@ def test_time_slot_becomes_deterministic_temporal_query(monkeypatch):
         )
     )
     assert calls == ["qué pasó a las 03:00"]
+
+
+def test_antigravity_intent_maps_to_local_draft_only_query(monkeypatch):
+    calls = []
+    monkeypatch.setattr(
+        gateway,
+        "_backend_turn",
+        lambda query, speaker_context=None: calls.append(query) or "borrador listo",
+    )
+    response = gateway._dispatch(
+        request_payload(
+            intent_request(
+                None,
+                intent_name="AntigravityDraftIntent",
+                locale="es-US",
+                task="crear una automatización para las luces",
+            )
+        )
+    )
+    assert calls == [
+        "prepara una tarea para Antigravity: crear una automatización para las luces"
+    ]
+    assert response["response"]["outputSpeech"]["text"] == "borrador listo"
 
 
 def test_pin_confirmation_is_opt_in_by_default(monkeypatch):

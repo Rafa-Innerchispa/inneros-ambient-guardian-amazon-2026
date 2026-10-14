@@ -39,6 +39,16 @@
           "samples": ["prepare a call through the PBX with the latest incident report", "call me through grandstream with the incident report"]
         },
         {
+          "name": "AntigravityDraftIntent",
+          "slots": [
+            {
+              "name": "task",
+              "type": "AMAZON.SearchQuery"
+            }
+          ],
+          "samples": ["prepare for antigravity {task}", "create an antigravity task {task}"]
+        },
+        {
           "name": "AMAZON.HelpIntent",
           "samples": []
         },
