@@ -20,15 +20,34 @@ _DISABLE = re.compile(r"\b(?:disable|stop|turn\s+off)\b", re.I)
 _NEGATED_ENABLE = re.compile(r"\b(?:do\s+not|don't|dont|never)\b[^.]*\b(?:enable|start|turn\s+on)\b", re.I)
 _NEGATED_DISABLE = re.compile(r"\b(?:do\s+not|don't|dont|never)\b[^.]*\b(?:disable|stop|turn\s+off)\b", re.I)
 _PBX_CALLBACK = re.compile(
-    r"\bcall\s+me\b[^.]*\b(?:through|via|using)\b[^.]*\bpbx\b"
-    r"[^.]*\bincident\s+report\b",
+    r"(?:\bcall\s+me\b[^.]*\b(?:through|via|using)\b[^.]*\b(?:pbx|grandstream)\b"
+    r"[^.]*\bincident\s+report\b)"
+    r"|(?:(?:\bll[aá]mame\b|\b(?:hazme|prep[aá]rame)\b[^.]*\b(?:llamada|llamar)\b)[^.]*"
+    r"\b(?:central|pbx|grandstream)\b[^.]*\b(?:reporte|informe|incidente)\b)",
     re.I,
 )
 _PBX_UNSAFE_DESTINATION = re.compile(
-    r"\b(?:pstn|mobile|cell(?:ular)?|telephone|phone\s+number|extension)\b|\+?\d[\d\s().-]{5,}",
+    r"\b(?:pstn|telephone|phone\s+number|extension|extensi[oó]n|n[uú]mero\s+de\s+tel[eé]fono)\b"
+    r"|\+?\d[\d\s().-]{5,}",
     re.I,
 )
-_PBX_NEGATED = re.compile(r"\b(?:do\s+not|don't|dont|never|cancel)\b[^.]*\bcall\b", re.I)
+_PBX_NEGATED = re.compile(
+    r"\b(?:do\s+not|don't|dont|never|cancel)\b[^.]*\bcall\b"
+    r"|\b(?:no\s+me\s+llames|no\s+llames|cancela)\b",
+    re.I,
+)
+
+_CAPABILITIES_QUERY = re.compile(
+    r"\b(?:qu[eé]\s+puedes\s+hacer|c[oó]mo\s+me\s+puedes\s+ayudar|qu[eé]\s+controla\s+inneros|"
+    r"what\s+can\s+you\s+do|how\s+can\s+you\s+help)\b",
+    re.I,
+)
+_VOICEOPS_STATUS_QUERY = re.compile(
+    r"\b(?:c[oó]mo\s+est[aá]|estado\s+de|est[aá]\s+lista|funciona)\b[^.]*"
+    r"\b(?:voice\s*ops|central|pbx|grandstream|sistema\s+de\s+llamadas)\b"
+    r"|\b(?:voice\s*ops|pbx|grandstream)\b[^.]*\b(?:status|ready|working)\b",
+    re.I,
+)
 
 
 _ALARM_DISARM_ATTEMPT = re.compile(
@@ -540,6 +559,57 @@ def _deterministic_fallback(
     }
 
 
+def _inneros_capabilities_response() -> dict[str, Any]:
+    return {
+        "answer": (
+            "Soy la entrada de voz de InnerOS. Puedo revisar el estado de la casa, "
+            "resumir incidentes de Ring, consultar VoiceOps y la central Grandstream, "
+            "preparar una llamada al propietario con el último reporte, y controlar "
+            "luces o escenas DMX permitidas. La alarma, la sirena y las llamadas reales "
+            "mantienen verificación y aprobación; no marco números arbitrarios. "
+            "Antigravity todavía no tiene un contrato seguro conectado a esta skill."
+        ),
+        "status": "all_clear",
+        "reasoning_mode": "deterministic-inneros-capabilities",
+    }
+
+
+def _voiceops_status_response(state: GuardianState) -> dict[str, Any]:
+    voiceops = state.voiceops.status()
+    ready = bool(voiceops.get("callback_ready"))
+    real = str(voiceops.get("truth_label") or "CODE_READY") == "REAL"
+    confirmed = bool(voiceops.get("owner_confirmed_e2e_calling"))
+    if ready and real:
+        answer = (
+            "VoiceOps y la central Grandstream están listos para preparar una llamada "
+            "al propietario. No inicié ninguna llamada."
+        )
+        status = "all_clear"
+    elif confirmed:
+        answer = (
+            "La telefonía Grandstream ya fue validada de extremo a extremo, pero "
+            "VoiceOps no está disponible para una llamada en este momento. No inicié ninguna llamada."
+        )
+        status = "attention_required"
+    elif str(voiceops.get("truth_label") or "") == "SIMULATED":
+        answer = (
+            "El flujo de llamada está en modo de simulación. Puedo demostrar la preparación, "
+            "pero no iniciaré una llamada real."
+        )
+        status = "attention_required"
+    else:
+        answer = (
+            "La integración VoiceOps está preparada, pero no puedo verificar ahora la central "
+            "Grandstream. No inicié ninguna llamada."
+        )
+        status = "attention_required"
+    return {
+        "answer": answer,
+        "status": status,
+        "reasoning_mode": "deterministic-voiceops-status",
+    }
+
+
 def simulated_alexa_turn(
     utterance: str,
     state: GuardianState,
@@ -551,6 +621,23 @@ def simulated_alexa_turn(
     events = state.recent_events(8)
 
     normalized_utterance = " ".join(utterance.strip().split())
+
+    if _CAPABILITIES_QUERY.search(normalized_utterance):
+        return {
+            "utterance": utterance,
+            "response": _inneros_capabilities_response(),
+            "prepared_action": None,
+            "evidence_count": len(state.evidence_snapshot()),
+        }
+
+    if _VOICEOPS_STATUS_QUERY.search(normalized_utterance):
+        return {
+            "utterance": utterance,
+            "response": _voiceops_status_response(state),
+            "prepared_action": None,
+            "voiceops": state.voiceops.status(),
+            "evidence_count": len(state.evidence_snapshot()),
+        }
 
     temporal_incident = _temporal_incident_response(
         normalized_utterance, state, reasoner
@@ -882,8 +969,8 @@ def simulated_alexa_turn(
         except ValueError as exc:
             if action_name == "voiceops_owner_callback":
                 response["answer"] = (
-                    "I need a persistent Incident Receipt before I can prepare the PBX callback. "
-                    "No call was placed."
+                    "Necesito un recibo persistente del incidente antes de preparar la llamada "
+                    "por la central. No se realizó ninguna llamada."
                 )
                 response["status"] = "attention_required"
                 response["prepare_error"] = str(exc)
@@ -892,8 +979,9 @@ def simulated_alexa_turn(
         else:
             if action_name == "voiceops_owner_callback":
                 response["answer"] = (
-                    "I prepared an owner callback through the PBX with the latest Incident Receipt. "
-                    "No call was placed. A separate owner-authenticated approval is required."
+                    "Preparé una llamada al propietario por la central con el recibo del último "
+                    "incidente. No se realizó ninguna llamada; falta una aprobación independiente "
+                    "autenticada por el propietario."
                 )
             else:
                 response["answer"] += (

@@ -1,0 +1,26 @@
+[Unit]
+Description=InnerOS Alexa Custom Skill gateway
+After=network-online.target ambient-guardian.service
+Wants=network-online.target ambient-guardian.service
+
+[Service]
+Type=simple
+WorkingDirectory=%h/projects/inneros-ambient-guardian-amazon-2026
+Environment=PYTHONPATH=%h/projects/inneros-ambient-guardian-amazon-2026/src
+Environment=PYTHONDONTWRITEBYTECODE=1
+Environment=ALEXA_SKILL_HOST=127.0.0.1
+Environment=ALEXA_SKILL_PORT=8795
+Environment=AMBIENT_GUARDIAN_SKILL_BACKEND_URL=http://127.0.0.1:8794/api/alexa
+Environment=AMBIENT_GUARDIAN_VOICE_NAME=InnerOS
+EnvironmentFile=%h/data/ralfia/ambient_guardian/runtime.env
+ExecStart=%h/projects/inneros-ambient-guardian-amazon-2026/.venv/bin/python -m ambient_guardian.alexa_skill_gateway
+Restart=on-failure
+RestartSec=3
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=read-only
+ReadWritePaths=%h/data/ralfia/ambient_guardian
+
+[Install]
+WantedBy=default.target

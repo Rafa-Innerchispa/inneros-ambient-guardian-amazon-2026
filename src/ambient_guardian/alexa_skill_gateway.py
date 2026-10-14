@@ -382,6 +382,31 @@ def _slot_value(request_payload: dict[str, Any], slot_name: str) -> str:
     return str(slot.get("value") or "").strip()
 
 
+def _request_locale(request_payload: dict[str, Any]) -> str:
+    return str(request_payload.get("locale") or "en-US").strip()
+
+
+def _voice_name() -> str:
+    return os.getenv("AMBIENT_GUARDIAN_VOICE_NAME", "InnerOS").strip() or "InnerOS"
+
+
+def _guardian_query(request_payload: dict[str, Any]) -> str:
+    """Translate stable Alexa intents into the bounded InnerOS voice vocabulary."""
+    intent_name = str(((request_payload.get("intent") or {}).get("name") or ""))
+    if intent_name == "CapabilitiesIntent":
+        return "qué puedes hacer dentro de InnerOS"
+    if intent_name == "VoiceOpsStatusIntent":
+        return "cómo está el sistema de llamadas VoiceOps y la central Grandstream"
+    if intent_name == "PBXCallbackIntent":
+        return "prepárame una llamada por la central con el reporte del último incidente"
+
+    query = _slot_value(request_payload, "query")
+    when = _slot_value(request_payload, "when")
+    if when:
+        query = f"qué pasó a las {when}"
+    return query
+
+
 def _dispatch(payload: dict[str, Any]) -> dict[str, Any]:
     _capture_speaker_candidate(payload)
     request_payload = payload.get("request") or {}
@@ -397,8 +422,14 @@ def _dispatch(payload: dict[str, Any]) -> dict[str, Any]:
     if account_linking_required and not linked:
         return _link_account_response()
     if request_type == "LaunchRequest":
+        if _request_locale(request_payload).lower().startswith("es"):
+            return _plain_response(
+                f"{_voice_name()} está listo. Puedo revisar la casa y los incidentes, "
+                "consultar VoiceOps y preparar acciones seguras.",
+                reprompt="¿Qué quieres consultar o preparar?",
+            )
         return _plain_response(
-            "Ambient Guardian is ready. Ask me if everything is okay at home, "
+            f"{_voice_name()} is ready. Ask me if everything is okay at home, "
             "what happened at the front door, or ask me to prepare a safe action.",
             reprompt="What would you like to know about the home?",
         )
@@ -413,8 +444,13 @@ def _dispatch(payload: dict[str, Any]) -> dict[str, Any]:
         )
 
     intent_name = str(((request_payload.get("intent") or {}).get("name") or ""))
-    if intent_name == "AskGuardianIntent":
-        query = _slot_value(request_payload, "query")
+    if intent_name in {
+        "AskGuardianIntent",
+        "CapabilitiesIntent",
+        "VoiceOpsStatusIntent",
+        "PBXCallbackIntent",
+    }:
+        query = _guardian_query(request_payload)
         speaker = _speaker_context(payload)
         speaker["account_linked"] = linked
         speaker["_request_id"] = str(request_payload.get("requestId") or "")
@@ -427,16 +463,38 @@ def _dispatch(payload: dict[str, Any]) -> dict[str, Any]:
         try:
             speech = _backend_turn(query, speaker)
         except ValueError:
-            speech = "Please ask a specific question about the home."
-        except Exception:
             speech = (
-                "Ambient Guardian cannot reach the local home brain right now. "
-                "No physical action was taken."
+                "Haz una pregunta específica sobre la casa."
+                if _request_locale(request_payload).lower().startswith("es")
+                else "Please ask a specific question about the home."
             )
+        except Exception:
+            if _request_locale(request_payload).lower().startswith("es"):
+                speech = (
+                    f"{_voice_name()} no puede conectarse con el cerebro local de la casa ahora. "
+                    "No se realizó ninguna acción física."
+                )
+            else:
+                speech = (
+                    f"{_voice_name()} cannot reach the local home brain right now. "
+                    "No physical action was taken."
+                )
         return _plain_response(
-            speech, reprompt="What else would you like to know?"
+            speech,
+            reprompt=(
+                "¿Qué más quieres consultar?"
+                if _request_locale(request_payload).lower().startswith("es")
+                else "What else would you like to know?"
+            ),
         )
     if intent_name == "AMAZON.HelpIntent":
+        if _request_locale(request_payload).lower().startswith("es"):
+            return _plain_response(
+                "Puedes preguntarme qué puede hacer InnerOS, qué pasó en la casa, "
+                "cómo está VoiceOps o pedirme que prepare una llamada por la central. "
+                "Las acciones sensibles conservan su aprobación independiente.",
+                reprompt="¿Qué quieres consultar?",
+            )
         return _plain_response(
             "You can ask whether the home is okay, what happened at the front door, "
             "or ask Ambient Guardian to prepare an action. Physical actions still "

@@ -60,6 +60,33 @@ Health: `GET http://127.0.0.1:8795/health`
 
 Alexa requests: `POST /alexa/skill`
 
+### Persistent InnerOS host services
+
+The checked-in user services keep both loopback processes alive and restart them
+after a failure:
+
+- `deploy/systemd/ambient-guardian.service`: orchestration backend on `127.0.0.1:8794`.
+- `deploy/systemd/ambient-guardian-alexa-skill.service`: signed Alexa gateway on
+  `127.0.0.1:8795`.
+
+Install them as user services only after the repository exists at
+`~/projects/inneros-ambient-guardian-amazon-2026`, its virtual environment is
+installed, and the protected runtime file exists at
+`~/data/ralfia/ambient_guardian/runtime.env`:
+
+```bash
+install -Dm644 deploy/systemd/ambient-guardian.service ~/.config/systemd/user/ambient-guardian.service
+install -Dm644 deploy/systemd/ambient-guardian-alexa-skill.service ~/.config/systemd/user/ambient-guardian-alexa-skill.service
+systemctl --user daemon-reload
+systemctl --user enable --now ambient-guardian.service ambient-guardian-alexa-skill.service
+curl --fail http://127.0.0.1:8794/health
+curl --fail http://127.0.0.1:8795/health
+```
+
+`runtime.env` supplies the exact Alexa Skill ID and bridge secret; neither value
+belongs in Git. The Cloudflare route for `/alexa/skill*` should continue to target
+`127.0.0.1:8795`.
+
 ## Alexa Developer Console
 
 Create a **Custom** skill:
@@ -192,6 +219,12 @@ Ambient Guardian.
 After an Incident Receipt exists, the owner can say:
 
 `Alexa, ask Ambient Guardian to call me through my PBX and give me the incident report`
+
+With the canonical Ecuador `es-US` model, the equivalent phrases include:
+
+- `Alexa, abre Guardián Ambiental y pregúntale qué puede hacer`
+- `Alexa, pregunta a Guardián Ambiental cómo está la central Grandstream`
+- `Alexa, pide a Guardián Ambiental que me prepare una llamada por la central con el último incidente`
 
 This request only prepares `voiceops_owner_callback`. It does not place a call
 and Alexa never receives a destination or extension. A separate owner-authenticated
