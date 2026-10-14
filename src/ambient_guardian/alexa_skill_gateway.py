@@ -31,6 +31,36 @@ _CERT_PATTERN = re.compile(
 )
 
 
+def _record_gateway_error(exc: Exception) -> None:
+    """Record a minimal local diagnostic without persisting Alexa request data."""
+    try:
+        error_path = Path(
+            os.getenv(
+                "AMBIENT_GUARDIAN_GATEWAY_ERROR_FILE",
+                "/home/rlopez/data/ralfia/ambient_guardian/alexa_gateway_errors.jsonl",
+            )
+        ).expanduser()
+        error_path.parent.mkdir(parents=True, exist_ok=True)
+        record = {
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "error_type": type(exc).__name__[:120],
+            "error": str(exc).replace("\n", " ")[:240],
+        }
+        fd = os.open(
+            error_path,
+            os.O_WRONLY | os.O_CREAT | os.O_APPEND,
+            0o600,
+        )
+        try:
+            os.write(fd, (json.dumps(record, ensure_ascii=True) + "\n").encode("utf-8"))
+        finally:
+            os.close(fd)
+        os.chmod(error_path, 0o600)
+    except Exception:
+        # Diagnostics must never change request handling or expose details remotely.
+        return
+
+
 def _backend_url() -> str:
     url = os.getenv("AMBIENT_GUARDIAN_SKILL_BACKEND_URL", DEFAULT_BACKEND).strip()
     parsed = urlsplit(url)
@@ -515,7 +545,8 @@ async def skill_endpoint(request: Request) -> Response:
     try:
         payload = _verify_request(headers, body)
         response = _dispatch(payload)
-    except Exception:
+    except Exception as exc:
+        _record_gateway_error(exc)
         return JSONResponse({"detail": "invalid Alexa request"}, status_code=400)
     return JSONResponse(response)
 
