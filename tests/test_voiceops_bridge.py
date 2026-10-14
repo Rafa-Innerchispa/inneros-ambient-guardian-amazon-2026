@@ -54,6 +54,20 @@ class FakeVoiceOpsClient:
         }
 
 
+def assert_private_extension_is_redacted(payload):
+    """Reject extension fields/values without matching unrelated digest text."""
+    if isinstance(payload, dict):
+        assert "extension" not in payload
+        assert "target_extension" not in payload
+        for value in payload.values():
+            assert_private_extension_is_redacted(value)
+    elif isinstance(payload, list):
+        for value in payload:
+            assert_private_extension_is_redacted(value)
+    elif isinstance(payload, str):
+        assert payload != "1004"
+
+
 def build_incident(state, when="2026-10-06T03:04:00-05:00"):
     state.events = []
     state.add_ring_demo_event("motion", timestamp=when, summary="Motion at the front door.")
@@ -72,7 +86,7 @@ def test_pbx_prepare_never_dispatches_and_approval_is_receipt_verified(tmp_path)
     assert prepared["executed"] is False
     assert prepared["target_alias"] == "voiceops.owner"
     assert prepared["linked_incident_id"] == incident["receipt"]["incident_id"]
-    assert "1004" not in json.dumps(prepared)
+    assert_private_extension_is_redacted(prepared)
 
     evidence = state.approve_action(prepared["approval_token"])
 
@@ -81,7 +95,7 @@ def test_pbx_prepare_never_dispatches_and_approval_is_receipt_verified(tmp_path)
     assert evidence["verified"] is True
     assert evidence["linked_incident_digest"] == incident["receipt"]["digest"]
     assert evidence["observed_state"]["target_alias"] == "voiceops.owner"
-    assert "1004" not in json.dumps(evidence)
+    assert_private_extension_is_redacted(evidence)
     recomputable = dict(evidence)
     digest = recomputable.pop("evidence_digest")
     canonical = json.dumps(
