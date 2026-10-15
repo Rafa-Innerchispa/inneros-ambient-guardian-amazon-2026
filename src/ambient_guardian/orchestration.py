@@ -4,6 +4,7 @@ import json
 import os
 import re
 import secrets
+import sqlite3
 from collections import Counter
 from datetime import datetime, time as clock_time, timedelta, timezone
 from typing import Any
@@ -12,6 +13,7 @@ from zoneinfo import ZoneInfo
 from . import aws_strands
 from .core import GuardianReasoner, GuardianState
 from .energy_resilience import estimate_energy_resilience, spoken_duration
+from .solar_history import current_outage_summary
 
 
 _DOOR = r"(?:front\s+)?door"
@@ -835,6 +837,14 @@ def _energy_resilience_response(state: GuardianState) -> dict[str, Any]:
                 current[entity_id] = event.get("state")
 
     estimate = estimate_energy_resilience(current, events, now=end)
+    try:
+        solar_history = current_outage_summary()
+    except (OSError, sqlite3.Error, ValueError):
+        solar_history = None
+    if solar_history and solar_history.get("outage_active"):
+        recorded_start = solar_history.get("outage_started_at")
+        if recorded_start:
+            estimate["outage_started_at"] = recorded_start
     grid = estimate["grid_present"]
     battery_mode = estimate["battery_mode"]
     inverter_mode = estimate["inverter_mode"]
@@ -860,12 +870,22 @@ def _energy_resilience_response(state: GuardianState) -> dict[str, Any]:
         if estimate.get("projected_reserve_at")
         else None
     )
+    history_text = ""
+    if solar_history and solar_history.get("outage_active"):
+        average_w = solar_history.get("load_average_w")
+        consumed_wh = solar_history.get("estimated_ac_energy_wh")
+        if average_w is not None and consumed_wh is not None:
+            history_text = (
+                f"Desde el inicio, el registro local acumula aproximadamente {consumed_wh:.0f} "
+                f"vatios hora, con una carga media de {average_w:.0f} vatios. "
+            )
 
     if outage_active:
         answer = (
             "InnerOS detecta pérdida de red o respaldo por batería activo. "
             + (f"El corte comenzó aproximadamente a las {outage_time}. " if outage_time else "")
             + (f"La lectura actual muestra {reading_text}. " if reading_text else "")
+            + history_text
             + (
                 f"Con la batería TECLAM de 5.9 kilovatios hora y una reserva del "
                 f"{estimate['reserve_percent']:.0f} por ciento, la autonomía estimada es "
@@ -926,6 +946,7 @@ def _energy_resilience_response(state: GuardianState) -> dict[str, Any]:
             ],
             "requires_owner_allowlist": True,
         },
+        "solar_history": solar_history,
         "home_timeline": timeline,
     }
 
@@ -1058,6 +1079,16 @@ def localize_alexa_result(result: dict[str, Any], locale: str) -> dict[str, Any]
             if output_power not in {None, "", "unknown", "unavailable"}:
                 readings.append(f"{output_power} watts output")
             reading_text = ", ".join(readings)
+            solar_history = dict(result.get("solar_history") or {})
+            history_text = ""
+            average_w = solar_history.get("load_average_w")
+            consumed_wh = solar_history.get("estimated_ac_energy_wh")
+            if average_w is not None and consumed_wh is not None:
+                history_text = (
+                    f"Since the outage began, the local recorder shows about "
+                    f"{consumed_wh:.0f} watt-hours used at an average load of "
+                    f"{average_w:.0f} watts. "
+                )
             if resilience.get("mode") == "OUTAGE_DETECTED":
                 outage_time = (
                     _format_local_time(str(resilience["outage_started_at"]))
@@ -1076,6 +1107,7 @@ def localize_alexa_result(result: dict[str, Any], locale: str) -> dict[str, Any]
                     "InnerOS detects utility loss or active battery backup. "
                     + (f"The outage began at about {outage_time}. " if outage_time else "")
                     + (f"The current reading shows {reading_text}. " if reading_text else "")
+                    + history_text
                     + (
                         f"Using the 5.9 kilowatt-hour TECLAM battery and a "
                         f"{resilience.get('reserve_percent', 20):.0f} percent reserve, estimated "

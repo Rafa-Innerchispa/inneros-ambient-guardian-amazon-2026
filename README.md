@@ -213,6 +213,7 @@ See [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md) for production host/origin settin
 | `AMBIENT_GUARDIAN_BATTERY_NOMINAL_WH` | `5888` | Installed nominal battery energy used for runtime estimates |
 | `AMBIENT_GUARDIAN_BATTERY_RESERVE_PERCENT` | `20` | Conservative reserve target; runtime never plans to the BMS cutoff |
 | `AMBIENT_GUARDIAN_INVERTER_EFFICIENCY` | `0.90` | Conservative DC-to-AC efficiency used in spoken estimates |
+| `AMBIENT_GUARDIAN_SOLAR_HISTORY_DB` | existing Pi01 SQLite path | Read-only solar flight recorder used for exact outage start and aggregate consumption |
 | `AMBIENT_GUARDIAN_ENERGY_ALERT_TARGETS` | `notify.echo_cuarto_speak` | Allowlisted Echo targets for outage, restoration, and bounded status alerts |
 | `AMBIENT_GUARDIAN_ENERGY_ALERT_LANGUAGE` | `en` | Spoken language for energy alerts |
 | `AMBIENT_GUARDIAN_ENERGY_DAY_START_HOUR` | `8` | First local hour in which periodic outage status is allowed |
