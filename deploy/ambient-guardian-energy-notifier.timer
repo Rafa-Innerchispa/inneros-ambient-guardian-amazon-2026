@@ -1,0 +1,13 @@
+[Unit]
+Description=Check for utility loss or restoration every minute
+
+[Timer]
+OnBootSec=45
+OnUnitActiveSec=60
+AccuracySec=5
+Persistent=false
+Unit=ambient-guardian-energy-notifier.service
+
+[Install]
+WantedBy=timers.target
+

@@ -1,7 +1,7 @@
 {
   "interactionModel": {
     "languageModel": {
-      "invocationName": "ambient guardian",
+      "invocationName": "inner oz",
       "intents": [
         {
           "name": "AskGuardianIntent",
@@ -57,7 +57,13 @@
             "show me the energy resilience status",
             "what is the energy saving plan",
             "which circuits stay protected during an outage",
-            "show me the load shedding preview"
+            "show me the load shedding preview",
+            "how long will the battery last",
+            "how much backup time remains",
+            "when did the outage start",
+            "what is the current power load",
+            "should I turn off the fan",
+            "enter energy saving mode"
           ]
         },
         {

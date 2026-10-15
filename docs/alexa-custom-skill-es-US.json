@@ -1,7 +1,7 @@
 {
   "interactionModel": {
     "languageModel": {
-      "invocationName": "guardián ambiental",
+      "invocationName": "inner oz",
       "intents": [
         {
           "name": "AskGuardianIntent",
@@ -64,7 +64,13 @@
             "dame el estado de resiliencia energética",
             "cuál es el plan de ahorro energético",
             "qué circuitos se protegen durante un apagón",
-            "muéstrame la vista previa de desconexión de cargas"
+            "muéstrame la vista previa de desconexión de cargas",
+            "cuánto tiempo durará la batería",
+            "cuánta autonomía queda",
+            "a qué hora comenzó el apagón",
+            "cuánto consume la casa",
+            "debo apagar el ventilador",
+            "activa el modo de ahorro energético"
           ]
         },
         {

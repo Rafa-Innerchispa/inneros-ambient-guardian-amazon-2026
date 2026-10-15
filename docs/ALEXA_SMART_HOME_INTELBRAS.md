@@ -95,10 +95,11 @@ The repository also contains Spanish interaction models:
 - `docs/alexa-custom-skill-es-US.json`
 - `docs/alexa-custom-skill-es-MX.json`
 
-Use invocation name **guardián ambiental** for the Spanish Custom Skill locale.
+Use invocation name **inner oz** for every Custom Skill locale. The display name remains
+**Ambient Guardian**.
 That gives an explicit fallback such as:
 
-`Alexa, abre guardián ambiental`
+`Alexa, abre Inner Oz`
 
 The Smart Home and MCP paths are what remove the need to say this invocation name
 for normal household and Alexa+ conversational use.

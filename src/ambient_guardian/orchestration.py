@@ -11,6 +11,7 @@ from zoneinfo import ZoneInfo
 
 from . import aws_strands
 from .core import GuardianReasoner, GuardianState
+from .energy_resilience import estimate_energy_resilience, spoken_duration
 
 
 _DOOR = r"(?:front\s+)?door"
@@ -71,9 +72,15 @@ _HOME_HISTORY_QUERY = re.compile(
 _ENERGY_RESILIENCE_QUERY = re.compile(
     r"\b(?:energy\s+(?:resilience|saving)\s+(?:status|mode|plan)|"
     r"resilience\s+plan|load\s+shedding|critical\s+circuits?|"
+    r"how\s+(?:long\s+will\s+the\s+battery\s+last|much\s+backup\s+time\s+remains)|"
+    r"when\s+did\s+the\s+(?:power\s+)?outage\s+start|current\s+power\s+load|"
+    r"should\s+i\s+turn\s+off\s+the\s+fan|enter\s+energy\s+saving\s+mode|"
     r"(?:estado|plan)\s+de\s+resiliencia\s+energ[eé]tica|"
     r"modo\s+de\s+ahorro\s+energ[eé]tico|desconexi[oó]n\s+de\s+cargas|"
-    r"circuitos?\s+cr[ií]ticos?)\b",
+    r"circuitos?\s+cr[ií]ticos?|cu[aá]nto\s+tiempo\s+durar[aá]\s+la\s+bater[ií]a|"
+    r"cu[aá]nta\s+autonom[ií]a\s+queda|a\s+qu[eé]\s+hora\s+comenz[oó]\s+el\s+apag[oó]n|"
+    r"cu[aá]nto\s+consume\s+la\s+casa|debo\s+apagar\s+el\s+ventilador|"
+    r"activa\s+el\s+modo\s+de\s+ahorro\s+energ[eé]tico)\b",
     re.I,
 )
 _RING_DEMO_QUERY = re.compile(
@@ -827,21 +834,13 @@ def _energy_resilience_response(state: GuardianState) -> dict[str, Any]:
             if entity_id and entity_id not in current:
                 current[entity_id] = event.get("state")
 
-    grid = str(
-        current.get("binary_sensor.inneros_pi01_solar_grid_present") or "unknown"
-    ).lower()
-    battery_mode = str(
-        current.get("binary_sensor.inneros_pi01_solar_battery_mode") or "unknown"
-    ).lower()
-    inverter_mode = str(
-        current.get("sensor.inneros_pi01_solar_mode") or "unknown"
-    ).lower()
-    outage_active = grid == "off" or battery_mode == "on" or inverter_mode in {
-        "battery_backup",
-        "battery",
-    }
-    battery_capacity = current.get("sensor.inneros_pi01_solar_battery_capacity")
-    output_power = current.get("sensor.inneros_pi01_solar_output_power")
+    estimate = estimate_energy_resilience(current, events, now=end)
+    grid = estimate["grid_present"]
+    battery_mode = estimate["battery_mode"]
+    inverter_mode = estimate["inverter_mode"]
+    outage_active = bool(estimate["outage_active"])
+    battery_capacity = estimate["battery_capacity_percent"]
+    output_power = estimate["output_power_w"]
 
     readings = []
     if battery_capacity not in {None, "", "unknown", "unavailable"}:
@@ -850,14 +849,35 @@ def _energy_resilience_response(state: GuardianState) -> dict[str, Any]:
         readings.append(f"salida de {output_power} vatios")
     reading_text = ", ".join(readings)
 
+    runtime_text = spoken_duration(estimate.get("remaining_hours"), english=False)
+    outage_time = (
+        _format_local_time(str(estimate["outage_started_at"]))
+        if estimate.get("outage_started_at")
+        else None
+    )
+    reserve_time = (
+        _format_local_time(str(estimate["projected_reserve_at"]))
+        if estimate.get("projected_reserve_at")
+        else None
+    )
+
     if outage_active:
         answer = (
             "InnerOS detecta pérdida de red o respaldo por batería activo. "
+            + (f"El corte comenzó aproximadamente a las {outage_time}. " if outage_time else "")
             + (f"La lectura actual muestra {reading_text}. " if reading_text else "")
-            + "Plan de resiliencia en vista previa: conservar servidores, red principal, "
-            "seguridad, Home Assistant y monitoreo del inversor; preparar el apagado de "
-            "cargas no críticas. No desconecté ninguna carga porque todavía no existe una "
-            "lista de circuitos aprobada por el propietario."
+            + (
+                f"Con la batería TECLAM de 5.9 kilovatios hora y una reserva del "
+                f"{estimate['reserve_percent']:.0f} por ciento, la autonomía estimada es "
+                f"de {runtime_text}, hasta cerca de las {reserve_time}. "
+                if runtime_text and reserve_time
+                else ""
+            )
+            + "Plan de resiliencia: conservar servidores, red principal, seguridad, Home "
+            "Assistant y monitoreo del inversor; suspender cómputo intensivo y preparar "
+            "el apagado de la computadora, monitores, puntos Wi-Fi secundarios, Echo no "
+            "esenciales e iluminación decorativa. No desconecté ninguna carga: los equipos "
+            "de red todavía requieren la autorización del propietario por WhatsApp."
         )
         mode = "OUTAGE_DETECTED"
         status = "attention_required"
@@ -881,21 +901,29 @@ def _energy_resilience_response(state: GuardianState) -> dict[str, Any]:
         "energy_resilience": {
             "truth": str(timeline.get("truth") or "REAL"),
             "mode": mode,
-            "grid_present": grid,
-            "battery_mode": battery_mode,
-            "inverter_mode": inverter_mode,
+            **estimate,
             "battery_capacity": battery_capacity,
             "output_power": output_power,
             "execution": "PREVIEW_ONLY",
             "executed": False,
             "critical_load_classes": [
                 "servers",
-                "network_core",
+                "router_gateway",
+                "network_core_switch",
+                "primary_wifi_access_point",
                 "security",
+                "critical_cameras_and_nvr",
                 "home_assistant",
                 "inverter_monitoring",
             ],
-            "load_shed_targets": [],
+            "load_shed_targets": [
+                "desktop_workstation",
+                "external_monitors",
+                "secondary_wifi_access_points",
+                "noncritical_echo_devices",
+                "decorative_and_dmx_lighting",
+                "nonessential_lighting",
+            ],
             "requires_owner_allowlist": True,
         },
         "home_timeline": timeline,
@@ -1031,13 +1059,35 @@ def localize_alexa_result(result: dict[str, Any], locale: str) -> dict[str, Any]
                 readings.append(f"{output_power} watts output")
             reading_text = ", ".join(readings)
             if resilience.get("mode") == "OUTAGE_DETECTED":
+                outage_time = (
+                    _format_local_time(str(resilience["outage_started_at"]))
+                    if resilience.get("outage_started_at")
+                    else None
+                )
+                reserve_time = (
+                    _format_local_time(str(resilience["projected_reserve_at"]))
+                    if resilience.get("projected_reserve_at")
+                    else None
+                )
+                runtime_text = spoken_duration(
+                    resilience.get("remaining_hours"), english=True
+                )
                 response["answer"] = (
                     "InnerOS detects utility loss or active battery backup. "
+                    + (f"The outage began at about {outage_time}. " if outage_time else "")
                     + (f"The current reading shows {reading_text}. " if reading_text else "")
-                    + "Energy resilience preview: keep servers, the network core, security, "
-                    "Home Assistant, and inverter monitoring protected; prepare noncritical "
-                    "loads for shutdown. I disconnected no loads because the owner has not "
-                    "approved a circuit allowlist yet."
+                    + (
+                        f"Using the 5.9 kilowatt-hour TECLAM battery and a "
+                        f"{resilience.get('reserve_percent', 20):.0f} percent reserve, estimated "
+                        f"runtime is {runtime_text}, until about {reserve_time}. "
+                        if runtime_text and reserve_time
+                        else ""
+                    )
+                    + "The resilience plan protects servers, the network core, security, Home "
+                    "Assistant, and inverter monitoring. It pauses intensive computing and "
+                    "prepares the workstation, monitors, secondary Wi-Fi, nonessential Echo "
+                    "devices, and decorative lighting for shutdown. I disconnected no loads; "
+                    "network equipment still requires owner approval through WhatsApp."
                 )
             else:
                 response["answer"] = (

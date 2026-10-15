@@ -209,6 +209,13 @@ See [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md) for production host/origin settin
 | `AMBIENT_GUARDIAN_HISTORY_ENTITY_ALLOWLIST` | unset | Comma-separated HA Recorder entities; a trailing `*` expands only that explicit prefix |
 | `AMBIENT_GUARDIAN_HISTORY_LABELS` | unset | JSON object mapping history entity IDs to safe spoken labels |
 | `AMBIENT_GUARDIAN_HOME_TIMEZONE` | `America/Guayaquil` | Timezone used for deterministic overnight/today summaries |
+| `AMBIENT_GUARDIAN_BATTERY_NAME` | `TECLAM LiFePO4` | Canonical installed battery profile name |
+| `AMBIENT_GUARDIAN_BATTERY_NOMINAL_WH` | `5888` | Installed nominal battery energy used for runtime estimates |
+| `AMBIENT_GUARDIAN_BATTERY_RESERVE_PERCENT` | `20` | Conservative reserve target; runtime never plans to the BMS cutoff |
+| `AMBIENT_GUARDIAN_INVERTER_EFFICIENCY` | `0.90` | Conservative DC-to-AC efficiency used in spoken estimates |
+| `AMBIENT_GUARDIAN_ENERGY_ALERT_TARGETS` | `notify.echo_cuarto_speak` | Allowlisted Echo targets for one-shot outage/restoration alerts |
+| `AMBIENT_GUARDIAN_ENERGY_ALERT_LANGUAGE` | `en` | Spoken language for critical energy alerts |
+| `AMBIENT_GUARDIAN_ENERGY_NOTIFIER_STATE` | user state directory | Durable transition state that prevents repeated outage announcements |
 | `AMBIENT_GUARDIAN_UNIFI_RESTART_ENABLED` | `0` | Enables only the two-phase owner-approved UniFi restart path |
 | `AMBIENT_GUARDIAN_UNIFI_RESTART_TARGETS` | unset | JSON allowlist mapping spoken aliases to HA restart, status, and uptime entities |
 | `AMBIENT_GUARDIAN_UNIFI_VERIFY_SECONDS` | `0` | Bounded post-approval state/uptime verification window, maximum 90 seconds |

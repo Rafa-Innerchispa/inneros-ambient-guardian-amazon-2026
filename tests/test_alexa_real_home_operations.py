@@ -57,6 +57,14 @@ class StubHomeAssistant:
                     "summary": "Detector de entrada se activó o abrió",
                 },
             ],
+            "current_states": {
+                "binary_sensor.inneros_pi01_solar_grid_present": "off",
+                "binary_sensor.inneros_pi01_solar_battery_mode": "on",
+                "sensor.inneros_pi01_solar_mode": "battery_backup",
+                "sensor.inneros_pi01_solar_battery_capacity": "90",
+                "sensor.inneros_pi01_solar_battery_voltage": "26.1",
+                "sensor.inneros_pi01_solar_output_power": "450",
+            },
         }
 
     def resolve_unifi_restart_target(self, utterance):
@@ -153,9 +161,12 @@ def test_energy_resilience_reports_real_outage_but_never_sheds_loads():
     assert plan["mode"] == "OUTAGE_DETECTED"
     assert plan["execution"] == "PREVIEW_ONLY"
     assert plan["executed"] is False
-    assert plan["load_shed_targets"] == []
+    assert "desktop_workstation" in plan["load_shed_targets"]
+    assert plan["battery_nominal_wh"] == 5888
+    assert plan["remaining_hours"] > 8
     assert plan["requires_owner_allowlist"] is True
     assert "No desconecté ninguna carga" in result["response"]["answer"]
+    assert "autonomía estimada" in result["response"]["answer"]
 
 
 def test_energy_resilience_can_be_rendered_in_english():
@@ -168,6 +179,7 @@ def test_energy_resilience_can_be_rendered_in_english():
     localized = localize_alexa_result(result, "en-US")
     assert "InnerOS detects utility loss" in localized["response"]["answer"]
     assert "I disconnected no loads" in localized["response"]["answer"]
+    assert "estimated runtime" in localized["response"]["answer"]
 
 
 def test_spoken_phone_number_is_rejected_and_redacted():

@@ -1,0 +1,19 @@
+[Unit]
+Description=Ambient Guardian immediate power-outage Alexa notifier
+After=network-online.target inneros-ambient-guardian-demo.service
+
+[Service]
+Type=oneshot
+WorkingDirectory=/home/rlopez/inneros/inneros_core/workspaces/inneros-ambient-guardian-amazon-2026
+Environment=PYTHONPATH=/home/rlopez/inneros/inneros_core/workspaces/inneros-ambient-guardian-amazon-2026/src
+Environment=AMBIENT_GUARDIAN_SHARED_ENV_FILE=/home/rlopez/inneros/inneros_core/platform/.env
+Environment=AMBIENT_GUARDIAN_ALEXA_SPEAK_ENABLED=1
+Environment=AMBIENT_GUARDIAN_ALEXA_NOTIFY_ALLOWLIST=notify.echo_cuarto_speak
+Environment=AMBIENT_GUARDIAN_ENERGY_ALERT_TARGETS=notify.echo_cuarto_speak
+Environment=AMBIENT_GUARDIAN_ENERGY_ALERT_LANGUAGE=en
+Environment="AMBIENT_GUARDIAN_BATTERY_NAME=TECLAM LiFePO4"
+Environment=AMBIENT_GUARDIAN_BATTERY_NOMINAL_WH=5888
+Environment=AMBIENT_GUARDIAN_BATTERY_RESERVE_PERCENT=20
+Environment=AMBIENT_GUARDIAN_INVERTER_EFFICIENCY=0.90
+ExecStart=/home/rlopez/inneros/inneros_core/workspaces/inneros-ambient-guardian-amazon-2026/.venv/bin/python -m ambient_guardian.energy_notifier
+

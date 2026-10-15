@@ -104,32 +104,51 @@ the device locale does not match a configured skill locale.
 Use the interaction model that matches the Echo language:
 
 - `en-US`: `docs/alexa-custom-skill-en-US.json`
-  - invocation: `ambient guardian`
-  - smoke phrase: `Alexa, open Ambient Guardian`
+  - invocation: `inner oz`
+  - smoke phrase: `Alexa, open Inner Oz`
 - `es-US`: `docs/alexa-custom-skill-es-US.json`
-  - invocation: `guardián ambiental`
-  - smoke phrase: `Alexa, abre Guardián Ambiental`
+  - invocation: `inner oz`
+  - smoke phrase: `Alexa, abre Inner Oz`
 - `es-MX`: `docs/alexa-custom-skill-es-MX.json`
-  - invocation: `guardián ambiental`
-  - smoke phrase: `Alexa, abre Guardián Ambiental`
+  - invocation: `inner oz`
+  - smoke phrase: `Alexa, abre Inner Oz`
 - `es-ES`: `docs/alexa-custom-skill-es-ES.json`
-  - invocation: `guardián ambiental`
-  - smoke phrase: `Alexa, abre Guardián Ambiental`
+  - invocation: `inner oz`
+  - smoke phrase: `Alexa, abre Inner Oz`
 
 In Developer Console, add the locale under **Language Settings**, import/paste
 the corresponding interaction model, then **Save Model** and **Build Model**
 for that locale before testing on the physical Echo.
 
 For the hackathon video, the canonical English path is `en-US` with:
-`Alexa, open Ambient Guardian`.
+`Alexa, open Inner Oz`.
 
 The energy-resilience demo is read-only and fail-closed:
 
-- `Alexa, ask Ambient Guardian for the energy resilience status`
-- it reads the real grid, battery/inverter, capacity and output state from Home Assistant;
+- `Alexa, ask Inner Oz for the energy resilience status`
+- it reads the real grid, battery/inverter, capacity, voltage and output state from Home Assistant;
+- it uses the canonical TECLAM LiFePO4 profile (25.6V, 230Ah, 5,888Wh), a configurable
+  reserve and live load to estimate remaining runtime and the projected reserve time;
+- it reports the real outage start captured by Home Assistant Recorder;
 - it explains which critical load classes would be protected;
 - it keeps load shedding in `PREVIEW_ONLY` until the owner approves an explicit
   Home Assistant circuit allowlist. It never interprets “turn off everything” as authority.
+
+## Energy notifications and quiet hours
+
+`ambient-guardian-energy-notifier.timer` checks the real grid state once per minute and
+speaks only on a state transition: one immediate outage alert and one restoration alert.
+Critical power transitions deliberately override quiet hours; repeated polls are deduplicated
+in a durable state file.
+
+Ordinary spoken briefs are limited to 08:00, 11:00, 16:00 and 18:00 in
+`America/Guayaquil`. Install `deploy/ralfia-daily-companion-safe-schedule.conf` as a
+drop-in for `ralfia-daily-companion.timer`. The drop-in sets `Persistent=false`, so a
+missed daytime brief is never replayed after a restart at 02:00.
+
+Alexa Devices uses the voice configured on the target Echo for Home Assistant speech.
+This notification path cannot promise a different male voice without a separate, tested
+TTS/media-player channel.
 
 The development skill can be tested in the Alexa simulator and on a physical
 Alexa device only when the device uses a supported skill locale and the device
@@ -220,13 +239,13 @@ execute other consequential physical actions.
 
 The Custom Skill must be invoked explicitly until name-free interaction is added:
 
-- `Alexa, open Ambient Guardian`
+- `Alexa, open Inner Oz`
 - then: `arm the alarm`
-- or one-shot: `Alexa, ask Ambient Guardian to arm the alarm`
+- or one-shot: `Alexa, ask Inner Oz to arm the alarm`
 
 For disarm:
 
-- `Alexa, ask Ambient Guardian to disarm the alarm`
+- `Alexa, ask Inner Oz to disarm the alarm`
 
 Alexa should then ask for the **Alexa profile PIN**. That PIN belongs to the
 owner's Alexa profile; it is not an Intelbras code and is never stored by
@@ -236,13 +255,13 @@ Ambient Guardian.
 
 After an Incident Receipt exists, the owner can say:
 
-`Alexa, ask Ambient Guardian to call me through my PBX and give me the incident report`
+`Alexa, ask Inner Oz to call me through my PBX and give me the incident report`
 
 With the canonical Ecuador `es-US` model, the equivalent phrases include:
 
-- `Alexa, abre Guardián Ambiental y pregúntale qué puede hacer`
-- `Alexa, pregunta a Guardián Ambiental cómo está la central Grandstream`
-- `Alexa, pide a Guardián Ambiental que me prepare una llamada por la central con el último incidente`
+- `Alexa, abre Inner Oz y pregúntale qué puede hacer`
+- `Alexa, pregunta a Inner Oz cómo está la central Grandstream`
+- `Alexa, pide a Inner Oz que me prepare una llamada por la central con el último incidente`
 
 This request only prepares `voiceops_owner_callback`. It does not place a call
 and Alexa never receives a destination or extension. A separate owner-authenticated
@@ -261,8 +280,8 @@ result back to WhatsApp. There is no UniFi approval route in MCP or the web demo
 
 Alexa can capture a bounded programming request as a local draft for later review:
 
-- `Alexa, pide a Guardián Ambiental que prepare para Antigravity una automatización de bienvenida`
-- `Alexa, ask Ambient Guardian to prepare for Antigravity a welcome-light automation`
+- `Alexa, pide a Inner Oz que prepare para Antigravity una automatización de bienvenida`
+- `Alexa, ask Inner Oz to prepare for Antigravity a welcome-light automation`
 
 The skill returns a `DRAFT_ONLY` work request. It does not contact Antigravity,
 NCP, or any coding agent, and it does not execute code. Dispatch remains a separate
@@ -305,7 +324,7 @@ For a physical Echo used in Ecuador, the canonical compatibility profile is:
 
 - Alexa language / skill locale: `es-US` (Spanish - United States).
 - Marketplace path: Amazon.com-compatible skill locale.
-- Invocation: `guardián ambiental`.
+- Invocation: `inner oz` in every locale; the skill display name remains `Ambient Guardian`.
 - Physical country does not require `es-MX` or `es-ES`.
 - Alexa+ is not required for this path; this is a standard Alexa Custom Skill.
 
