@@ -222,6 +222,7 @@ See [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md) for production host/origin settin
 | `AMBIENT_GUARDIAN_ENERGY_CRITICAL_RUNTIME_HOURS` | `1` | Remaining-runtime threshold that may override quiet mode once |
 | `AMBIENT_GUARDIAN_ENERGY_CRITICAL_SOC_PERCENT` | `25` | Battery threshold that may override quiet mode once |
 | `AMBIENT_GUARDIAN_ENERGY_NOTIFIER_STATE` | user state directory | Durable transition, interval, and critical-threshold deduplication state |
+| `SOLAR_READER_CACHE_TTL_SECONDS` | `50` in the platform reader; `5` in the fast-poll drop-in | Maximum age reused across serialized USB/HID inverter reads |
 | `AMBIENT_GUARDIAN_UNIFI_RESTART_ENABLED` | `0` | Enables only the two-phase owner-approved UniFi restart path |
 | `AMBIENT_GUARDIAN_UNIFI_RESTART_TARGETS` | unset | JSON allowlist mapping spoken aliases to HA restart, status, and uptime entities |
 | `AMBIENT_GUARDIAN_UNIFI_VERIFY_SECONDS` | `0` | Bounded post-approval state/uptime verification window, maximum 90 seconds |

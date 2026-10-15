@@ -136,7 +136,11 @@ The energy-resilience demo is read-only and fail-closed:
 
 ## Energy notifications and quiet hours
 
-`ambient-guardian-energy-notifier.timer` checks the real grid state once per minute. It
+`ambient-guardian-energy-notifier.timer` checks the Home Assistant grid state every five
+seconds. The Pi01 USB/HID publisher refreshes the inverter telemetry every ten seconds with
+a five-second shared cache, giving a typical outage-to-notification target of 5–15 seconds
+plus Alexa delivery time. The one-minute SQLite/JSONL flight recorder remains unchanged for
+stable long-term energy integration. The notifier
 speaks once on the outage transition, once on restoration, and every 30 minutes while an
 outage remains active between 08:00 and 22:00. Between 22:00 and 08:00 it stays silent
 unless the grid state changes or battery/runtime crosses a critical threshold. Repeated

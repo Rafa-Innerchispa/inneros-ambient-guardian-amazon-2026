@@ -1,10 +1,10 @@
 [Unit]
-Description=Check for utility loss or restoration every minute
+Description=Check for utility loss or restoration every five seconds
 
 [Timer]
-OnBootSec=45
-OnUnitActiveSec=60
-AccuracySec=5
+OnBootSec=10
+OnUnitActiveSec=5
+AccuracySec=1
 Persistent=false
 Unit=ambient-guardian-energy-notifier.service
 
