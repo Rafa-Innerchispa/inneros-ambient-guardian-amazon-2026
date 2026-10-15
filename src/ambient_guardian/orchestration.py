@@ -68,6 +68,14 @@ _HOME_HISTORY_QUERY = re.compile(
     r"lights?\s+turned\s+(?:on|off))\b",
     re.I,
 )
+_ENERGY_RESILIENCE_QUERY = re.compile(
+    r"\b(?:energy\s+(?:resilience|saving)\s+(?:status|mode|plan)|"
+    r"resilience\s+plan|load\s+shedding|critical\s+circuits?|"
+    r"(?:estado|plan)\s+de\s+resiliencia\s+energ[eé]tica|"
+    r"modo\s+de\s+ahorro\s+energ[eé]tico|desconexi[oó]n\s+de\s+cargas|"
+    r"circuitos?\s+cr[ií]ticos?)\b",
+    re.I,
+)
 _RING_DEMO_QUERY = re.compile(
     r"\b(?:ring|timbre)\b[^.]*\b(?:demo|simulat(?:ed|ion)|simulad[oa]|saw|detected|status|"
     r"vio|detect[oó]|pas[oó]|evento|estado)\b"
@@ -787,6 +795,113 @@ def _home_history_response(utterance: str, state: GuardianState) -> dict[str, An
     }
 
 
+def _energy_resilience_response(state: GuardianState) -> dict[str, Any]:
+    """Report a real electrical snapshot and a non-executing resilience plan."""
+    end = datetime.now(timezone.utc)
+    start = end - timedelta(hours=12)
+    try:
+        timeline = state.home_assistant.history_timeline(start, end, max_events=80)
+    except Exception as exc:
+        return {
+            "response": {
+                "answer": (
+                    "No pude consultar el estado eléctrico real de Home Assistant. "
+                    "El plan de ahorro permanece bloqueado y no desconecté ninguna carga."
+                ),
+                "status": "attention_required",
+                "reasoning_mode": "deterministic-energy-resilience",
+            },
+            "energy_resilience": {
+                "truth": "UNAVAILABLE",
+                "error": type(exc).__name__,
+                "execution": "BLOCKED",
+                "executed": False,
+            },
+        }
+
+    events = list(timeline.get("events") or [])
+    current = dict(timeline.get("current_states") or {})
+    if not current:
+        for event in reversed(events):
+            entity_id = str(event.get("entity_id") or "")
+            if entity_id and entity_id not in current:
+                current[entity_id] = event.get("state")
+
+    grid = str(
+        current.get("binary_sensor.inneros_pi01_solar_grid_present") or "unknown"
+    ).lower()
+    battery_mode = str(
+        current.get("binary_sensor.inneros_pi01_solar_battery_mode") or "unknown"
+    ).lower()
+    inverter_mode = str(
+        current.get("sensor.inneros_pi01_solar_mode") or "unknown"
+    ).lower()
+    outage_active = grid == "off" or battery_mode == "on" or inverter_mode in {
+        "battery_backup",
+        "battery",
+    }
+    battery_capacity = current.get("sensor.inneros_pi01_solar_battery_capacity")
+    output_power = current.get("sensor.inneros_pi01_solar_output_power")
+
+    readings = []
+    if battery_capacity not in {None, "", "unknown", "unavailable"}:
+        readings.append(f"batería al {battery_capacity} por ciento")
+    if output_power not in {None, "", "unknown", "unavailable"}:
+        readings.append(f"salida de {output_power} vatios")
+    reading_text = ", ".join(readings)
+
+    if outage_active:
+        answer = (
+            "InnerOS detecta pérdida de red o respaldo por batería activo. "
+            + (f"La lectura actual muestra {reading_text}. " if reading_text else "")
+            + "Plan de resiliencia en vista previa: conservar servidores, red principal, "
+            "seguridad, Home Assistant y monitoreo del inversor; preparar el apagado de "
+            "cargas no críticas. No desconecté ninguna carga porque todavía no existe una "
+            "lista de circuitos aprobada por el propietario."
+        )
+        mode = "OUTAGE_DETECTED"
+        status = "attention_required"
+    else:
+        answer = (
+            "La red eléctrica está presente y el modo batería no está activo. "
+            + (f"La lectura actual muestra {reading_text}. " if reading_text else "")
+            + "El plan de resiliencia está listo en vista previa: prioriza servidores, red "
+            "principal, seguridad, Home Assistant y monitoreo del inversor. No desconecté "
+            "ninguna carga."
+        )
+        mode = "GRID_NORMAL"
+        status = "all_clear"
+
+    return {
+        "response": {
+            "answer": answer,
+            "status": status,
+            "reasoning_mode": "deterministic-energy-resilience",
+        },
+        "energy_resilience": {
+            "truth": str(timeline.get("truth") or "REAL"),
+            "mode": mode,
+            "grid_present": grid,
+            "battery_mode": battery_mode,
+            "inverter_mode": inverter_mode,
+            "battery_capacity": battery_capacity,
+            "output_power": output_power,
+            "execution": "PREVIEW_ONLY",
+            "executed": False,
+            "critical_load_classes": [
+                "servers",
+                "network_core",
+                "security",
+                "home_assistant",
+                "inverter_monitoring",
+            ],
+            "load_shed_targets": [],
+            "requires_owner_allowlist": True,
+        },
+        "home_timeline": timeline,
+    }
+
+
 def _english_history_answer(timeline: dict[str, Any]) -> str:
     """Render the real HA timeline in concise English for an en-US Alexa turn."""
     if str(timeline.get("truth") or "") == "UNAVAILABLE":
@@ -899,10 +1014,45 @@ def localize_alexa_result(result: dict[str, Any], locale: str) -> dict[str, Any]
     mode = str(response.get("reasoning_mode") or "")
     if mode == "deterministic-home-assistant-history":
         response["answer"] = _english_history_answer(dict(result.get("home_timeline") or {}))
+    elif mode == "deterministic-energy-resilience":
+        resilience = dict(result.get("energy_resilience") or {})
+        if resilience.get("truth") == "UNAVAILABLE":
+            response["answer"] = (
+                "I could not query the real Home Assistant electrical state. The energy-saving "
+                "plan remains blocked, and I disconnected no loads."
+            )
+        else:
+            readings = []
+            battery_capacity = resilience.get("battery_capacity")
+            output_power = resilience.get("output_power")
+            if battery_capacity not in {None, "", "unknown", "unavailable"}:
+                readings.append(f"battery at {battery_capacity} percent")
+            if output_power not in {None, "", "unknown", "unavailable"}:
+                readings.append(f"{output_power} watts output")
+            reading_text = ", ".join(readings)
+            if resilience.get("mode") == "OUTAGE_DETECTED":
+                response["answer"] = (
+                    "InnerOS detects utility loss or active battery backup. "
+                    + (f"The current reading shows {reading_text}. " if reading_text else "")
+                    + "Energy resilience preview: keep servers, the network core, security, "
+                    "Home Assistant, and inverter monitoring protected; prepare noncritical "
+                    "loads for shutdown. I disconnected no loads because the owner has not "
+                    "approved a circuit allowlist yet."
+                )
+            else:
+                response["answer"] = (
+                    "Utility power is present and battery mode is not active. "
+                    + (f"The current reading shows {reading_text}. " if reading_text else "")
+                    + "The energy resilience plan is ready in preview mode and prioritizes "
+                    "servers, the network core, security, Home Assistant, and inverter "
+                    "monitoring. I disconnected no loads."
+                )
     elif mode == "deterministic-inneros-capabilities":
         response["answer"] = (
             "I am the voice gateway to InnerOS. I can read real Home Assistant history for "
             "security zones, lights, solar power, battery mode, internet, and UniFi. I can "
+            "show a real energy-resilience preview that protects critical infrastructure "
+            "without shedding unapproved loads. I can "
             "correlate it with a clearly simulated Ring demo, check VoiceOps and Grandstream, "
             "prepare an owner callback, prepare approved UniFi restarts, and control professional "
             "DMX lighting over Art-Net. I can also play YouTube Music through Music Assistant "
@@ -1028,6 +1178,8 @@ def _inneros_capabilities_response() -> dict[str, Any]:
         "answer": (
             "Soy la entrada de voz de InnerOS. Puedo leer el historial real de Home Assistant: "
             "alarma, zonas, luces, energía solar, modo batería, internet y UniFi. Puedo "
+            "mostrar una vista previa real de resiliencia energética que protege la "
+            "infraestructura crítica sin desconectar cargas no aprobadas. Puedo "
             "correlacionarlo con un demo Ring claramente simulado, consultar VoiceOps y la "
             "central Grandstream, preparar una llamada al alias privado del propietario, "
             "preparar reinicios UniFi permitidos y controlar escenas profesionales DMX por "
@@ -1263,6 +1415,15 @@ def simulated_alexa_turn(
             "response": _ring_demo_response(state),
             "prepared_action": None,
             "ring_truth": "SIMULATED",
+            "evidence_count": len(state.evidence_snapshot()),
+        }
+
+    if _ENERGY_RESILIENCE_QUERY.search(normalized_utterance):
+        resilience = _energy_resilience_response(state)
+        return {
+            "utterance": utterance,
+            **resilience,
+            "prepared_action": None,
             "evidence_count": len(state.evidence_snapshot()),
         }
 

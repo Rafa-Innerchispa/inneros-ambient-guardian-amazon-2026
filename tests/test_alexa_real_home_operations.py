@@ -141,6 +141,35 @@ def test_overnight_report_can_be_rendered_in_english():
     assert "simulated Ring events" in answer
 
 
+def test_energy_resilience_reports_real_outage_but_never_sheds_loads():
+    result = simulated_alexa_turn(
+        "dame el estado de resiliencia energética y el plan de ahorro",
+        _state(),
+        FailIfReasonerRuns(),
+    )
+
+    plan = result["energy_resilience"]
+    assert plan["truth"] == "REAL"
+    assert plan["mode"] == "OUTAGE_DETECTED"
+    assert plan["execution"] == "PREVIEW_ONLY"
+    assert plan["executed"] is False
+    assert plan["load_shed_targets"] == []
+    assert plan["requires_owner_allowlist"] is True
+    assert "No desconecté ninguna carga" in result["response"]["answer"]
+
+
+def test_energy_resilience_can_be_rendered_in_english():
+    result = simulated_alexa_turn(
+        "show me the energy resilience status and energy saving plan",
+        _state(),
+        FailIfReasonerRuns(),
+    )
+
+    localized = localize_alexa_result(result, "en-US")
+    assert "InnerOS detects utility loss" in localized["response"]["answer"]
+    assert "I disconnected no loads" in localized["response"]["answer"]
+
+
 def test_spoken_phone_number_is_rejected_and_redacted():
     result = simulated_alexa_turn(
         "llama a mi celular 099 123 4567 usando Grandstream",

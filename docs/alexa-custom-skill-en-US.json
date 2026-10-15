@@ -51,6 +51,16 @@
           ]
         },
         {
+          "name": "EnergyResilienceIntent",
+          "slots": [],
+          "samples": [
+            "show me the energy resilience status",
+            "what is the energy saving plan",
+            "which circuits stay protected during an outage",
+            "show me the load shedding preview"
+          ]
+        },
+        {
           "name": "RingDemoStatusIntent",
           "slots": [],
           "samples": [

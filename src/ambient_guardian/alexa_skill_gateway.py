@@ -432,6 +432,12 @@ def _guardian_query(request_payload: dict[str, Any]) -> str:
             if english
             else "dame los eventos reales de la madrugada"
         )
+    if intent_name == "EnergyResilienceIntent":
+        return (
+            "show me the energy resilience status and energy saving plan"
+            if english
+            else "dame el estado de resiliencia energética y el plan de ahorro"
+        )
     if intent_name == "RingDemoStatusIntent":
         return "what did Ring detect in the demo" if english else "qué detectó Ring en el demo"
     if intent_name == "DMXStatusIntent":
@@ -531,6 +537,7 @@ def _dispatch(payload: dict[str, Any]) -> dict[str, Any]:
         "AskGuardianIntent",
         "CapabilitiesIntent",
         "HomeHistoryIntent",
+        "EnergyResilienceIntent",
         "RingDemoStatusIntent",
         "DMXStatusIntent",
         "MusicStatusIntent",

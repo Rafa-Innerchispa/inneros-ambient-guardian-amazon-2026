@@ -246,6 +246,10 @@ def test_spanish_exit_intents_close_skill(intent_name):
             "prepárame una llamada por la central con el reporte del último incidente",
         ),
         ("HomeHistoryIntent", "dame los eventos reales de la madrugada"),
+        (
+            "EnergyResilienceIntent",
+            "dame el estado de resiliencia energética y el plan de ahorro",
+        ),
         ("RingDemoStatusIntent", "qué detectó Ring en el demo"),
         ("DMXStatusIntent", "qué puede hacer el sistema DMX por Art-Net"),
         ("MusicStatusIntent", "está listo YouTube Music con Music Assistant"),
@@ -283,6 +287,10 @@ def test_stable_intents_map_to_bounded_backend_queries(
         (
             "HomeHistoryIntent",
             "show me the real overnight home events and tell me if the power went out",
+        ),
+        (
+            "EnergyResilienceIntent",
+            "show me the energy resilience status and energy saving plan",
         ),
         ("RingDemoStatusIntent", "what did Ring detect in the demo"),
         ("DMXStatusIntent", "what can the DMX system do over Art-Net"),

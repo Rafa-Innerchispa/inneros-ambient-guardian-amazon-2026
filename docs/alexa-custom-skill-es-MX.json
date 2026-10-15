@@ -58,6 +58,16 @@
           ]
         },
         {
+          "name": "EnergyResilienceIntent",
+          "slots": [],
+          "samples": [
+            "dame el estado de resiliencia energética",
+            "cuál es el plan de ahorro energético",
+            "qué circuitos se protegen durante un apagón",
+            "muéstrame la vista previa de desconexión de cargas"
+          ]
+        },
+        {
           "name": "RingDemoStatusIntent",
           "slots": [],
           "samples": [

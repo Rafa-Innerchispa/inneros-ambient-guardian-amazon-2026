@@ -123,6 +123,14 @@ for that locale before testing on the physical Echo.
 For the hackathon video, the canonical English path is `en-US` with:
 `Alexa, open Ambient Guardian`.
 
+The energy-resilience demo is read-only and fail-closed:
+
+- `Alexa, ask Ambient Guardian for the energy resilience status`
+- it reads the real grid, battery/inverter, capacity and output state from Home Assistant;
+- it explains which critical load classes would be protected;
+- it keeps load shedding in `PREVIEW_ONLY` until the owner approves an explicit
+  Home Assistant circuit allowlist. It never interprets “turn off everything” as authority.
+
 The development skill can be tested in the Alexa simulator and on a physical
 Alexa device only when the device uses a supported skill locale and the device
 is registered to the same Amazon account used for development testing.
