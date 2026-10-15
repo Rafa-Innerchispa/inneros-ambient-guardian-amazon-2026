@@ -5,6 +5,7 @@ import os
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
+from zoneinfo import ZoneInfo
 
 from .energy_resilience import estimate_energy_resilience, spoken_duration
 from .home_assistant import HomeAssistantBridge
@@ -51,8 +52,53 @@ def _targets() -> list[str]:
     return [item.strip() for item in raw.split(",") if item.strip()]
 
 
-def _message(estimate: dict[str, Any], *, restored: bool, english: bool) -> str:
-    if restored:
+def _local_now(now: datetime) -> datetime:
+    timezone_name = os.getenv(
+        "AMBIENT_GUARDIAN_HOME_TIMEZONE", "America/Guayaquil"
+    ).strip()
+    try:
+        zone = ZoneInfo(timezone_name)
+    except Exception:
+        zone = timezone.utc
+    return now.astimezone(zone)
+
+
+def _daytime(local_now: datetime) -> bool:
+    start_hour = int(os.getenv("AMBIENT_GUARDIAN_ENERGY_DAY_START_HOUR", "8"))
+    end_hour = int(os.getenv("AMBIENT_GUARDIAN_ENERGY_DAY_END_HOUR", "22"))
+    return start_hour <= local_now.hour < end_hour
+
+
+def _periodic_bucket(local_now: datetime) -> str | None:
+    interval_minutes = max(
+        5, int(os.getenv("AMBIENT_GUARDIAN_ENERGY_DAY_INTERVAL_MINUTES", "30"))
+    )
+    minute = (local_now.minute // interval_minutes) * interval_minutes
+    bucket = local_now.replace(minute=minute, second=0, microsecond=0)
+    if local_now.minute % interval_minutes != 0:
+        return None
+    return bucket.isoformat()
+
+
+def _critical_key(estimate: dict[str, Any]) -> str | None:
+    capacity = estimate.get("battery_capacity_percent")
+    remaining_hours = estimate.get("remaining_hours")
+    reserve = float(estimate.get("reserve_percent") or 20)
+    critical_soc = float(
+        os.getenv("AMBIENT_GUARDIAN_ENERGY_CRITICAL_SOC_PERCENT", str(reserve + 5))
+    )
+    critical_runtime_hours = float(
+        os.getenv("AMBIENT_GUARDIAN_ENERGY_CRITICAL_RUNTIME_HOURS", "1")
+    )
+    if capacity is not None and float(capacity) <= critical_soc:
+        return "critical_soc"
+    if remaining_hours is not None and float(remaining_hours) <= critical_runtime_hours:
+        return "critical_runtime"
+    return None
+
+
+def _message(estimate: dict[str, Any], *, event: str, english: bool) -> str:
+    if event == "utility_restored":
         return (
             "Utility power has returned. InnerOS confirms that battery backup is no longer "
             "active. Critical systems remain protected while normal loads recover gradually."
@@ -73,6 +119,20 @@ def _message(estimate: dict[str, Any], *, restored: bool, english: bool) -> str:
         if runtime:
             detail.append(f"estimated runtime to reserve is {runtime}")
         suffix = ". ".join(detail)
+        if event == "energy_update":
+            return (
+                "InnerOS energy update. "
+                + suffix
+                + ". To extend runtime, keep the AMD server and core network protected, "
+                "and shut down the noncritical Intel server only after owner approval."
+            )
+        if event == "critical_energy":
+            return (
+                "Critical energy warning. "
+                + suffix
+                + ". Review noncritical loads now. Any server shutdown still requires "
+                "owner approval."
+            )
         return (
             "Power outage detected. InnerOS is entering energy-saving mode. Servers, the "
             "core network, security, Home Assistant, and inverter monitoring stay protected. "
@@ -87,6 +147,20 @@ def _message(estimate: dict[str, Any], *, restored: bool, english: bool) -> str:
     if runtime:
         detail.append(f"la autonomía estimada hasta la reserva es de {runtime}")
     suffix = ". ".join(detail)
+    if event == "energy_update":
+        return (
+            "Actualización energética de InnerOS. "
+            + suffix
+            + ". Para extender la autonomía, mantén protegido el servidor AMD y la red "
+            "principal, y apaga el servidor Intel no crítico sólo con autorización del dueño."
+        )
+    if event == "critical_energy":
+        return (
+            "Alerta energética crítica. "
+            + suffix
+            + ". Revisa ahora las cargas no críticas. Apagar un servidor todavía requiere "
+            "autorización del dueño."
+        )
     return (
         "Apagón detectado. InnerOS entra en modo de ahorro energético. Los servidores, la "
         "red principal, la seguridad, Home Assistant y el monitoreo del inversor permanecen "
@@ -138,9 +212,25 @@ def run_cycle(
         event = "outage_started"
         previous["outage_started_at"] = now.astimezone(timezone.utc).isoformat()
         estimate["outage_started_at"] = previous["outage_started_at"]
+        previous["last_critical_key"] = _critical_key(estimate)
     elif not outage_now and outage_before:
         event = "utility_restored"
         previous["outage_started_at"] = None
+        previous["last_periodic_bucket"] = None
+        previous["last_critical_key"] = None
+
+    if outage_now and event is None:
+        local_now = _local_now(now)
+        if _daytime(local_now):
+            bucket = _periodic_bucket(local_now)
+            if bucket and previous.get("last_periodic_bucket") != bucket:
+                event = "energy_update"
+                previous["last_periodic_bucket"] = bucket
+        else:
+            critical_key = _critical_key(estimate)
+            if critical_key and previous.get("last_critical_key") != critical_key:
+                event = "critical_energy"
+                previous["last_critical_key"] = critical_key
 
     if event:
         english = os.getenv(
@@ -148,7 +238,7 @@ def run_cycle(
         ).lower().startswith("en")
         message = _message(
             estimate,
-            restored=event == "utility_restored",
+            event=event,
             english=english,
         )
         if not dry_run:

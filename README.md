@@ -213,9 +213,14 @@ See [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md) for production host/origin settin
 | `AMBIENT_GUARDIAN_BATTERY_NOMINAL_WH` | `5888` | Installed nominal battery energy used for runtime estimates |
 | `AMBIENT_GUARDIAN_BATTERY_RESERVE_PERCENT` | `20` | Conservative reserve target; runtime never plans to the BMS cutoff |
 | `AMBIENT_GUARDIAN_INVERTER_EFFICIENCY` | `0.90` | Conservative DC-to-AC efficiency used in spoken estimates |
-| `AMBIENT_GUARDIAN_ENERGY_ALERT_TARGETS` | `notify.echo_cuarto_speak` | Allowlisted Echo targets for one-shot outage/restoration alerts |
-| `AMBIENT_GUARDIAN_ENERGY_ALERT_LANGUAGE` | `en` | Spoken language for critical energy alerts |
-| `AMBIENT_GUARDIAN_ENERGY_NOTIFIER_STATE` | user state directory | Durable transition state that prevents repeated outage announcements |
+| `AMBIENT_GUARDIAN_ENERGY_ALERT_TARGETS` | `notify.echo_cuarto_speak` | Allowlisted Echo targets for outage, restoration, and bounded status alerts |
+| `AMBIENT_GUARDIAN_ENERGY_ALERT_LANGUAGE` | `en` | Spoken language for energy alerts |
+| `AMBIENT_GUARDIAN_ENERGY_DAY_START_HOUR` | `8` | First local hour in which periodic outage status is allowed |
+| `AMBIENT_GUARDIAN_ENERGY_DAY_END_HOUR` | `22` | Local hour when periodic outage status enters critical-only quiet mode |
+| `AMBIENT_GUARDIAN_ENERGY_DAY_INTERVAL_MINUTES` | `30` | Daytime interval for spoken status while an outage remains active |
+| `AMBIENT_GUARDIAN_ENERGY_CRITICAL_RUNTIME_HOURS` | `1` | Remaining-runtime threshold that may override quiet mode once |
+| `AMBIENT_GUARDIAN_ENERGY_CRITICAL_SOC_PERCENT` | `25` | Battery threshold that may override quiet mode once |
+| `AMBIENT_GUARDIAN_ENERGY_NOTIFIER_STATE` | user state directory | Durable transition, interval, and critical-threshold deduplication state |
 | `AMBIENT_GUARDIAN_UNIFI_RESTART_ENABLED` | `0` | Enables only the two-phase owner-approved UniFi restart path |
 | `AMBIENT_GUARDIAN_UNIFI_RESTART_TARGETS` | unset | JSON allowlist mapping spoken aliases to HA restart, status, and uptime entities |
 | `AMBIENT_GUARDIAN_UNIFI_VERIFY_SECONDS` | `0` | Bounded post-approval state/uptime verification window, maximum 90 seconds |

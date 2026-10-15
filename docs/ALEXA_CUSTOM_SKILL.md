@@ -136,10 +136,11 @@ The energy-resilience demo is read-only and fail-closed:
 
 ## Energy notifications and quiet hours
 
-`ambient-guardian-energy-notifier.timer` checks the real grid state once per minute and
-speaks only on a state transition: one immediate outage alert and one restoration alert.
-Critical power transitions deliberately override quiet hours; repeated polls are deduplicated
-in a durable state file.
+`ambient-guardian-energy-notifier.timer` checks the real grid state once per minute. It
+speaks once on the outage transition, once on restoration, and every 30 minutes while an
+outage remains active between 08:00 and 22:00. Between 22:00 and 08:00 it stays silent
+unless the grid state changes or battery/runtime crosses a critical threshold. Repeated
+polls and repeated thresholds are deduplicated in a durable state file.
 
 Ordinary spoken briefs are limited to 08:00, 11:00, 16:00 and 18:00 in
 `America/Guayaquil`. Install `deploy/ralfia-daily-companion-safe-schedule.conf` as a
