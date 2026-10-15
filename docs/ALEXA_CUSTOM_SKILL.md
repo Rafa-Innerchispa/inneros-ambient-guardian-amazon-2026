@@ -174,6 +174,18 @@ actions. Account Linking does not replace Voice ID/PIN verification.
 Use a dedicated Cloudflare hostname targeting only
 `http://127.0.0.1:8795`. Home Assistant itself stays private.
 
+## InnerOS announcements on Echo speakers
+
+Home Assistant can deliver natural Alexa speech through the installed, explicitly
+allowlisted `notify.echo_*_speak` entities. Ambient Guardian exposes this only on
+the owner-authenticated `/api/home/alexa/speak` route; it is deliberately absent
+from public MCP tools and from unauthenticated skill requests. The real-home profile
+allows the Cocina, Cuarto, Estudio, Sala, and Disco Echo speakers.
+
+This channel does not change an Echo device's language or voice locale. Amazon owns
+that per-device setting, which must be changed in the Alexa app. Announcements should
+be authored in the same language as the target Echo for predictable pronunciation.
+
 
 ## Allowlisted ambient lighting
 
