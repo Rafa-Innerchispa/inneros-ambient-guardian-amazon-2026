@@ -189,7 +189,23 @@ def test_spoken_phone_number_is_rejected_and_redacted():
         FailIfReasonerRuns(),
     )
     assert "números dictados" in result["response"]["answer"]
+    assert "Grandstream o Zoiper" in result["response"]["answer"]
+    assert "línea externa sigue bloqueada" in result["response"]["answer"]
     assert "099" not in result["utterance"]
+    assert result["prepared_action"] is None
+
+
+def test_private_phone_destination_explains_current_english_boundary():
+    result = simulated_alexa_turn(
+        "call my cell phone using Grandstream",
+        _state(),
+        FailIfReasonerRuns(),
+    )
+
+    localized = localize_alexa_result(result, "en-US")
+    answer = localized["response"]["answer"]
+    assert "Grandstream or Zoiper extension" in answer
+    assert "external phone line remains blocked" in answer
     assert result["prepared_action"] is None
 
 

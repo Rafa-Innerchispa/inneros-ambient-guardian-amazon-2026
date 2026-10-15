@@ -242,7 +242,21 @@ execute other consequential physical actions.
 
 ## Owner test phrases
 
-The Custom Skill must be invoked explicitly until name-free interaction is added:
+Enabling the skill and invoking it are different operations. The skill stays enabled
+for the Amazon account until the owner disables it; saying `Inner Oz` does not enable
+or disable anything. It starts a short Alexa skill session:
+
+- Open once with `Alexa, open Inner Oz`, then use follow-up commands without repeating
+  the invocation name while Alexa keeps the microphone/session open.
+- Use a one-shot command such as `Alexa, ask Inner Oz what happened overnight` when no
+  session is open.
+- A Custom Skill cannot remain the active Alexa conversation forever. Alexa closes an
+  idle session after a few seconds and one reprompt. English `en-US` can later be
+  evaluated for Amazon's name-free interaction, but routing is not guaranteed and the
+  Spanish locales still require the invocation name for a new session.
+
+The Custom Skill must be invoked explicitly for each new session until a separate
+name-free or Smart Home surface is added:
 
 - `Alexa, open Inner Oz`
 - then: `arm the alarm`
@@ -273,6 +287,15 @@ and Alexa never receives a destination or extension. A separate owner-authentica
 HTTP approval asks the existing VoiceOps runtime to call its preconfigured
 `voiceops.owner` alias. The Live Evidence Console then shows a sanitized dispatch
 result and the Incident Receipt → action → evidence digest chain.
+
+The currently verified `voiceops.owner` path resolves only to the allowlisted owner
+softphone extensions (`1004`/`1006`, Grandstream or Zoiper). It does not originate a
+PSTN call to a spoken number. The Ecuador mobile/fixed-number policy exists in VoiceOps,
+but mobile execution must remain blocked until the exact UCM outbound-route translation
+is verified and a server-side alias such as `voiceops.owner_mobile` is bound to the
+owner's private number. The number must stay out of Alexa, Git, logs and receipts. The
+intended final flow is: Alexa prepares the call to the alias, InnerOS sends Confirm/Cancel
+to the enrolled owner on WhatsApp, and only the authenticated approval may dispatch it.
 
 UniFi restarts use a different, stricter approval path. Alexa prepares only an
 allowlisted Home Assistant restart button and InnerOS sends Confirm/Cancel to the

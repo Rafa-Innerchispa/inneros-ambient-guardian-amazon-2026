@@ -134,7 +134,7 @@
           "samples": [
             "llama a mi celular usando grandstream",
             "marca mi teléfono por la central",
-            "llama a este número por la central"
+            "llama a mi celular permitido por la central"
           ]
         },
         {
@@ -155,7 +155,9 @@
             "prepara el reporte del último incidente para la central",
             "prepárame una llamada por la central con el último incidente",
             "llámame por la central con el reporte del incidente",
-            "hazme una llamada por grandstream con el informe del incidente"
+            "hazme una llamada por grandstream con el informe del incidente",
+            "llama a mi aplicación grandstream con el informe del incidente",
+            "llama a mi aplicación de voz con el último incidente"
           ]
         },
         {

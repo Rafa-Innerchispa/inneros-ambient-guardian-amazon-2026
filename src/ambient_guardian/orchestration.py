@@ -44,7 +44,7 @@ _PBX_NEGATED = re.compile(
 )
 _PBX_DIRECT_PHONE_REQUEST = re.compile(
     r"\b(?:llama|llamar|ll[aá]mame|marca|marcar|call)\b[^.]*"
-    r"\b(?:celular|tel[eé]fono|n[uú]mero)\b",
+    r"\b(?:celular|tel[eé]fono|n[uú]mero|cell(?:ular)?|mobile|phone)\b",
     re.I,
 )
 
@@ -1176,8 +1176,11 @@ def localize_alexa_result(result: dict[str, Any], locale: str) -> dict[str, Any]
         )
     elif mode == "deterministic-private-voiceops-destination":
         response["answer"] = (
-            "For privacy and safety, I do not use or store phone numbers spoken aloud. VoiceOps "
-            "can call only the owner's configured private contact after separate approval."
+            "For privacy and safety, I do not use or store phone numbers spoken aloud. Today, "
+            "VoiceOps can call only the owner's allowlisted Grandstream or Zoiper extension "
+            "after separate approval. Calling the owner's mobile through the external phone "
+            "line remains blocked until the PBX outbound route and WhatsApp approval path are "
+            "verified."
         )
     elif mode == "deterministic-antigravity-draft":
         response["answer"] = (
@@ -1480,9 +1483,12 @@ def simulated_alexa_turn(
             "response": {
                 "answer": (
                     "Por privacidad y seguridad no uso ni guardo números dictados por voz. "
-                    "VoiceOps llama únicamente al alias privado del propietario ya configurado. "
-                    "Di: prepara una llamada por Grandstream con el último incidente. La llamada "
-                    "quedará pendiente de aprobación y no se ejecutará todavía."
+                    "Hoy VoiceOps solo puede llamar a la extensión permitida de la aplicación "
+                    "Grandstream o Zoiper del propietario. Para esa ruta, di: prepara una llamada "
+                    "por Grandstream con el último incidente. La llamada quedará pendiente de "
+                    "aprobación y no se ejecutará todavía. La salida al celular por la línea "
+                    "externa sigue bloqueada hasta verificar la ruta PBX y la aprobación por "
+                    "WhatsApp."
                 ),
                 "status": "attention_required",
                 "reasoning_mode": "deterministic-private-voiceops-destination",

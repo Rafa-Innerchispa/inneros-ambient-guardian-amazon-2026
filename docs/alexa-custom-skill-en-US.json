@@ -126,7 +126,7 @@
           "samples": [
             "call my cell phone using grandstream",
             "call my phone through the PBX",
-            "call this number through the PBX"
+            "call my allowed mobile through the PBX"
           ]
         },
         {
@@ -137,7 +137,7 @@
         {
           "name": "PBXCallbackIntent",
           "slots": [],
-          "samples": ["prepare a call through the PBX with the latest incident report", "call me through grandstream with the incident report"]
+          "samples": ["prepare a call through the PBX with the latest incident report", "call me through grandstream with the incident report", "call my grandstream app with the latest incident report", "call my softphone with the latest incident report"]
         },
         {
           "name": "AntigravityDraftIntent",
