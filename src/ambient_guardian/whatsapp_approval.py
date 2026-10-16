@@ -92,6 +92,7 @@ class WhatsAppApprovalBridge:
                 "adapter",
                 "verified_at",
                 "evidence_digest",
+                "verification_truth_label",
             )
         }
         return self._run(

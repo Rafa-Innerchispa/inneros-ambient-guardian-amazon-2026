@@ -102,7 +102,7 @@ _DMX_STATUS_QUERY = re.compile(
 )
 _UNIFI_RESTART_QUERY = re.compile(
     r"\b(?:reinicia|reiniciar|reinicio|reboot|restart)\b[^.]*\b(?:unifi|u7|gateway|wifi|"
-    r"access\s+point|punto\s+de\s+acceso|estudio|cuarto|living)\b",
+    r"router|access\s+point|punto\s+de\s+acceso|study|bedroom|estudio|cuarto|living)\b",
     re.I,
 )
 

@@ -142,6 +142,7 @@
           "samples": [
             "prepara reiniciar unifi {target}",
             "reinicia el equipo unifi {target}",
+            "reinicia el router {target}",
             "prepara el reinicio del punto de acceso {target}"
           ]
         },

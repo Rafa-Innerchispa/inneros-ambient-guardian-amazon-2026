@@ -570,8 +570,6 @@ class GuardianState:
                 "action": (
                     "SIMULATED"
                     if action == "voiceops_owner_callback" and self.voiceops.mode == "simulator"
-                    else "REAL"
-                    if unifi_alias
                     else "CODE_READY"
                 ),
             },
@@ -645,29 +643,41 @@ class GuardianState:
                     correlation_id=item.action_id,
                     reason=item.reason,
                 )
-                verified = bool(after.get("verified"))
+                adapter_verified = bool(after.get("verified"))
             elif item.action.startswith("unifi_restart:"):
                 after = self.home_assistant.restart_unifi_device(
                     item.action.split(":", 1)[1]
                 )
-                verified = bool(after.get("verified"))
+                adapter_verified = bool(after.get("verified"))
             else:
                 after = self.adapter.execute(item.action)
-                verified = self._verify(item.action, after)
+                adapter_verified = self._verify(item.action, after)
         except Exception:
             with self._lock:
                 self.pending.pop(token, None)
             self.approval_store.finish(item.action_id, "failed")
             self.record_live_evidence(approval_state="EXECUTION_FAILED_NO_RETRY")
             raise
+        executed = bool(after.get("executed", True))
+        verified = bool(executed and adapter_verified)
+        verification_truth_label = (
+            "LIVE_VERIFIED"
+            if executed
+            and verified
+            and item.action.startswith("unifi_restart:")
+            else "EXECUTED_UNVERIFIED"
+            if executed and item.action.startswith("unifi_restart:")
+            else str(after.get("truth_label") or "SIMULATED")
+        )
         evidence = {
             "evidence_id": f"evd-{secrets.token_hex(6)}",
             "action_id": item.action_id,
             "action_digest": item.action_digest,
             "action": item.action,
             "reason": item.reason,
-            "executed": bool(after.get("executed", True)),
+            "executed": executed,
             "verified": verified,
+            "verification_truth_label": verification_truth_label,
             "adapter": after.get("adapter", "simulator"),
             "observed_state": after,
             "verified_at": iso_now(),
@@ -702,7 +712,7 @@ class GuardianState:
             },
             truth={
                 **dict(self.live_evidence.get("truth") or {}),
-                "action": str(after.get("truth_label") or "SIMULATED"),
+                "action": verification_truth_label,
             },
         )
         return evidence
@@ -768,8 +778,16 @@ class GuardianState:
             outcomes.append(
                 {
                     "action_id": item.action_id,
-                    "status": "completed" if evidence.get("verified") else "failed",
+                    "status": (
+                        "completed"
+                        if evidence.get("executed") and evidence.get("verified")
+                        else "failed"
+                    ),
+                    "executed": bool(evidence.get("executed")),
                     "verified": bool(evidence.get("verified")),
+                    "truth_label": str(
+                        evidence.get("verification_truth_label") or "CODE_READY"
+                    ),
                     "completion_notified": bool(completion.get("ok")),
                 }
             )
