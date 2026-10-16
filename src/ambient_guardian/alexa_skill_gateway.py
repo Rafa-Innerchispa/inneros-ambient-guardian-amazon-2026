@@ -525,15 +525,15 @@ def _dispatch(payload: dict[str, Any]) -> dict[str, Any]:
     if request_type == "LaunchRequest":
         if _request_locale(request_payload).lower().startswith("es"):
             return _plain_response(
-                f"{_voice_name()} listo. ¿Qué revisamos: energía, seguridad, red, "
-                "DMX o llamadas?",
-                reprompt="Sigo aquí. Puedes decir energía, seguridad, red, DMX o llamadas.",
+                f"{_voice_name()} listo. ¿Qué revisamos? Puedes decir: "
+                "dame el estado de energía.",
+                reprompt="Sigo aquí. Puedes decir: dame el estado de energía.",
                 session_attributes={"fallback_count": 0},
             )
         return _plain_response(
-            f"{_voice_name()} is ready. What should I check: energy, security, network, "
-            "DMX, or calls?",
-            reprompt="I am still here. Say energy, security, network, DMX, or calls.",
+            f"{_voice_name()} is ready. What should I check? You can say: "
+            "give me the energy status.",
+            reprompt="I am still here. You can say: give me the energy status.",
             session_attributes={"fallback_count": 0},
         )
     if request_type == "SessionEndedRequest":

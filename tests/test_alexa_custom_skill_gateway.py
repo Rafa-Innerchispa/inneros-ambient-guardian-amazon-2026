@@ -198,8 +198,7 @@ def test_spanish_launch_is_short_and_prompts_for_a_domain(monkeypatch):
     )
     speech = response["response"]["outputSpeech"]["text"]
     assert "InnerOS" in speech
-    assert "energía" in speech
-    assert "DMX" in speech
+    assert "dame el estado de energía" in speech
     assert response["response"]["shouldEndSession"] is False
     assert "Sigo aquí" in response["response"]["reprompt"]["outputSpeech"]["text"]
 
