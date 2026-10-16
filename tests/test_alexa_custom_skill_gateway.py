@@ -191,14 +191,17 @@ def test_guardian_intent_calls_local_backend(monkeypatch):
     assert response["response"]["shouldEndSession"] is False
 
 
-def test_spanish_launch_presents_inneros_as_voice_front_door(monkeypatch):
+def test_spanish_launch_is_short_and_prompts_for_a_domain(monkeypatch):
     monkeypatch.setenv("AMBIENT_GUARDIAN_VOICE_NAME", "InnerOS")
     response = gateway._dispatch(
         request_payload(launch_request(locale="es-US"))
     )
     speech = response["response"]["outputSpeech"]["text"]
     assert "InnerOS" in speech
-    assert "incidentes" in speech
+    assert "energía" in speech
+    assert "DMX" in speech
+    assert response["response"]["shouldEndSession"] is False
+    assert "Sigo aquí" in response["response"]["reprompt"]["outputSpeech"]["text"]
 
 
 def test_spanish_fallback_allows_one_retry_inside_same_session():
