@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import base64
 import json
+import os
 import re
 import subprocess
 import sys
@@ -89,12 +90,36 @@ def _dispatch(payload: dict[str, Any]) -> dict[str, Any]:
         correlation_id=draft_id,
     )
     repo_full = str(github.get("repo") or f"{owner}/{repo_name}")
-    readme = _seed_readme(repo_full, brief, draft_id) if github.get("ok") else {"ok": False}
+    # Alexa Custom Skills have a short response deadline. Seeding the README
+    # requires two additional GitHub round trips and can make an otherwise
+    # successful repo/task dispatch arrive after Alexa has already timed out.
+    # The assigned agent owns the first commit by default; synchronous seeding
+    # remains available as an explicit demo/debug opt-in.
+    seed_readme_sync = (
+        os.getenv("AMBIENT_GUARDIAN_VOICE_PROGRAM_SEED_README_SYNC", "0") == "1"
+    )
+    readme = (
+        _seed_readme(repo_full, brief, draft_id)
+        if github.get("ok") and seed_readme_sync
+        else {
+            "ok": False,
+            "skipped": (
+                "deferred_to_assigned_agent_for_alexa_latency_budget"
+                if github.get("ok")
+                else "github_repo_creation_failed"
+            ),
+        }
+    )
 
     task = create_ops_task(
         assignee=provider,
         title=f"[Alexa voz] {brief[:120]}",
-        checklist=[brief, f"Trabajar en repo {repo_full}", "Dejar evidencia PASS en ops task"],
+        checklist=[
+            brief,
+            f"Trabajar en repo {repo_full}",
+            "Crear el primer commit/README si el repositorio está vacío",
+            "Dejar evidencia PASS en ops task",
+        ],
         evidence_required=["repo_url", "resumen de cambios"],
         priority="high",
         from_agent="ambient_guardian_alexa",
