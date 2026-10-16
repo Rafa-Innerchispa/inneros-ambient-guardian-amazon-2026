@@ -50,3 +50,23 @@ the gateway, core switch, AMD server, Intel server, or another critical device.
 - [ ] Final WhatsApp outcome matches the verified receipt.
 - [ ] Duplicate confirmation produces no second execution.
 - [ ] No real phone call is placed and no unrelated InnerOS service is changed.
+
+## Alexa → AMD agents → GitHub (hackathon bridge)
+
+Requires `AMBIENT_GUARDIAN_VOICE_PROGRAM_DISPATCH=1` on the Ambient Guardian demo service.
+Default remains `DRAFT_ONLY` when the flag is off (Codex safety boundary).
+
+Spanish one-shot:
+
+1. **“Alexa, abre Inner Oz.”**
+2. **“Programa con antigravity un script mínimo que muestre latencia AMD para el hackathon.”**
+
+Expected:
+
+- Alexa speaks that InnerOS queued an ops task and created a public GitHub repo URL.
+- Live Evidence shows `voice_program_dispatch`, `DISPATCHED_TO_AGENTS`, and systems
+  `InnerOS Ops Tasks`, `AMD agent lane (Qwen/vLLM)`, `GitHub`.
+- Mongo ops task is created with `from_agent=ambient_guardian_alexa`.
+
+Chain this after the energy-resilience readout to show both hackathons connected.
+

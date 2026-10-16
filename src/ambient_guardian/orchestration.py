@@ -117,12 +117,13 @@ _MUSIC_PLAY_PREFIX = re.compile(
     r"^(?:reproduce|reproducir|pon|poner|toca|tocar|play)\s+(.+)$", re.I
 )
 
-_ANTIGRAVITY_DRAFT = re.compile(
-    r"^(?:prepara|preparar|crea|crear|draft|prepare|create)\s+"
-    r"(?:(?:una|un|a)\s+)?(?:tarea|brief|solicitud|request)?\s*"
-    r"(?:para|en|for)\s+antigravity\s*:?\s*(?P<task>.+)$",
+_VOICE_PROGRAM_DRAFT = re.compile(
+    r"^(?:prepara|preparar|crea|crear|draft|prepare|create|programa|programar)\s+"
+    r"(?:(?:una|un|a)\s+)?(?:tarea|brief|solicitud|request|esto)?\s*"
+    r"(?:para|en|for|con|with)\s+(?P<target>antigravity|cursor|codex)\s*:?\s*(?P<task>.+)$",
     re.I,
 )
+_ANTIGRAVITY_DRAFT = _VOICE_PROGRAM_DRAFT
 
 
 _ALARM_DISARM_ATTEMPT = re.compile(
@@ -1344,16 +1345,23 @@ def _music_status_response(state: GuardianState) -> dict[str, Any]:
 
 
 def _antigravity_task_draft(utterance: str) -> dict[str, Any] | None:
-    """Create a local, non-dispatched programming brief from an explicit voice request."""
-    match = _ANTIGRAVITY_DRAFT.match(" ".join(utterance.strip().split()))
+    """Create a local programming brief from an explicit Alexa/InnerOS voice request."""
+    match = _VOICE_PROGRAM_DRAFT.match(" ".join(utterance.strip().split()))
     if not match:
         return None
     task = " ".join(match.group("task").strip().split())[:400]
     if len(task) < 4:
         return None
+    target_raw = str(match.group("target") or "antigravity").lower()
+    if "cursor" in target_raw:
+        target = "Cursor"
+    elif "codex" in target_raw:
+        target = "Codex"
+    else:
+        target = "Antigravity"
     return {
         "draft_id": f"draft-{secrets.token_hex(6)}",
-        "target": "Antigravity",
+        "target": target,
         "brief": task,
         "status": "DRAFT_ONLY",
         "dispatched": False,

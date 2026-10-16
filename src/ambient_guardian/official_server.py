@@ -16,6 +16,7 @@ from starlette.responses import HTMLResponse, JSONResponse, Response
 from . import aws_strands
 from .core import GuardianReasoner, GuardianState
 from .orchestration import localize_alexa_result, simulated_alexa_turn
+from .voice_program_bridge import VoiceProgramBridge
 
 APP_VERSION = "0.6.0"
 STATE = GuardianState(
@@ -363,6 +364,39 @@ async def simulated_alexa(request: Request) -> Response:
         if isinstance(result.get("work_request_draft"), dict)
         else None
     )
+    dispatch_meta = None
+    if work_draft and os.getenv("AMBIENT_GUARDIAN_VOICE_PROGRAM_DISPATCH", "0") == "1":
+        dispatch_meta = VoiceProgramBridge().dispatch(dict(work_draft))
+        if dispatch_meta.get("ok"):
+            work_draft = {
+                **work_draft,
+                "status": "DISPATCHED",
+                "dispatched": True,
+                "executed": False,
+                "requires_owner_review": False,
+                "ops_task_id": dispatch_meta.get("task_id"),
+                "github_repo": dispatch_meta.get("repo"),
+                "github_repo_url": dispatch_meta.get("repo_url"),
+                "preferred_provider": dispatch_meta.get("provider"),
+            }
+            result["work_request_draft"] = work_draft
+            response_payload = result.get("response") if isinstance(result.get("response"), dict) else {}
+            provider = str(dispatch_meta.get("provider") or "antigravity")
+            repo_url = str(dispatch_meta.get("repo_url") or "")
+            task_id = str(dispatch_meta.get("task_id") or "")
+            response_payload["answer"] = (
+                f"Perfecto. InnerOS recibió tu pedido por Alexa, creó el repositorio en GitHub "
+                f"y encoló la tarea {task_id} para {provider} en los agentes locales sobre AMD. "
+                f"Puedes abrir {repo_url} para verificarlo."
+            )
+            response_payload["reasoning_mode"] = "deterministic-voice-program-dispatch"
+            result["response"] = response_payload
+            result["voice_program_dispatch"] = {
+                "task_id": task_id,
+                "repo_url": repo_url,
+                "provider": provider,
+            }
+
     public_prepared = (
         {key: value for key, value in prepared.items() if key != "approval_token"}
         if prepared
@@ -383,8 +417,12 @@ async def simulated_alexa(request: Request) -> Response:
     if receipt:
         intent = "incident_summary"
     if work_draft:
-        intent = "draft_antigravity_task"
-        systems.append("Antigravity (draft only)")
+        if work_draft.get("dispatched"):
+            intent = "voice_program_dispatch"
+            systems.extend(["InnerOS Ops Tasks", "AMD agent lane (Qwen/vLLM)", "GitHub"])
+        else:
+            intent = "draft_antigravity_task"
+            systems.append("Antigravity (draft only)")
     if prepared:
         intent = (
             "prepare_pbx_callback"
@@ -412,9 +450,13 @@ async def simulated_alexa(request: Request) -> Response:
         approval_state=(
             "WAITING_FOR_OWNER"
             if prepared
-            else "DRAFT_ONLY"
-            if work_draft
-            else "NOT_REQUIRED"
+            else (
+                "DISPATCHED_TO_AGENTS"
+                if work_draft and work_draft.get("dispatched")
+                else "DRAFT_ONLY"
+                if work_draft
+                else "NOT_REQUIRED"
+            )
         ),
         request_id=(
             str(payload.get("request_id") or "")[:160] or None
