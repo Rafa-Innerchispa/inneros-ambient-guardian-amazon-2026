@@ -427,7 +427,7 @@ async def simulated_alexa(request: Request) -> Response:
                 "REAL" if reasoning_mode == "local-qwen-vllm" or reasoning_mode.startswith("strands") else "CODE_READY"
             ),
             "action": (
-                "REAL"
+                "CODE_READY"
                 if prepared
                 and str(prepared.get("action") or "").startswith("unifi_restart:")
                 else "SIMULATED"

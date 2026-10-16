@@ -214,6 +214,46 @@ def test_authenticated_skill_bridge_can_forward_identity_without_leaking_token(m
     assert "approval_token" not in str(live)
 
 
+def test_unifi_http_prepare_never_claims_real_execution(monkeypatch):
+    import ambient_guardian.official_server as server
+
+    monkeypatch.setenv("AMBIENT_GUARDIAN_SKILL_BRIDGE_TOKEN", "bridge-secret")
+
+    def fake_turn(utterance, state, reasoner, *, speaker_context=None):
+        del state, reasoner, speaker_context
+        return {
+            "utterance": utterance,
+            "response": {
+                "answer": "Prepared safely.",
+                "status": "all_clear",
+                "reasoning_mode": "deterministic-local-fallback",
+            },
+            "prepared_action": {
+                "action_id": "act-sanitized",
+                "action": "unifi_restart:study",
+                "executed": False,
+                "approval_channel": "whatsapp",
+                "approval_delivery": "sent",
+                "approval_token": "must-not-leak",
+            },
+            "evidence_count": 0,
+        }
+
+    monkeypatch.setattr(server, "simulated_alexa_turn", fake_turn)
+    response = client.post(
+        "/api/alexa",
+        headers={"X-Ambient-Skill-Bridge": "bridge-secret"},
+        json={"utterance": "restart the study router"},
+    )
+
+    assert response.status_code == 200
+    assert "approval_token" not in response.json()["prepared_action"]
+    live = client.get("/api/live-evidence").json()
+    assert live["intent"] == "prepare_unifi_restart"
+    assert live["approval_state"] == "WAITING_FOR_OWNER"
+    assert live["truth"]["action"] == "CODE_READY"
+
+
 def test_pbx_approval_token_never_crosses_alexa_or_frontend(monkeypatch):
     monkeypatch.setenv("AWS_STRANDS_ENABLED", "0")
     monkeypatch.setenv("AMBIENT_GUARDIAN_OWNER_TOKEN", "owner-test-token")
