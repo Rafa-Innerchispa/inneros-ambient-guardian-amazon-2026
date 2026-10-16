@@ -188,7 +188,11 @@
           ],
           "samples": [
             "prepara para antigravity {task}",
-            "crea una tarea en antigravity {task}"
+            "crea una tarea en antigravity {task}",
+            "programa con antigravity {task}",
+            "programa esto con antigravity {task}",
+            "pídeme que programe con antigravity {task}",
+            "ayúdame a programar con antigravity {task}"
           ]
         },
         {

@@ -28,7 +28,11 @@
         {
           "name": "CapabilitiesIntent",
           "slots": [],
-          "samples": ["what can you do", "how can you help", "what does inner os control"]
+          "samples": [
+            "what can you do",
+            "how can you help",
+            "what does inner os control"
+          ]
         },
         {
           "name": "HomeHistoryIntent",
@@ -150,12 +154,21 @@
         {
           "name": "VoiceOpsStatusIntent",
           "slots": [],
-          "samples": ["is voice ops ready", "check the phone system", "is grandstream ready"]
+          "samples": [
+            "is voice ops ready",
+            "check the phone system",
+            "is grandstream ready"
+          ]
         },
         {
           "name": "PBXCallbackIntent",
           "slots": [],
-          "samples": ["prepare a call through the PBX with the latest incident report", "call me through grandstream with the incident report", "call my grandstream app with the latest incident report", "call my softphone with the latest incident report"]
+          "samples": [
+            "prepare a call through the PBX with the latest incident report",
+            "call me through grandstream with the incident report",
+            "call my grandstream app with the latest incident report",
+            "call my softphone with the latest incident report"
+          ]
         },
         {
           "name": "AntigravityDraftIntent",
@@ -165,7 +178,12 @@
               "type": "AMAZON.SearchQuery"
             }
           ],
-          "samples": ["prepare for antigravity {task}", "create an antigravity task {task}"]
+          "samples": [
+            "prepare for antigravity {task}",
+            "create an antigravity task {task}",
+            "program this with antigravity {task}",
+            "help me program with antigravity {task}"
+          ]
         },
         {
           "name": "AMAZON.HelpIntent",
