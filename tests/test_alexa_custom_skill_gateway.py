@@ -386,6 +386,26 @@ def test_unifi_restart_intent_preserves_only_target_alias(monkeypatch):
     assert calls == ["prepara reiniciar el UniFi U7 Living"]
 
 
+def test_english_unifi_restart_intent_maps_to_prepare_only_query(monkeypatch):
+    calls = []
+    monkeypatch.setattr(
+        gateway,
+        "_backend_turn",
+        lambda query, speaker_context=None: calls.append(query) or "answer",
+    )
+    gateway._dispatch(
+        request_payload(
+            intent_request(
+                None,
+                intent_name="UnifiRestartIntent",
+                locale="en-US",
+                target="study",
+            )
+        )
+    )
+    assert calls == ["prepare to restart UniFi study"]
+
+
 def test_play_music_intent_preserves_query_and_optional_speaker(monkeypatch):
     calls = []
     monkeypatch.setattr(

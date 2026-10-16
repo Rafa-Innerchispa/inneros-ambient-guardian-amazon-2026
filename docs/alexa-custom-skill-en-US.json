@@ -134,6 +134,7 @@
           "samples": [
             "prepare to restart unifi {target}",
             "restart the unifi device {target}",
+            "restart the {target} router",
             "prepare to restart access point {target}"
           ]
         },
