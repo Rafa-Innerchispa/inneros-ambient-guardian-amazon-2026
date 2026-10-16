@@ -6,6 +6,7 @@ import os
 import re
 import subprocess
 import sys
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timezone
 from typing import Any
 
@@ -79,17 +80,72 @@ def _dispatch(payload: dict[str, Any]) -> dict[str, Any]:
 
     owner = "Rafa-Innerchispa"
     repo_name = _repo_slug(draft_id)
+    repo_full = f"{owner}/{repo_name}"
+    repo_url = f"https://github.com/{repo_full}"
     description = f"Alexa→InnerOS→AMD: {brief[:160]}"
-    github = local_github_plane.create_github_repo(
-        owner,
-        repo_name,
-        description=description,
-        private=False,
-        actor="ambient_guardian_alexa",
-        task_id=draft_id,
-        correlation_id=draft_id,
-    )
-    repo_full = str(github.get("repo") or f"{owner}/{repo_name}")
+    planned_github = {
+        "repo": repo_full,
+        "url": repo_url,
+        "visibility": "public",
+        "provisioning": "parallel_requested",
+    }
+
+    def create_repo() -> dict[str, Any]:
+        return local_github_plane.create_github_repo(
+            owner,
+            repo_name,
+            description=description,
+            private=False,
+            actor="ambient_guardian_alexa",
+            task_id=draft_id,
+            correlation_id=draft_id,
+        )
+
+    def create_task() -> dict[str, Any]:
+        return create_ops_task(
+            assignee=provider,
+            title=f"[Alexa voz] {brief[:120]}",
+            checklist=[
+                brief,
+                f"Trabajar en repo {repo_full}",
+                "Crear el primer commit/README si el repositorio está vacío",
+                "Dejar evidencia PASS en ops task",
+            ],
+            evidence_required=["repo_url", "resumen de cambios"],
+            priority="high",
+            from_agent="ambient_guardian_alexa",
+            correlation_id=draft_id,
+            idempotency_key=f"alexa-voice-program:{draft_id}",
+            repo=repo_full,
+            base_ref="main",
+            related_project="ambient-guardian-amazon-2026",
+            objective=brief,
+            preferred_provider=provider,
+            do_not_auto_dispatch=False,
+            payload={
+                "source": "alexa_voice_program",
+                "draft_id": draft_id,
+                "voice_target": target,
+                "github": planned_github,
+                "readme_seed": {
+                    "ok": False,
+                    "skipped": "deferred_to_assigned_agent_for_alexa_latency_budget",
+                },
+                "requested_at": datetime.now(timezone.utc).isoformat(),
+            },
+        )
+
+    # Repo provisioning and Temporal admission are independent network calls.
+    # Run them together so Alexa is bounded by the slower call instead of their
+    # sum; sequential execution exceeded the Custom Skill response deadline.
+    with ThreadPoolExecutor(max_workers=2, thread_name_prefix="alexa-voice-program") as pool:
+        github_future = pool.submit(create_repo)
+        task_future = pool.submit(create_task)
+        github = github_future.result()
+        task = task_future.result()
+
+    repo_full = str(github.get("repo") or repo_full)
+    repo_url = str(github.get("url") or repo_url)
     # Alexa Custom Skills have a short response deadline. Seeding the README
     # requires two additional GitHub round trips and can make an otherwise
     # successful repo/task dispatch arrive after Alexa has already timed out.
@@ -111,42 +167,13 @@ def _dispatch(payload: dict[str, Any]) -> dict[str, Any]:
         }
     )
 
-    task = create_ops_task(
-        assignee=provider,
-        title=f"[Alexa voz] {brief[:120]}",
-        checklist=[
-            brief,
-            f"Trabajar en repo {repo_full}",
-            "Crear el primer commit/README si el repositorio está vacío",
-            "Dejar evidencia PASS en ops task",
-        ],
-        evidence_required=["repo_url", "resumen de cambios"],
-        priority="high",
-        from_agent="ambient_guardian_alexa",
-        correlation_id=draft_id,
-        idempotency_key=f"alexa-voice-program:{draft_id}",
-        repo=repo_full,
-        base_ref="main",
-        related_project="ambient-guardian-amazon-2026",
-        objective=brief,
-        preferred_provider=provider,
-        do_not_auto_dispatch=False,
-        payload={
-            "source": "alexa_voice_program",
-            "draft_id": draft_id,
-            "voice_target": target,
-            "github": github,
-            "readme_seed": readme,
-            "requested_at": datetime.now(timezone.utc).isoformat(),
-        },
-    )
-    ok = bool(task.get("task_id") or task.get("ok"))
+    ok = bool(github.get("ok") and (task.get("task_id") or task.get("ok")))
     return {
         "ok": ok,
         "provider": provider,
         "task_id": task.get("task_id"),
         "repo": repo_full,
-        "repo_url": github.get("url") or f"https://github.com/{repo_full}",
+        "repo_url": repo_url,
         "github": github,
         "ops_task": task,
         "readme_seed": readme,
