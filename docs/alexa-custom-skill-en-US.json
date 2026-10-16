@@ -55,6 +55,11 @@
           "slots": [],
           "samples": [
             "show me the energy resilience status",
+            "give me energy information",
+            "energy information",
+            "give me the energy status",
+            "how is the home energy system",
+            "give me the energy report",
             "what is the energy saving plan",
             "which circuits stay protected during an outage",
             "show me the load shedding preview",
@@ -64,6 +69,18 @@
             "what is the current power load",
             "should I turn off the fan",
             "enter energy saving mode"
+          ]
+        },
+        {
+          "name": "ResumeConversationIntent",
+          "slots": [],
+          "samples": [
+            "continue",
+            "keep going",
+            "I am still here",
+            "are you there",
+            "can we continue",
+            "I want to continue"
           ]
         },
         {

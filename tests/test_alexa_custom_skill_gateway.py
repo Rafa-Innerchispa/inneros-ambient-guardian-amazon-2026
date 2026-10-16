@@ -14,7 +14,7 @@ from ambient_guardian import alexa_skill_gateway as gateway
 SKILL_ID = "amzn1.ask.skill.test-ambient-guardian"
 
 
-def request_payload(request, *, person=None, access_token=None):
+def request_payload(request, *, person=None, access_token=None, session_attributes=None):
     system = {
         "application": {"applicationId": SKILL_ID},
         "user": {"userId": "test-user"},
@@ -32,6 +32,7 @@ def request_payload(request, *, person=None, access_token=None):
             "sessionId": "test-session",
             "application": {"applicationId": SKILL_ID},
             "user": {"userId": "test-user"},
+            "attributes": dict(session_attributes or {}),
         },
         "context": {"System": system},
         "request": request,
@@ -200,7 +201,7 @@ def test_spanish_launch_presents_inneros_as_voice_front_door(monkeypatch):
     assert "incidentes" in speech
 
 
-def test_spanish_fallback_ends_session_instead_of_reprompt_loop():
+def test_spanish_fallback_allows_one_retry_inside_same_session():
     response = gateway._dispatch(
         request_payload(
             intent_request(
@@ -211,11 +212,47 @@ def test_spanish_fallback_ends_session_instead_of_reprompt_loop():
         )
     )
 
+    assert response["response"]["shouldEndSession"] is False
+    assert "reprompt" in response["response"]
+    assert response["sessionAttributes"]["fallback_count"] == 1
+    speech = response["response"]["outputSpeech"]["text"]
+    assert "No entendí" in speech
+    assert "estado de energía" in speech
+
+
+def test_second_spanish_fallback_ends_session_without_looping():
+    response = gateway._dispatch(
+        request_payload(
+            intent_request(
+                None,
+                intent_name="AMAZON.FallbackIntent",
+                locale="es-US",
+            ),
+            session_attributes={"fallback_count": 1},
+        )
+    )
+
     assert response["response"]["shouldEndSession"] is True
     assert "reprompt" not in response["response"]
     speech = response["response"]["outputSpeech"]["text"]
-    assert "No entendí" in speech
-    assert "se fue la luz" in speech
+    assert "evitar un ciclo" in speech
+    assert "Inner Oz" in speech
+
+
+def test_resume_conversation_intent_keeps_session_open():
+    response = gateway._dispatch(
+        request_payload(
+            intent_request(
+                None,
+                intent_name="ResumeConversationIntent",
+                locale="es-US",
+            )
+        )
+    )
+
+    assert response["response"]["shouldEndSession"] is False
+    assert response["sessionAttributes"]["fallback_count"] == 0
+    assert "Sigo aquí" in response["response"]["outputSpeech"]["text"]
 
 
 @pytest.mark.parametrize(

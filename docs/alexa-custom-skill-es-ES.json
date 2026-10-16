@@ -62,6 +62,11 @@
           "slots": [],
           "samples": [
             "dame el estado de resiliencia energética",
+            "dame información de energía",
+            "información de energía",
+            "dame el estado de energía",
+            "cómo está la energía de la casa",
+            "dame el reporte de energía",
             "cuál es el plan de ahorro energético",
             "qué circuitos se protegen durante un apagón",
             "muéstrame la vista previa de desconexión de cargas",
@@ -71,6 +76,18 @@
             "cuánto consume la casa",
             "debo apagar el ventilador",
             "activa el modo de ahorro energético"
+          ]
+        },
+        {
+          "name": "ResumeConversationIntent",
+          "slots": [],
+          "samples": [
+            "continúa",
+            "sigue",
+            "sigo aquí",
+            "estás ahí",
+            "podemos seguir",
+            "quiero continuar"
           ]
         },
         {

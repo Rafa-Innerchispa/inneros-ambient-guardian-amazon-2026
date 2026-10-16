@@ -73,11 +73,15 @@ _HOME_HISTORY_QUERY = re.compile(
 )
 _ENERGY_RESILIENCE_QUERY = re.compile(
     r"\b(?:energy\s+(?:resilience|saving)\s+(?:status|mode|plan)|"
+    r"(?:energy|power)\s+(?:information|status|report|summary)|"
     r"resilience\s+plan|load\s+shedding|critical\s+circuits?|"
     r"how\s+(?:long\s+will\s+the\s+battery\s+last|much\s+backup\s+time\s+remains)|"
     r"when\s+did\s+the\s+(?:power\s+)?outage\s+start|current\s+power\s+load|"
     r"should\s+i\s+turn\s+off\s+the\s+fan|enter\s+energy\s+saving\s+mode|"
     r"(?:estado|plan)\s+de\s+resiliencia\s+energ[eé]tica|"
+    r"(?:informaci[oó]n|estado|reporte|resumen)\s+(?:de|sobre)\s+(?:la\s+)?"
+    r"(?:energ[ií]a|electricidad|panel(?:es)?\s+solares?|inversor)|"
+    r"c[oó]mo\s+est[aá]\s+(?:la\s+)?(?:energ[ií]a|electricidad)|"
     r"modo\s+de\s+ahorro\s+energ[eé]tico|desconexi[oó]n\s+de\s+cargas|"
     r"circuitos?\s+cr[ií]ticos?|cu[aá]nto\s+tiempo\s+durar[aá]\s+la\s+bater[ií]a|"
     r"cu[aá]nta\s+autonom[ií]a\s+queda|a\s+qu[eé]\s+hora\s+comenz[oó]\s+el\s+apag[oó]n|"

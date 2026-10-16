@@ -384,7 +384,11 @@ def _resume_after_pin(
 
 
 def _plain_response(
-    speech: str, *, reprompt: str | None = None, end_session: bool = False
+    speech: str,
+    *,
+    reprompt: str | None = None,
+    end_session: bool = False,
+    session_attributes: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     response: dict[str, Any] = {
         "outputSpeech": {"type": "PlainText", "text": speech},
@@ -394,7 +398,15 @@ def _plain_response(
         response["reprompt"] = {
             "outputSpeech": {"type": "PlainText", "text": reprompt}
         }
-    return {"version": "1.0", "response": response}
+    envelope: dict[str, Any] = {"version": "1.0", "response": response}
+    if session_attributes is not None:
+        envelope["sessionAttributes"] = session_attributes
+    return envelope
+
+
+def _session_attributes(payload: dict[str, Any]) -> dict[str, Any]:
+    attributes = ((payload.get("session") or {}).get("attributes") or {})
+    return dict(attributes) if isinstance(attributes, dict) else {}
 
 
 def _link_account_response() -> dict[str, Any]:
@@ -516,11 +528,13 @@ def _dispatch(payload: dict[str, Any]) -> dict[str, Any]:
                 f"{_voice_name()} está listo. Puedo revisar la casa y los incidentes, "
                 "consultar VoiceOps y preparar acciones seguras.",
                 reprompt="¿Qué quieres consultar o preparar?",
+                session_attributes={"fallback_count": 0},
             )
         return _plain_response(
             f"{_voice_name()} is ready. Ask me if everything is okay at home, "
             "what happened at the front door, or ask me to prepare a safe action.",
             reprompt="What would you like to know about the home?",
+            session_attributes={"fallback_count": 0},
         )
     if request_type == "SessionEndedRequest":
         return _plain_response("", end_session=True)
@@ -533,6 +547,18 @@ def _dispatch(payload: dict[str, Any]) -> dict[str, Any]:
         )
 
     intent_name = str(((request_payload.get("intent") or {}).get("name") or ""))
+    if intent_name == "ResumeConversationIntent":
+        if _request_locale(request_payload).lower().startswith("es"):
+            return _plain_response(
+                "Sigo aquí. Puedes continuar con energía, seguridad, red, DMX o VoiceOps.",
+                reprompt="¿Qué quieres revisar?",
+                session_attributes={"fallback_count": 0},
+            )
+        return _plain_response(
+            "I am still here. You can continue with energy, security, network, DMX, or VoiceOps.",
+            reprompt="What would you like to check?",
+            session_attributes={"fallback_count": 0},
+        )
     if intent_name in {
         "AskGuardianIntent",
         "CapabilitiesIntent",
@@ -585,6 +611,7 @@ def _dispatch(payload: dict[str, Any]) -> dict[str, Any]:
                 if _request_locale(request_payload).lower().startswith("es")
                 else "What else would you like to know?"
             ),
+            session_attributes={"fallback_count": 0},
         )
     if intent_name == "AMAZON.HelpIntent":
         if _request_locale(request_payload).lower().startswith("es"):
@@ -594,12 +621,14 @@ def _dispatch(payload: dict[str, Any]) -> dict[str, Any]:
                 "También puedo preparar un borrador de tarea para Antigravity. "
                 "Las acciones sensibles conservan su aprobación independiente.",
                 reprompt="¿Qué quieres consultar?",
+                session_attributes={"fallback_count": 0},
             )
         return _plain_response(
             "You can ask whether the home is okay, what happened at the front door, "
             "or ask Ambient Guardian to prepare an action. Physical actions still "
             "require separate human approval.",
             reprompt="What would you like to ask?",
+            session_attributes={"fallback_count": 0},
         )
     if intent_name in {
         "AMAZON.StopIntent",
@@ -613,19 +642,33 @@ def _dispatch(payload: dict[str, Any]) -> dict[str, Any]:
         )
         return _plain_response(speech, end_session=True)
 
-    # A fallback must never trap the user in a reprompt loop. Alexa does not expose
-    # the unmatched utterance to a custom skill, so there is nothing safe to route
-    # to the backend here. End the session and tell the user exactly how to retry.
+    # Alexa does not expose the unmatched utterance to a custom skill, so there is
+    # nothing safe to route to the backend here. Allow one concise retry inside the
+    # same session, then close on a second miss to avoid trapping the user in a loop.
+    fallback_count = int(_session_attributes(payload).get("fallback_count") or 0)
+    if fallback_count < 1:
+        if _request_locale(request_payload).lower().startswith("es"):
+            return _plain_response(
+                "No entendí esa frase y no realicé ninguna acción. Sigo aquí; prueba con: "
+                "dame el estado de energía, o di salir.",
+                reprompt="Puedes decir: dame el estado de energía.",
+                session_attributes={"fallback_count": 1},
+            )
+        return _plain_response(
+            "I did not understand that request and took no action. I am still here; "
+            "try: give me the energy status, or say exit.",
+            reprompt="You can say: give me the energy status.",
+            session_attributes={"fallback_count": 1},
+        )
     if _request_locale(request_payload).lower().startswith("es"):
         return _plain_response(
-            "No entendí esa frase y no realicé ninguna acción. Para salir, di salir. "
-            "Para consultar la energía, vuelve a abrir guardián ambiental y pregunta: "
-            "se fue la luz.",
+            "Todavía no entendí. Cierro esta conversación para evitar un ciclo; "
+            "cuando quieras, di: Alexa, pide a Inner Oz el estado de energía.",
             end_session=True,
         )
     return _plain_response(
-        "I did not understand that request. No action was taken. Please open "
-        "Ambient Guardian again and retry.",
+        "I still did not understand. I am closing this conversation to avoid a loop. "
+        "When ready, say: Alexa, ask Inner Oz for the energy status.",
         end_session=True,
     )
 

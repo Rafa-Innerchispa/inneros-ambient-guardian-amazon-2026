@@ -169,6 +169,29 @@ def test_energy_resilience_reports_real_outage_but_never_sheds_loads():
     assert "autonomía estimada" in result["response"]["answer"]
 
 
+def test_plain_energy_information_uses_deterministic_real_home_report():
+    result = simulated_alexa_turn(
+        "información de energía",
+        _state(),
+        FailIfReasonerRuns(),
+    )
+
+    assert result["response"]["reasoning_mode"] == "deterministic-energy-resilience"
+    assert result["energy_resilience"]["truth"] == "REAL"
+    assert "autonomía estimada" in result["response"]["answer"]
+
+
+def test_plain_english_energy_status_uses_deterministic_real_home_report():
+    result = simulated_alexa_turn(
+        "energy status",
+        _state(),
+        FailIfReasonerRuns(),
+    )
+
+    assert result["response"]["reasoning_mode"] == "deterministic-energy-resilience"
+    assert result["energy_resilience"]["truth"] == "REAL"
+
+
 def test_energy_resilience_can_be_rendered_in_english():
     result = simulated_alexa_turn(
         "show me the energy resilience status and energy saving plan",
