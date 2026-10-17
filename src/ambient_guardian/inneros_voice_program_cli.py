@@ -49,12 +49,12 @@ def _seed_readme(repo_full: str, brief: str, draft_id: str) -> dict[str, Any]:
         timeout=60,
         check=False,
     )
-    branch = (branch_proc.stdout or "main").strip() or "main"
+    branch = (branch_proc.stdout or "").strip()
     api_payload = json.dumps(
         {
             "message": "Alexa voice seed README",
             "content": base64.b64encode(body.encode()).decode(),
-            "branch": branch,
+            **({"branch": branch} if branch else {}),
         }
     )
     push = subprocess.run(
@@ -65,7 +65,45 @@ def _seed_readme(repo_full: str, brief: str, draft_id: str) -> dict[str, Any]:
         timeout=90,
         check=False,
     )
-    return {"ok": push.returncode == 0, "branch": branch, "detail": (push.stderr or push.stdout)[:300]}
+    return {
+        "ok": push.returncode == 0,
+        "branch": branch or "main",
+        "detail": (push.stderr or push.stdout)[:300],
+    }
+
+
+def _onboard_repo(repo_full: str, repo_url: str, draft_id: str) -> dict[str, Any]:
+    """Register and clone the new owner repo before an IDE agent can claim it."""
+    from inneros_core_runtime import local_execution_plane
+
+    authorization = local_execution_plane.repo_authorize(
+        repo=repo_full,
+        repo_class="alexa-voice-demo",
+        write_scope="worktree",
+        allowed_commands_profile="python-tests",
+        package_roots=["."],
+        approval_id=f"alexa-voice-provision:{draft_id}",
+        actor="ambient_guardian_alexa",
+        task_id=draft_id,
+        correlation_id=draft_id,
+        dry_run=False,
+    )
+    if not authorization.get("ok"):
+        return {"ok": False, "authorization": authorization, "prepare": None}
+    prepare = local_execution_plane.prepare_repo(
+        repo=repo_full,
+        base_ref="main",
+        actor="ambient_guardian_alexa",
+        task_id=draft_id,
+        correlation_id=draft_id,
+        idempotency_key=f"alexa-voice-prepare:{draft_id}",
+        remote_url=f"{repo_url}.git",
+    )
+    return {
+        "ok": bool(prepare.get("ok")),
+        "authorization": authorization,
+        "prepare": prepare,
+    }
 
 
 def _dispatch(payload: dict[str, Any]) -> dict[str, Any]:
@@ -127,7 +165,8 @@ def _dispatch(payload: dict[str, Any]) -> dict[str, Any]:
                 "draft_id": draft_id,
                 "voice_target": target,
                 "github": planned_github,
-                "readme_seed": {
+                "readme_seed": planned_github.get("readme_seed")
+                or {
                     "ok": False,
                     "skipped": "deferred_to_assigned_agent_for_alexa_latency_budget",
                 },
@@ -135,39 +174,72 @@ def _dispatch(payload: dict[str, Any]) -> dict[str, Any]:
             },
         )
 
-    # Repo provisioning and Temporal admission are independent network calls.
-    # Run them together so Alexa is bounded by the slower call instead of their
-    # sum; sequential execution exceeded the Custom Skill response deadline.
-    with ThreadPoolExecutor(max_workers=2, thread_name_prefix="alexa-voice-program") as pool:
-        github_future = pool.submit(create_repo)
-        task_future = pool.submit(create_task)
-        github = github_future.result()
-        task = task_future.result()
-
-    repo_full = str(github.get("repo") or repo_full)
-    repo_url = str(github.get("url") or repo_url)
+    async_provisioning = (
+        os.getenv("AMBIENT_GUARDIAN_VOICE_PROGRAM_ASYNC_PROVISION", "0") == "1"
+    )
+    if async_provisioning:
+        # This process is already detached from the Alexa response. Finish the
+        # repo, default branch and safe local checkout before emitting the Ops
+        # task/WhatsApp approval, otherwise Cursor cannot create its worktree.
+        github = create_repo()
+        repo_full = str(github.get("repo") or repo_full)
+        repo_url = str(github.get("url") or repo_url)
+        readme = (
+            _seed_readme(repo_full, brief, draft_id)
+            if github.get("ok")
+            else {"ok": False, "skipped": "github_repo_creation_failed"}
+        )
+        onboarding = (
+            _onboard_repo(repo_full, repo_url, draft_id)
+            if github.get("ok") and readme.get("ok")
+            else {"ok": False, "skipped": "readme_seed_failed"}
+        )
+        planned_github.update(
+            {
+                "repo": repo_full,
+                "url": repo_url,
+                "provisioning": "ready" if onboarding.get("ok") else "failed",
+                "readme_seed": readme,
+                "local_onboarding": onboarding,
+            }
+        )
+        task = create_task()
+    else:
+        # Direct/debug callers retain the bounded parallel path. The actual
+        # Alexa gateway uses detached provisioning above.
+        with ThreadPoolExecutor(max_workers=2, thread_name_prefix="alexa-voice-program") as pool:
+            github_future = pool.submit(create_repo)
+            task_future = pool.submit(create_task)
+            github = github_future.result()
+            task = task_future.result()
+        repo_full = str(github.get("repo") or repo_full)
+        repo_url = str(github.get("url") or repo_url)
+        seed_readme_sync = (
+            os.getenv("AMBIENT_GUARDIAN_VOICE_PROGRAM_SEED_README_SYNC", "0") == "1"
+        )
+        readme = (
+            _seed_readme(repo_full, brief, draft_id)
+            if github.get("ok") and seed_readme_sync
+            else {
+                "ok": False,
+                "skipped": (
+                    "deferred_to_assigned_agent_for_alexa_latency_budget"
+                    if github.get("ok")
+                    else "github_repo_creation_failed"
+                ),
+            }
+        )
+        onboarding = {"ok": False, "skipped": "detached_provisioning_only"}
     # Alexa Custom Skills have a short response deadline. Seeding the README
     # requires two additional GitHub round trips and can make an otherwise
     # successful repo/task dispatch arrive after Alexa has already timed out.
     # The assigned agent owns the first commit by default; synchronous seeding
     # remains available as an explicit demo/debug opt-in.
-    seed_readme_sync = (
-        os.getenv("AMBIENT_GUARDIAN_VOICE_PROGRAM_SEED_README_SYNC", "0") == "1"
+    ok = bool(
+        github.get("ok")
+        and (task.get("task_id") or task.get("ok"))
+        and (not async_provisioning or onboarding.get("ok"))
     )
-    readme = (
-        _seed_readme(repo_full, brief, draft_id)
-        if github.get("ok") and seed_readme_sync
-        else {
-            "ok": False,
-            "skipped": (
-                "deferred_to_assigned_agent_for_alexa_latency_budget"
-                if github.get("ok")
-                else "github_repo_creation_failed"
-            ),
-        }
-    )
-
-    ok = bool(github.get("ok") and (task.get("task_id") or task.get("ok")))
     task_record = task.get("task") if isinstance(task.get("task"), dict) else {}
     requires_owner_authorization = not bool(task_record.get("owner_authorized_at"))
     return {
@@ -180,6 +252,7 @@ def _dispatch(payload: dict[str, Any]) -> dict[str, Any]:
         "ops_task": task,
         "requires_owner_authorization": requires_owner_authorization,
         "readme_seed": readme,
+        "local_onboarding": onboarding,
     }
 
 
