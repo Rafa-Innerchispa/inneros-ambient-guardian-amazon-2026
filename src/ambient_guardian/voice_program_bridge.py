@@ -133,6 +133,9 @@ class VoiceProgramBridge:
             _ACTIVE_DISPATCHES.add(draft_id)
 
         env, command = runtime
+        env = dict(env)
+        env["AMBIENT_GUARDIAN_VOICE_PROGRAM_ASYNC_PROVISION"] = "1"
+        env["AMBIENT_GUARDIAN_VOICE_PROGRAM_SEED_README_SYNC"] = "1"
         try:
             process = subprocess.Popen(
                 command,
@@ -154,7 +157,7 @@ class VoiceProgramBridge:
 
         def reap() -> None:
             try:
-                process.wait(timeout=self.timeout_seconds)
+                process.wait(timeout=max(self.timeout_seconds, 180.0))
             except subprocess.TimeoutExpired:
                 process.kill()
                 process.wait()

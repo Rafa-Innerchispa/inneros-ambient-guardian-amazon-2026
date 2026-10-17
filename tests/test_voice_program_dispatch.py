@@ -239,3 +239,63 @@ def test_voice_program_cli_routes_cursor_and_requests_governed_authorization(mon
     assert captured["assignee"] == "cursor"
     assert captured["preferred_provider"] == "cursor"
     assert captured["do_not_auto_dispatch"] is False
+
+
+def test_async_voice_program_readies_repo_before_whatsapp_task(monkeypatch):
+    from ambient_guardian import inneros_voice_program_cli as cli
+
+    runtime = ModuleType("inneros_core_runtime")
+    local_github_plane = ModuleType("inneros_core_runtime.local_github_plane")
+    local_execution_plane = ModuleType("inneros_core_runtime.local_execution_plane")
+    coordination_live = ModuleType("inneros_core_runtime.coordination_live")
+    runtime.local_github_plane = local_github_plane
+    runtime.local_execution_plane = local_execution_plane
+    monkeypatch.setitem(sys.modules, "inneros_core_runtime", runtime)
+    monkeypatch.setitem(sys.modules, "inneros_core_runtime.local_github_plane", local_github_plane)
+    monkeypatch.setitem(sys.modules, "inneros_core_runtime.local_execution_plane", local_execution_plane)
+    monkeypatch.setitem(sys.modules, "inneros_core_runtime.coordination_live", coordination_live)
+    monkeypatch.setenv("AMBIENT_GUARDIAN_VOICE_PROGRAM_ASYNC_PROVISION", "1")
+    events = []
+
+    def fake_repo(*args, **kwargs):
+        events.append("repo")
+        return {
+            "ok": True,
+            "repo": "Rafa-Innerchispa/inneros-alexa-amd-draftabc",
+            "url": "https://github.com/Rafa-Innerchispa/inneros-alexa-amd-draftabc",
+        }
+
+    def fake_seed(*args, **kwargs):
+        events.append("seed")
+        return {"ok": True, "branch": "main"}
+
+    def fake_authorize(**kwargs):
+        events.append("authorize")
+        assert kwargs["dry_run"] is False
+        assert kwargs["write_scope"] == "worktree"
+        return {"ok": True}
+
+    def fake_prepare(**kwargs):
+        events.append("prepare")
+        assert kwargs["base_ref"] == "main"
+        return {"ok": True, "source_path": "/safe/workspace"}
+
+    def fake_task(**kwargs):
+        events.append("task")
+        assert kwargs["payload"]["github"]["provisioning"] == "ready"
+        assert kwargs["payload"]["readme_seed"]["ok"] is True
+        return {"ok": True, "task_id": "ops_cursor_ready", "task": {}}
+
+    monkeypatch.setattr(local_github_plane, "create_github_repo", fake_repo, raising=False)
+    monkeypatch.setattr(local_execution_plane, "repo_authorize", fake_authorize, raising=False)
+    monkeypatch.setattr(local_execution_plane, "prepare_repo", fake_prepare, raising=False)
+    monkeypatch.setattr(coordination_live, "create_ops_task", fake_task, raising=False)
+    monkeypatch.setattr(cli, "_seed_readme", fake_seed)
+
+    result = cli._dispatch(
+        {"draft_id": "draft-abc", "brief": "crear demo listo", "target": "Cursor"}
+    )
+
+    assert result["ok"] is True
+    assert result["local_onboarding"]["ok"] is True
+    assert events == ["repo", "seed", "authorize", "prepare", "task"]
