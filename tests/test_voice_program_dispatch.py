@@ -50,6 +50,50 @@ def test_api_voice_program_dispatches_when_enabled(monkeypatch):
     assert "github.com" in body["response"]["answer"]
 
 
+def test_authenticated_skill_bridge_queues_voice_program_without_blocking(monkeypatch):
+    monkeypatch.setenv("AWS_STRANDS_ENABLED", "0")
+    monkeypatch.setenv("AMBIENT_GUARDIAN_VOICE_PROGRAM_DISPATCH", "1")
+    monkeypatch.setenv("AMBIENT_GUARDIAN_SKILL_BRIDGE_TOKEN", "bridge-secret")
+
+    def unexpected_sync(self, draft):
+        raise AssertionError("The authenticated Alexa path must not block on provisioning")
+
+    def fake_background(self, draft):
+        assert draft["target"] == "Cursor"
+        return {
+            "ok": True,
+            "queued": True,
+            "provider": "cursor",
+            "task_id": None,
+            "repo": "Rafa-Innerchispa/inneros-alexa-amd-demo",
+            "repo_url": "https://github.com/Rafa-Innerchispa/inneros-alexa-amd-demo",
+            "requires_owner_authorization": True,
+        }
+
+    monkeypatch.setattr(
+        "ambient_guardian.official_server.VoiceProgramBridge.dispatch",
+        unexpected_sync,
+    )
+    monkeypatch.setattr(
+        "ambient_guardian.official_server.VoiceProgramBridge.dispatch_background",
+        fake_background,
+    )
+    client = TestClient(app)
+    STATE.reset_demo()
+    response = client.post(
+        "/api/alexa",
+        headers={"X-Ambient-Skill-Bridge": "bridge-secret"},
+        json={"utterance": "programa con cursor un demo de prueba para hackathon"},
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["work_request_draft"]["status"] == "QUEUED"
+    assert body["voice_program_dispatch"]["queued"] is True
+    assert "WhatsApp" in body["response"]["answer"]
+    assert client.get("/api/live-evidence").json()["approval_state"] == "DISPATCH_QUEUED"
+
+
 def test_voice_program_cli_defers_readme_seed_by_default(monkeypatch):
     from ambient_guardian import inneros_voice_program_cli as cli
 

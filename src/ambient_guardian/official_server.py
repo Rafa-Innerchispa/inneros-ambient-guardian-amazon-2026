@@ -366,11 +366,17 @@ async def simulated_alexa(request: Request) -> Response:
     )
     dispatch_meta = None
     if work_draft and os.getenv("AMBIENT_GUARDIAN_VOICE_PROGRAM_DISPATCH", "0") == "1":
-        dispatch_meta = VoiceProgramBridge().dispatch(dict(work_draft))
+        bridge = VoiceProgramBridge()
+        dispatch_meta = (
+            bridge.dispatch_background(dict(work_draft))
+            if skill_bridge
+            else bridge.dispatch(dict(work_draft))
+        )
         if dispatch_meta.get("ok"):
+            queued = bool(dispatch_meta.get("queued"))
             work_draft = {
                 **work_draft,
-                "status": "DISPATCHED",
+                "status": "QUEUED" if queued else "DISPATCHED",
                 "dispatched": True,
                 "executed": False,
                 "requires_owner_review": bool(
@@ -386,7 +392,13 @@ async def simulated_alexa(request: Request) -> Response:
             provider = str(dispatch_meta.get("provider") or "antigravity")
             repo_url = str(dispatch_meta.get("repo_url") or "")
             task_id = str(dispatch_meta.get("task_id") or "")
-            if dispatch_meta.get("requires_owner_authorization", True):
+            if queued:
+                response_payload["answer"] = (
+                    f"Perfecto. InnerOS recibió tu pedido para {provider}. "
+                    "Estoy creando el repositorio y la tarea ahora. "
+                    "Te llegará la autorización por WhatsApp antes de que el agente comience."
+                )
+            elif dispatch_meta.get("requires_owner_authorization", True):
                 response_payload["answer"] = (
                     f"Perfecto. InnerOS creó el repositorio en GitHub y la tarea {task_id} "
                     f"para {provider}. Te enviará la autorización por WhatsApp. "
@@ -404,6 +416,7 @@ async def simulated_alexa(request: Request) -> Response:
                 "task_id": task_id,
                 "repo_url": repo_url,
                 "provider": provider,
+                "queued": queued,
                 "requires_owner_authorization": bool(
                     dispatch_meta.get("requires_owner_authorization", True)
                 ),
@@ -463,7 +476,9 @@ async def simulated_alexa(request: Request) -> Response:
             "WAITING_FOR_OWNER"
             if prepared
             else (
-                "DISPATCHED_TO_AGENTS"
+                "DISPATCH_QUEUED"
+                if work_draft and work_draft.get("status") == "QUEUED"
+                else "DISPATCHED_TO_AGENTS"
                 if work_draft and work_draft.get("dispatched")
                 else "DRAFT_ONLY"
                 if work_draft
