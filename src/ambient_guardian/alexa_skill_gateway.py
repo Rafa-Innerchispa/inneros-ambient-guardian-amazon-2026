@@ -503,19 +503,20 @@ def _guardian_query(request_payload: dict[str, Any]) -> str:
             if english
             else "prepárame una llamada por la central con el reporte del último incidente"
         )
-    if intent_name == "ProgramTaskIntent":
-        provider = _slot_value(request_payload, "provider").strip().lower()
+    program_providers = {
+        "CursorProgramIntent": "cursor",
+        "CodexProgramIntent": "codex",
+        "AntigravityDraftIntent": "antigravity",
+        "ProgramTaskIntent": _slot_value(request_payload, "provider").strip().lower(),
+    }
+    if intent_name in program_providers:
+        provider = program_providers[intent_name]
         task = _slot_value(request_payload, "task")
         if provider not in {"antigravity", "cursor", "codex"}:
             provider = "cursor"
         if english:
             return f"prepare for {provider}: {task}" if task else ""
         return f"prepara una tarea para {provider}: {task}" if task else ""
-    if intent_name == "AntigravityDraftIntent":
-        task = _slot_value(request_payload, "task")
-        if english:
-            return f"prepare for Antigravity: {task}" if task else ""
-        return f"prepara una tarea para Antigravity: {task}" if task else ""
 
     query = _slot_value(request_payload, "query")
     when = _slot_value(request_payload, "when")
@@ -588,6 +589,8 @@ def _dispatch(payload: dict[str, Any]) -> dict[str, Any]:
         "PBXPrivateDestinationIntent",
         "VoiceOpsStatusIntent",
         "PBXCallbackIntent",
+        "CursorProgramIntent",
+        "CodexProgramIntent",
         "ProgramTaskIntent",
         "AntigravityDraftIntent",
     }:

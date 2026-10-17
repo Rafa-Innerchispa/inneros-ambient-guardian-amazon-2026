@@ -28,7 +28,7 @@ Cadena deseada en cámara:
 ## Lo que Codex ya tenía (no tocar sin motivo)
 
 - Rama histórica `codex/alexa-governed-voice-action-e2e-20261016` → mergeada vía #47/#48.
-- `ProgramTaskIntent` con proveedor explícito (`cursor`, `codex`, `antigravity`) + orchestration `DRAFT_ONLY` por defecto.
+- intents separados `CursorProgramIntent`, `CodexProgramIntent` y `AntigravityDraftIntent` + orchestration `DRAFT_ONLY` por defecto. La separación es obligatoria porque ASK no permite combinar `AMAZON.SearchQuery` con otro slot en la misma frase.
 - `docs/VOICE_ACTION_DEMO.md` — UniFi gobernado.
 - Gateway en Intel: `ambient-guardian-alexa-gateway.service` puerto **8795**, skill id **`amzn1.ask.skill.4a096414-e312-49d1-b2f5-4e538d7fdb93`**.
 - Backend: `inneros-ambient-guardian-demo.service` puerto **8794**, LLM **`INNEROS_LOCAL_LLM_URL=http://127.0.0.1:18000`** (router → AMD).
@@ -47,9 +47,9 @@ Archivos:
 - `docs/alexa-custom-skill-en-US.json`
 - `docs/alexa-custom-skill-es-MX.json`, `es-ES.json`
 
-Samples en `ProgramTaskIntent` (ej.):
+Samples de programación (ej.):
 
-- `programa con {provider} {task}`
+- `programa con cursor {task}`
 - `programa con cursor {task}` crea repo+tarea, solicita autorización por WhatsApp y queda elegible para el autopilot Cursor después de la aprobación.
 - `programa esto con antigravity {task}`
 - `ayúdame a programar con antigravity {task}`
@@ -123,7 +123,7 @@ curl -s -X POST http://127.0.0.1:8794/api/alexa \
 1. **Unificar narrativa Devpost:** voz → InnerOS → repo creado en GitHub → cola antigravity en AMD (misma historia que benchmark hackathon AMD en `platform/scripts/hackathon_amd_inference_benchmark.py`).
 2. **Idempotencia repos:** nombres `inneros-alexa-amd-{draft}` — considerar prefijo fecha si rebuildea demos.
 3. **`inneros_voice_program_cli.py`:** si `gh` falla, fallback API-only ya está en `local_github_plane`; seed README puede fallar en repo vacío — aceptable si `create_github_repo` OK.
-4. **Provider samples:** si ASK rechaza `SearchQuery` en alguna frase, acortar samples manteniendo “programa con {provider} {task}”.
+4. **Provider samples:** mantener un intent por proveedor porque `AMAZON.SearchQuery` debe ser el único slot de la frase.
 5. **Post-demo:** `AMBIENT_GUARDIAN_VOICE_PROGRAM_DISPATCH=0` + merge doc en `SUBMISSION_READINESS.md`.
 
 ---

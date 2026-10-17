@@ -487,9 +487,8 @@ def test_program_task_intent_preserves_cursor_provider_in_spanish(monkeypatch):
         request_payload(
             intent_request(
                 None,
-                intent_name="ProgramTaskIntent",
+                intent_name="CursorProgramIntent",
                 locale="es-US",
-                provider="cursor",
                 task="crear un monitor de energía",
             )
         )
@@ -509,9 +508,8 @@ def test_program_task_intent_preserves_cursor_provider_in_english(monkeypatch):
         request_payload(
             intent_request(
                 None,
-                intent_name="ProgramTaskIntent",
+                intent_name="CursorProgramIntent",
                 locale="en-US",
-                provider="cursor",
                 task="create an energy monitor",
             )
         )

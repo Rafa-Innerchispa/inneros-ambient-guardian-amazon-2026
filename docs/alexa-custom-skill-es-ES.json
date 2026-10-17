@@ -179,24 +179,50 @@
           ]
         },
         {
-          "name": "ProgramTaskIntent",
+          "name": "CursorProgramIntent",
           "slots": [
-            {
-              "name": "provider",
-              "type": "PROGRAM_PROVIDER"
-            },
             {
               "name": "task",
               "type": "AMAZON.SearchQuery"
             }
           ],
           "samples": [
-            "prepara para {provider} {task}",
-            "crea una tarea en {provider} {task}",
-            "programa con {provider} {task}",
-            "programa esto con {provider} {task}",
-            "pídeme que programe con {provider} {task}",
-            "ayúdame a programar con {provider} {task}"
+            "prepara para cursor {task}",
+            "crea una tarea en cursor {task}",
+            "programa con cursor {task}",
+            "programa esto con cursor {task}",
+            "pide que programe cursor {task}",
+            "ayúdame a programar con cursor {task}"
+          ]
+        },
+        {
+          "name": "CodexProgramIntent",
+          "slots": [
+            {
+              "name": "task",
+              "type": "AMAZON.SearchQuery"
+            }
+          ],
+          "samples": [
+            "prepara para codex {task}",
+            "crea una tarea en codex {task}",
+            "programa con codex {task}",
+            "programa esto con codex {task}"
+          ]
+        },
+        {
+          "name": "AntigravityDraftIntent",
+          "slots": [
+            {
+              "name": "task",
+              "type": "AMAZON.SearchQuery"
+            }
+          ],
+          "samples": [
+            "prepara para antigravity {task}",
+            "crea una tarea en antigravity {task}",
+            "programa con antigravity {task}",
+            "programa esto con antigravity {task}"
           ]
         },
         {
@@ -220,16 +246,7 @@
           "samples": []
         }
       ],
-      "types": [
-        {
-          "name": "PROGRAM_PROVIDER",
-          "values": [
-            {"name": {"value": "cursor", "synonyms": ["cursor ai", "agente cursor", "córser"]}},
-            {"name": {"value": "codex", "synonyms": ["openai codex", "agente codex"]}},
-            {"name": {"value": "antigravity", "synonyms": ["antigravity agent", "agente antigravity"]}}
-          ]
-        }
-      ]
+      "types": []
     }
   }
 }
