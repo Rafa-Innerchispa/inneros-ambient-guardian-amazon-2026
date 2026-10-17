@@ -310,7 +310,8 @@ Alexa can capture a bounded programming request as a local draft for later revie
 
 - `Alexa, pide a Inner Oz que prepare para Antigravity una automatización de bienvenida`
 - `Alexa, ask Inner Oz to prepare for Antigravity a welcome-light automation`
-- `Alexa, abre Inner Oz` → seguimiento: `programa esto con antigravity un repo de prueba para el hackathon`
+- `Alexa, abre Inner Oz` → seguimiento: `programa con cursor un repo de prueba para el hackathon`
+- InnerOS crea repositorio y Ops Task, envía autorización por WhatsApp y Cursor solo comienza después de la aprobación del propietario.
 - `Alexa, ask Inner Oz to program this with Antigravity a demo GitHub repo for the hackathon`
 
 **Importante para el video:** frases sueltas del tipo *“Alexa, ayúdame a programar”* o *“programa con Cursor”* **no** entran en esta skill; Alexa responde con Amazon Q u otra skill genérica. Siempre invoca **`Inner Oz`** (skill Custom de Ambient Guardian). Tras grabar, sube el JSON de interacción del locale activo (`docs/alexa-custom-skill-es-US.json` en Ecuador) en el Developer Console → **Save Model** → **Build Model**.

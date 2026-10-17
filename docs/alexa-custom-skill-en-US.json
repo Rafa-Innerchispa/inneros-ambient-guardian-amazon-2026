@@ -171,18 +171,24 @@
           ]
         },
         {
-          "name": "AntigravityDraftIntent",
+          "name": "ProgramTaskIntent",
           "slots": [
+            {
+              "name": "provider",
+              "type": "PROGRAM_PROVIDER"
+            },
             {
               "name": "task",
               "type": "AMAZON.SearchQuery"
             }
           ],
           "samples": [
-            "prepare for antigravity {task}",
-            "create an antigravity task {task}",
-            "program this with antigravity {task}",
-            "help me program with antigravity {task}"
+            "prepare for {provider} {task}",
+            "create a task for {provider} {task}",
+            "program with {provider} {task}",
+            "program this with {provider} {task}",
+            "ask {provider} to program {task}",
+            "help me program with {provider} {task}"
           ]
         },
         {
@@ -206,7 +212,16 @@
           "samples": []
         }
       ],
-      "types": []
+      "types": [
+        {
+          "name": "PROGRAM_PROVIDER",
+          "values": [
+            {"name": {"value": "cursor", "synonyms": ["cursor ai", "cursor agent"]}},
+            {"name": {"value": "codex", "synonyms": ["openai codex", "codex agent"]}},
+            {"name": {"value": "antigravity", "synonyms": ["antigravity agent"]}}
+          ]
+        }
+      ]
     }
   }
 }

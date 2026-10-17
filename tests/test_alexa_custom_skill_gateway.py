@@ -58,6 +58,7 @@ def intent_request(
     target=None,
     music_query=None,
     speaker=None,
+    provider=None,
 ):
     slots = {}
     if query is not None:
@@ -94,6 +95,12 @@ def intent_request(
         slots["speaker"] = {
             "name": "speaker",
             "value": speaker,
+            "confirmationStatus": "NONE",
+        }
+    if provider is not None:
+        slots["provider"] = {
+            "name": "provider",
+            "value": provider,
             "confirmationStatus": "NONE",
         }
     return {
@@ -467,6 +474,49 @@ def test_antigravity_intent_maps_to_local_draft_only_query(monkeypatch):
         "prepara una tarea para Antigravity: crear una automatización para las luces"
     ]
     assert response["response"]["outputSpeech"]["text"] == "borrador listo"
+
+
+def test_program_task_intent_preserves_cursor_provider_in_spanish(monkeypatch):
+    calls = []
+    monkeypatch.setattr(
+        gateway,
+        "_backend_turn",
+        lambda query, speaker_context=None: calls.append(query) or "tarea lista",
+    )
+    response = gateway._dispatch(
+        request_payload(
+            intent_request(
+                None,
+                intent_name="ProgramTaskIntent",
+                locale="es-US",
+                provider="cursor",
+                task="crear un monitor de energía",
+            )
+        )
+    )
+    assert calls == ["prepara una tarea para cursor: crear un monitor de energía"]
+    assert response["response"]["outputSpeech"]["text"] == "tarea lista"
+
+
+def test_program_task_intent_preserves_cursor_provider_in_english(monkeypatch):
+    calls = []
+    monkeypatch.setattr(
+        gateway,
+        "_backend_turn",
+        lambda query, speaker_context=None: calls.append(query) or "task ready",
+    )
+    gateway._dispatch(
+        request_payload(
+            intent_request(
+                None,
+                intent_name="ProgramTaskIntent",
+                locale="en-US",
+                provider="cursor",
+                task="create an energy monitor",
+            )
+        )
+    )
+    assert calls == ["prepare for cursor: create an energy monitor"]
 
 
 def test_pin_confirmation_is_opt_in_by_default(monkeypatch):

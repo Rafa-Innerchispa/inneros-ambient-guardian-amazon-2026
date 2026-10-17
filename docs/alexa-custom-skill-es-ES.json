@@ -179,20 +179,24 @@
           ]
         },
         {
-          "name": "AntigravityDraftIntent",
+          "name": "ProgramTaskIntent",
           "slots": [
+            {
+              "name": "provider",
+              "type": "PROGRAM_PROVIDER"
+            },
             {
               "name": "task",
               "type": "AMAZON.SearchQuery"
             }
           ],
           "samples": [
-            "prepara para antigravity {task}",
-            "crea una tarea en antigravity {task}",
-            "programa con antigravity {task}",
-            "programa esto con antigravity {task}",
-            "pídeme que programe con antigravity {task}",
-            "ayúdame a programar con antigravity {task}"
+            "prepara para {provider} {task}",
+            "crea una tarea en {provider} {task}",
+            "programa con {provider} {task}",
+            "programa esto con {provider} {task}",
+            "pídeme que programe con {provider} {task}",
+            "ayúdame a programar con {provider} {task}"
           ]
         },
         {
@@ -216,7 +220,16 @@
           "samples": []
         }
       ],
-      "types": []
+      "types": [
+        {
+          "name": "PROGRAM_PROVIDER",
+          "values": [
+            {"name": {"value": "cursor", "synonyms": ["cursor ai", "agente cursor", "córser"]}},
+            {"name": {"value": "codex", "synonyms": ["openai codex", "agente codex"]}},
+            {"name": {"value": "antigravity", "synonyms": ["antigravity agent", "agente antigravity"]}}
+          ]
+        }
+      ]
     }
   }
 }
