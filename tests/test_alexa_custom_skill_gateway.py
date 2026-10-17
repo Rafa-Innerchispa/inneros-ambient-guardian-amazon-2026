@@ -471,7 +471,7 @@ def test_antigravity_intent_maps_to_local_draft_only_query(monkeypatch):
         )
     )
     assert calls == [
-        "prepara una tarea para Antigravity: crear una automatización para las luces"
+        "prepara una tarea para antigravity: crear una automatización para las luces"
     ]
     assert response["response"]["outputSpeech"]["text"] == "borrador listo"
 
