@@ -168,6 +168,8 @@ def _dispatch(payload: dict[str, Any]) -> dict[str, Any]:
     )
 
     ok = bool(github.get("ok") and (task.get("task_id") or task.get("ok")))
+    task_record = task.get("task") if isinstance(task.get("task"), dict) else {}
+    requires_owner_authorization = not bool(task_record.get("owner_authorized_at"))
     return {
         "ok": ok,
         "provider": provider,
@@ -176,6 +178,7 @@ def _dispatch(payload: dict[str, Any]) -> dict[str, Any]:
         "repo_url": repo_url,
         "github": github,
         "ops_task": task,
+        "requires_owner_authorization": requires_owner_authorization,
         "readme_seed": readme,
     }
 

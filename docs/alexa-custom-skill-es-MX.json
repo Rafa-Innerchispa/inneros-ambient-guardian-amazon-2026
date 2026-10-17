@@ -179,6 +179,38 @@
           ]
         },
         {
+          "name": "CursorProgramIntent",
+          "slots": [
+            {
+              "name": "task",
+              "type": "AMAZON.SearchQuery"
+            }
+          ],
+          "samples": [
+            "prepara para cursor {task}",
+            "crea una tarea en cursor {task}",
+            "programa con cursor {task}",
+            "programa esto con cursor {task}",
+            "pide que programe cursor {task}",
+            "ayúdame a programar con cursor {task}"
+          ]
+        },
+        {
+          "name": "CodexProgramIntent",
+          "slots": [
+            {
+              "name": "task",
+              "type": "AMAZON.SearchQuery"
+            }
+          ],
+          "samples": [
+            "prepara para codex {task}",
+            "crea una tarea en codex {task}",
+            "programa con codex {task}",
+            "programa esto con codex {task}"
+          ]
+        },
+        {
           "name": "AntigravityDraftIntent",
           "slots": [
             {
@@ -190,9 +222,7 @@
             "prepara para antigravity {task}",
             "crea una tarea en antigravity {task}",
             "programa con antigravity {task}",
-            "programa esto con antigravity {task}",
-            "pide que programe con antigravity {task}",
-            "ayúdame a programar con antigravity {task}"
+            "programa esto con antigravity {task}"
           ]
         },
         {

@@ -171,6 +171,38 @@
           ]
         },
         {
+          "name": "CursorProgramIntent",
+          "slots": [
+            {
+              "name": "task",
+              "type": "AMAZON.SearchQuery"
+            }
+          ],
+          "samples": [
+            "prepare for cursor {task}",
+            "create a cursor task {task}",
+            "program with cursor {task}",
+            "program this with cursor {task}",
+            "ask cursor to program {task}",
+            "help me program with cursor {task}"
+          ]
+        },
+        {
+          "name": "CodexProgramIntent",
+          "slots": [
+            {
+              "name": "task",
+              "type": "AMAZON.SearchQuery"
+            }
+          ],
+          "samples": [
+            "prepare for codex {task}",
+            "create a codex task {task}",
+            "program with codex {task}",
+            "ask codex to program {task}"
+          ]
+        },
+        {
           "name": "AntigravityDraftIntent",
           "slots": [
             {
@@ -181,8 +213,8 @@
           "samples": [
             "prepare for antigravity {task}",
             "create an antigravity task {task}",
-            "program this with antigravity {task}",
-            "help me program with antigravity {task}"
+            "program with antigravity {task}",
+            "ask antigravity to program {task}"
           ]
         },
         {

@@ -373,7 +373,9 @@ async def simulated_alexa(request: Request) -> Response:
                 "status": "DISPATCHED",
                 "dispatched": True,
                 "executed": False,
-                "requires_owner_review": False,
+                "requires_owner_review": bool(
+                    dispatch_meta.get("requires_owner_authorization", True)
+                ),
                 "ops_task_id": dispatch_meta.get("task_id"),
                 "github_repo": dispatch_meta.get("repo"),
                 "github_repo_url": dispatch_meta.get("repo_url"),
@@ -384,17 +386,27 @@ async def simulated_alexa(request: Request) -> Response:
             provider = str(dispatch_meta.get("provider") or "antigravity")
             repo_url = str(dispatch_meta.get("repo_url") or "")
             task_id = str(dispatch_meta.get("task_id") or "")
-            response_payload["answer"] = (
-                f"Perfecto. InnerOS recibió tu pedido por Alexa, creó el repositorio en GitHub "
-                f"y encoló la tarea {task_id} para {provider} en los agentes locales sobre AMD. "
-                f"Puedes abrir {repo_url} para verificarlo."
-            )
+            if dispatch_meta.get("requires_owner_authorization", True):
+                response_payload["answer"] = (
+                    f"Perfecto. InnerOS creó el repositorio en GitHub y la tarea {task_id} "
+                    f"para {provider}. Te enviará la autorización por WhatsApp. "
+                    f"Después de aprobarla, {provider} podrá comenzar. Puedes verificarlo en {repo_url}."
+                )
+            else:
+                response_payload["answer"] = (
+                    f"Perfecto. InnerOS recibió tu pedido por Alexa, creó el repositorio en GitHub "
+                    f"y encoló la tarea {task_id} para {provider} en los agentes locales sobre AMD. "
+                    f"Puedes abrir {repo_url} para verificarlo."
+                )
             response_payload["reasoning_mode"] = "deterministic-voice-program-dispatch"
             result["response"] = response_payload
             result["voice_program_dispatch"] = {
                 "task_id": task_id,
                 "repo_url": repo_url,
                 "provider": provider,
+                "requires_owner_authorization": bool(
+                    dispatch_meta.get("requires_owner_authorization", True)
+                ),
             }
 
     public_prepared = (

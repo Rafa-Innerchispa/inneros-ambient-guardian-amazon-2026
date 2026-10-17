@@ -59,7 +59,8 @@ Default remains `DRAFT_ONLY` when the flag is off (Codex safety boundary).
 Spanish one-shot:
 
 1. **“Alexa, abre Inner Oz.”**
-2. **“Programa con antigravity un script mínimo que muestre latencia AMD para el hackathon.”**
+2. **“Programa con Cursor un script mínimo que muestre latencia AMD para el hackathon.”**
+3. Aprobar por WhatsApp la solicitud gobernada. El autopilot Cursor reclama la tarea autorizada y deja evidencia de commit, pruebas y PR.
 
 Expected:
 

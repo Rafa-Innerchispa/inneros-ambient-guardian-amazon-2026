@@ -421,6 +421,14 @@ def _link_account_response() -> dict[str, Any]:
 def _slot_value(request_payload: dict[str, Any], slot_name: str) -> str:
     intent = request_payload.get("intent") or {}
     slot = (intent.get("slots") or {}).get(slot_name) or {}
+    resolutions = ((slot.get("resolutions") or {}).get("resolutionsPerAuthority") or [])
+    for authority in resolutions:
+        status = str(((authority.get("status") or {}).get("code") or ""))
+        values = authority.get("values") or []
+        if status == "ER_SUCCESS_MATCH" and values:
+            canonical = str((((values[0] or {}).get("value") or {}).get("name") or "")).strip()
+            if canonical:
+                return canonical
     return str(slot.get("value") or "").strip()
 
 
@@ -495,11 +503,20 @@ def _guardian_query(request_payload: dict[str, Any]) -> str:
             if english
             else "prepárame una llamada por la central con el reporte del último incidente"
         )
-    if intent_name == "AntigravityDraftIntent":
+    program_providers = {
+        "CursorProgramIntent": "cursor",
+        "CodexProgramIntent": "codex",
+        "AntigravityDraftIntent": "antigravity",
+        "ProgramTaskIntent": _slot_value(request_payload, "provider").strip().lower(),
+    }
+    if intent_name in program_providers:
+        provider = program_providers[intent_name]
         task = _slot_value(request_payload, "task")
+        if provider not in {"antigravity", "cursor", "codex"}:
+            provider = "cursor"
         if english:
-            return f"prepare for Antigravity: {task}" if task else ""
-        return f"prepara una tarea para Antigravity: {task}" if task else ""
+            return f"prepare for {provider}: {task}" if task else ""
+        return f"prepara una tarea para {provider}: {task}" if task else ""
 
     query = _slot_value(request_payload, "query")
     when = _slot_value(request_payload, "when")
@@ -572,6 +589,9 @@ def _dispatch(payload: dict[str, Any]) -> dict[str, Any]:
         "PBXPrivateDestinationIntent",
         "VoiceOpsStatusIntent",
         "PBXCallbackIntent",
+        "CursorProgramIntent",
+        "CodexProgramIntent",
+        "ProgramTaskIntent",
         "AntigravityDraftIntent",
     }:
         query = _guardian_query(request_payload)
