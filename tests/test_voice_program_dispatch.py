@@ -1,4 +1,5 @@
 import sys
+import threading
 from types import ModuleType
 
 from starlette.testclient import TestClient
@@ -100,3 +101,53 @@ def test_voice_program_cli_defers_readme_seed_by_default(monkeypatch):
         "ok": False,
         "skipped": "deferred_to_assigned_agent_for_alexa_latency_budget",
     }
+
+
+def test_voice_program_cli_provisions_repo_and_ops_task_concurrently(monkeypatch):
+    from ambient_guardian import inneros_voice_program_cli as cli
+
+    runtime = ModuleType("inneros_core_runtime")
+    local_github_plane = ModuleType("inneros_core_runtime.local_github_plane")
+    coordination_live = ModuleType("inneros_core_runtime.coordination_live")
+    runtime.local_github_plane = local_github_plane
+    monkeypatch.setitem(sys.modules, "inneros_core_runtime", runtime)
+    monkeypatch.setitem(
+        sys.modules,
+        "inneros_core_runtime.local_github_plane",
+        local_github_plane,
+    )
+    monkeypatch.setitem(
+        sys.modules,
+        "inneros_core_runtime.coordination_live",
+        coordination_live,
+    )
+    monkeypatch.delenv("AMBIENT_GUARDIAN_VOICE_PROGRAM_SEED_README_SYNC", raising=False)
+    rendezvous = threading.Barrier(2, timeout=2)
+
+    def fake_repo(*args, **kwargs):
+        rendezvous.wait()
+        return {
+            "ok": True,
+            "repo": "Rafa-Innerchispa/inneros-alexa-amd-draftabc",
+            "url": "https://github.com/Rafa-Innerchispa/inneros-alexa-amd-draftabc",
+        }
+
+    def fake_task(**kwargs):
+        rendezvous.wait()
+        assert kwargs["repo"] == "Rafa-Innerchispa/inneros-alexa-amd-draftabc"
+        assert kwargs["payload"]["github"]["provisioning"] == "parallel_requested"
+        return {"ok": True, "task_id": "ops_parallel123"}
+
+    monkeypatch.setattr(local_github_plane, "create_github_repo", fake_repo, raising=False)
+    monkeypatch.setattr(coordination_live, "create_ops_task", fake_task, raising=False)
+
+    result = cli._dispatch(
+        {
+            "draft_id": "draft-abc",
+            "brief": "demo hackathon AMD",
+            "target": "Antigravity",
+        }
+    )
+
+    assert result["ok"] is True
+    assert result["task_id"] == "ops_parallel123"
