@@ -79,6 +79,39 @@
           ]
         },
         {
+          "name": "UnifiStatusIntent",
+          "slots": [],
+          "samples": [
+            "revisa la red UniFi",
+            "dame el estado de UniFi",
+            "cómo está la red wifi",
+            "están conectados los puntos de acceso UniFi"
+          ]
+        },
+        {
+          "name": "CameraStatusIntent",
+          "slots": [],
+          "samples": [
+            "revisa las cámaras",
+            "dame el estado de las cámaras",
+            "están grabando las cámaras",
+            "revisa los grabadores NVR"
+          ]
+        },
+        {
+          "name": "ServerStatusIntent",
+          "slots": [],
+          "samples": [
+            "revisa los servidores de Inner OS",
+            "dame el estado de los servidores",
+            "qué servidores tenemos",
+            "cómo está el servidor Intel",
+            "cómo está el servidor AMD",
+            "revisa el nodo punto cuatro",
+            "revisa el nodo punto cinco"
+          ]
+        },
+        {
           "name": "ResumeConversationIntent",
           "slots": [],
           "samples": [

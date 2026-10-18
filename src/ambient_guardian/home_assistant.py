@@ -197,6 +197,15 @@ class HomeAssistantBridge:
                 if str(entity_id).strip() and str(label).strip()
             }
 
+        raw_cameras = os.getenv("AMBIENT_GUARDIAN_CAMERA_ENTITY_ALLOWLIST", "")
+        self.camera_entity_allowlist = {
+            item.strip() for item in raw_cameras.split(",") if item.strip()
+        }
+        raw_unifi_status = os.getenv("AMBIENT_GUARDIAN_UNIFI_STATUS_ENTITIES", "")
+        self.unifi_status_entities = {
+            item.strip() for item in raw_unifi_status.split(",") if item.strip()
+        }
+
         self.unifi_restart_enabled = os.getenv(
             "AMBIENT_GUARDIAN_UNIFI_RESTART_ENABLED", "0"
         ) == "1"
@@ -260,6 +269,59 @@ class HomeAssistantBridge:
             "state": payload.get("state"),
             "attributes": payload.get("attributes", {}),
             "last_updated": payload.get("last_updated"),
+        }
+
+    def _allowlisted_states(self, entity_ids: set[str]) -> list[dict[str, Any]]:
+        states: list[dict[str, Any]] = []
+        for entity_id in sorted(entity_ids)[:32]:
+            try:
+                state = self.get_entity_state(entity_id)
+            except (httpx.HTTPError, RuntimeError, ValueError):
+                states.append(
+                    {"entity_id": entity_id, "state": "unavailable", "label": entity_id}
+                )
+                continue
+            attributes = state.get("attributes") or {}
+            states.append(
+                {
+                    "entity_id": entity_id,
+                    "state": str(state.get("state") or "unknown"),
+                    "label": str(attributes.get("friendly_name") or self.history_labels.get(entity_id) or entity_id),
+                    "unit": str(attributes.get("unit_of_measurement") or ""),
+                    "last_updated": state.get("last_updated"),
+                }
+            )
+        return states
+
+    def camera_status(self) -> dict[str, Any]:
+        return {
+            "configured": self.configured and bool(self.camera_entity_allowlist),
+            "entities": self._allowlisted_states(self.camera_entity_allowlist)
+            if self.configured
+            else [],
+        }
+
+    def unifi_status(self) -> dict[str, Any]:
+        entity_ids = set(self.unifi_status_entities)
+        targets: list[dict[str, str]] = []
+        seen: set[tuple[str, str]] = set()
+        for target in self.unifi_restart_targets.values():
+            key = (target.get("status", ""), target.get("uptime", ""))
+            if key in seen:
+                continue
+            seen.add(key)
+            entity_ids.update(item for item in key if item)
+            targets.append(
+                {
+                    "label": target.get("label", "UniFi device"),
+                    "status_entity": target.get("status", ""),
+                    "uptime_entity": target.get("uptime", ""),
+                }
+            )
+        return {
+            "configured": self.configured and bool(entity_ids),
+            "entities": self._allowlisted_states(entity_ids) if self.configured else [],
+            "targets": targets,
         }
 
     def _expanded_history_entities(self) -> tuple[list[str], dict[str, str]]:

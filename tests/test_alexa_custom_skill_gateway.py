@@ -279,6 +279,13 @@ def test_spanish_exit_intents_close_skill(intent_name):
     assert response["response"]["outputSpeech"]["text"] == "InnerOS queda en espera."
 
 
+def test_english_exit_uses_inneros_brand():
+    response = gateway._dispatch(
+        request_payload(intent_request(None, intent_name="AMAZON.StopIntent", locale="en-US"))
+    )
+    assert response["response"]["outputSpeech"]["text"] == "InnerOS is standing by."
+
+
 @pytest.mark.parametrize(
     ("intent_name", "expected"),
     [
@@ -296,6 +303,9 @@ def test_spanish_exit_intents_close_skill(intent_name):
             "EnergyResilienceIntent",
             "dame el estado de resiliencia energética y el plan de ahorro",
         ),
+        ("UnifiStatusIntent", "revisa el estado en vivo de UniFi"),
+        ("CameraStatusIntent", "revisa el estado en vivo de las cámaras y grabadores"),
+        ("ServerStatusIntent", "revisa el estado en vivo de los servidores de InnerOS"),
         ("RingDemoStatusIntent", "qué detectó Ring en el demo"),
         ("DMXStatusIntent", "qué puede hacer el sistema DMX por Art-Net"),
         ("MusicStatusIntent", "está listo YouTube Music con Music Assistant"),
@@ -338,6 +348,9 @@ def test_stable_intents_map_to_bounded_backend_queries(
             "EnergyResilienceIntent",
             "show me the energy resilience status and energy saving plan",
         ),
+        ("UnifiStatusIntent", "check the live UniFi network status"),
+        ("CameraStatusIntent", "check the live camera and recorder status"),
+        ("ServerStatusIntent", "check the live InnerOS server fleet status"),
         ("RingDemoStatusIntent", "what did Ring detect in the demo"),
         ("DMXStatusIntent", "what can the DMX system do over Art-Net"),
         ("MusicStatusIntent", "is YouTube Music ready through Music Assistant"),

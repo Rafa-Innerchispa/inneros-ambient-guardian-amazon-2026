@@ -15,6 +15,7 @@ from .approval_store import ApprovalStore
 from .dmx import DMXBridge
 from .google_home import GoogleHomeBridge, GoogleHomeStatus
 from .home_assistant import HomeAssistantBridge
+from .infrastructure import InfrastructureBridge
 from .incident_store import IncidentStore
 from .music_assistant import MusicAssistantBridge
 from .ring import RingAdapterStatus, RingOfficialAdapter, RingSimulatorAdapter
@@ -94,6 +95,7 @@ class GuardianState:
         self.ring_adapter = RingSimulatorAdapter()
         self.ring_official = RingOfficialAdapter()
         self.home_assistant = HomeAssistantBridge()
+        self.infrastructure = InfrastructureBridge()
         self.dmx = DMXBridge()
         self.google_home = GoogleHomeBridge()
         self.music_assistant = MusicAssistantBridge(self.home_assistant)

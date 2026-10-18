@@ -105,6 +105,28 @@ _UNIFI_RESTART_QUERY = re.compile(
     r"router|access\s+point|punto\s+de\s+acceso|study|bedroom|estudio|cuarto|living)\b",
     re.I,
 )
+_UNIFI_STATUS_QUERY = re.compile(
+    r"\b(?:unifi|wi[ -]?fi|wifi|network|red)\b[^.]*\b(?:status|health|online|connected|"
+    r"estado|salud|conectad[oa]|funcionando)\b"
+    r"|\b(?:status|health|how\s+is|check|estado|salud|c[oó]mo\s+est[aá]|revisa)\b[^.]*"
+    r"\b(?:unifi|wi[ -]?fi|wifi|network|red)\b",
+    re.I,
+)
+_CAMERA_STATUS_QUERY = re.compile(
+    r"\b(?:cameras?|c[aá]maras?|nvr|dahua|ezviz)\b[^.]*\b(?:status|health|online|recording|"
+    r"estado|salud|conectad[oa]s?|grabando|funcionando)\b"
+    r"|\b(?:status|health|how\s+are|check|estado|salud|c[oó]mo\s+est[aá]n?|revisa)\b[^.]*"
+    r"\b(?:cameras?|c[aá]maras?|nvr|dahua|ezviz)\b",
+    re.I,
+)
+_SERVER_STATUS_QUERY = re.compile(
+    r"\b(?:servers?|servidores?|fleet|flota|intel|amd|node|nodo|(?:one|uno|1)?\s*point\s*(?:four|five)|"
+    r"punto\s+(?:cuatro|cinco)|\.4|\.5)\b[^.]*\b(?:status|health|services?|gpu|inventory|"
+    r"estado|salud|servicios?|inventario|tiene|tenemos)\b"
+    r"|\b(?:status|health|what|which|check|estado|salud|qu[eé]|cu[aá]les|revisa)\b[^.]*"
+    r"\b(?:servers?|servidores?|fleet|flota|intel|amd|node|nodo|punto\s+(?:cuatro|cinco)|\.4|\.5)\b",
+    re.I,
+)
 
 _MUSIC_STATUS_QUERY = re.compile(
     r"\b(?:youtube\s+music|music\s+assistant)\b[^.]*\b(?:estado|status|list[oa]|ready|"
@@ -1285,6 +1307,104 @@ def _inneros_capabilities_response() -> dict[str, Any]:
     }
 
 
+def _english_answer(utterance: str, speaker_context: dict[str, Any] | None) -> bool:
+    locale = str((speaker_context or {}).get("response_locale") or "").lower()
+    if locale:
+        return locale.startswith("en")
+    return bool(re.search(r"\b(?:status|check|how|what|server|camera|network|unifi)\b", utterance, re.I))
+
+
+def _unifi_status_response(
+    utterance: str, state: GuardianState, speaker_context: dict[str, Any] | None
+) -> tuple[dict[str, Any], dict[str, Any]]:
+    snapshot = state.home_assistant.unifi_status()
+    english = _english_answer(utterance, speaker_context)
+    entities = snapshot.get("entities") or []
+    if not snapshot.get("configured") or not entities:
+        answer = (
+            "InnerOS cannot reach the allowlisted UniFi telemetry right now. I did not restart anything."
+            if english
+            else "InnerOS no puede consultar ahora la telemetría permitida de UniFi. No reinicié nada."
+        )
+        return {"answer": answer, "status": "attention_required", "reasoning_mode": "deterministic-unifi-status"}, snapshot
+    available = [item for item in entities if str(item.get("state")) not in {"unknown", "unavailable", "offline", "disconnected"}]
+    problem = [item for item in entities if item not in available]
+    details = []
+    for item in entities[:8]:
+        label = str(item.get("label") or item.get("entity_id") or "device")
+        value = str(item.get("state") or "unknown")
+        unit = str(item.get("unit") or "")
+        details.append(f"{label}: {value}{(' ' + unit) if unit else ''}")
+    if english:
+        answer = f"InnerOS read live UniFi telemetry. {len(available)} of {len(entities)} monitored signals are available. " + "; ".join(details)
+        if problem:
+            answer += f". {len(problem)} signal or device needs attention."
+    else:
+        answer = f"InnerOS leyó la telemetría en vivo de UniFi. {len(available)} de {len(entities)} señales monitoreadas están disponibles. " + "; ".join(details)
+        if problem:
+            answer += f". {len(problem)} señal o equipo requiere atención."
+    return {"answer": answer, "status": "attention_required" if problem else "all_clear", "reasoning_mode": "deterministic-unifi-status"}, snapshot
+
+
+def _camera_status_response(
+    utterance: str, state: GuardianState, speaker_context: dict[str, Any] | None
+) -> tuple[dict[str, Any], dict[str, Any]]:
+    snapshot = state.home_assistant.camera_status()
+    english = _english_answer(utterance, speaker_context)
+    entities = snapshot.get("entities") or []
+    if not snapshot.get("configured") or not entities:
+        answer = (
+            "InnerOS cannot reach the allowlisted camera inventory right now. I am not claiming that any camera is recording."
+            if english
+            else "InnerOS no puede consultar ahora el inventario permitido de cámaras. No afirmaré que estén grabando sin datos reales."
+        )
+        return {"answer": answer, "status": "attention_required", "reasoning_mode": "deterministic-camera-status"}, snapshot
+    healthy_states = {"home", "on", "recording", "streaming", "connected"}
+    healthy = [item for item in entities if str(item.get("state") or "").lower() in healthy_states]
+    details = [f"{item.get('label')}: {item.get('state')}" for item in entities[:8]]
+    if english:
+        answer = f"InnerOS read the live camera inventory. {len(healthy)} of {len(entities)} allowlisted camera or recorder signals are connected or recording. " + "; ".join(details)
+    else:
+        answer = f"InnerOS leyó el inventario en vivo de cámaras. {len(healthy)} de {len(entities)} señales permitidas de cámaras o grabadores están conectadas o grabando. " + "; ".join(details)
+    return {"answer": answer, "status": "all_clear" if len(healthy) == len(entities) else "attention_required", "reasoning_mode": "deterministic-camera-status"}, snapshot
+
+
+def _server_status_response(
+    utterance: str, state: GuardianState, speaker_context: dict[str, Any] | None
+) -> tuple[dict[str, Any], dict[str, Any]]:
+    snapshot = state.infrastructure.fleet_status()
+    english = _english_answer(utterance, speaker_context)
+    nodes = snapshot.get("nodes") or []
+    lower = utterance.lower()
+    if re.search(r"(?:\.4|point\s+four|punto\s+cuatro|intel)", lower):
+        nodes = [node for node in nodes if "intel" in (str(node).lower()) or ".4" in (str(node).lower())]
+    elif re.search(r"(?:\.5|point\s+five|punto\s+cinco|amd)", lower):
+        nodes = [node for node in nodes if "amd" in (str(node).lower()) or ".5" in (str(node).lower())]
+    if not snapshot.get("reachable") or not nodes:
+        answer = (
+            "InnerOS cannot reach the read-only server inventory right now. I will not invent a system status."
+            if english
+            else "InnerOS no puede consultar ahora el inventario de servidores de solo lectura. No inventaré un estado del sistema."
+        )
+        return {"answer": answer, "status": "attention_required", "reasoning_mode": "deterministic-server-status"}, snapshot
+    details = []
+    for node in nodes[:4]:
+        name = str(node.get("name") or node.get("id") or "server")
+        gpu = str(node.get("gpu") or "").strip()
+        summary = str(node.get("summary") or "").strip()
+        state_word = "healthy" if node.get("ok") else "needs attention"
+        if not english:
+            state_word = "saludable" if node.get("ok") else "requiere atención"
+        detail = f"{name}, {state_word}"
+        if gpu:
+            detail += f", GPU {gpu}"
+        if summary:
+            detail += f", {summary}"
+        details.append(detail)
+    prefix = "InnerOS read the live server inventory. " if english else "InnerOS leyó el inventario en vivo de servidores. "
+    return {"answer": prefix + "; ".join(details), "status": "all_clear" if all(node.get("ok") for node in nodes) else "attention_required", "reasoning_mode": "deterministic-server-status"}, snapshot
+
+
 def _music_request(utterance: str) -> dict[str, str] | None:
     """Parse a bounded bilingual music command produced by the Alexa model."""
     match = _MUSIC_PLAY_PREFIX.match(" ".join(utterance.strip().split()))
@@ -1524,6 +1644,42 @@ def simulated_alexa_turn(
             "utterance": utterance,
             **resilience,
             "prepared_action": None,
+            "evidence_count": len(state.evidence_snapshot()),
+        }
+
+    if _UNIFI_STATUS_QUERY.search(normalized_utterance):
+        response, snapshot = _unifi_status_response(
+            normalized_utterance, state, speaker_context
+        )
+        return {
+            "utterance": utterance,
+            "response": response,
+            "prepared_action": None,
+            "unifi_status": snapshot,
+            "evidence_count": len(state.evidence_snapshot()),
+        }
+
+    if _CAMERA_STATUS_QUERY.search(normalized_utterance):
+        response, snapshot = _camera_status_response(
+            normalized_utterance, state, speaker_context
+        )
+        return {
+            "utterance": utterance,
+            "response": response,
+            "prepared_action": None,
+            "camera_status": snapshot,
+            "evidence_count": len(state.evidence_snapshot()),
+        }
+
+    if _SERVER_STATUS_QUERY.search(normalized_utterance):
+        response, snapshot = _server_status_response(
+            normalized_utterance, state, speaker_context
+        )
+        return {
+            "utterance": utterance,
+            "response": response,
+            "prepared_action": None,
+            "fleet_status": snapshot,
             "evidence_count": len(state.evidence_snapshot()),
         }
 
