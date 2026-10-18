@@ -106,10 +106,10 @@ _UNIFI_RESTART_QUERY = re.compile(
     re.I,
 )
 _UNIFI_STATUS_QUERY = re.compile(
-    r"\b(?:unifi|wi[ -]?fi|wifi|network|red)\b[^.]*\b(?:status|health|online|connected|"
+    r"\b(?:uni\s*fi|wi[ -]?fi|wifi|network|red)\b[^.]*\b(?:status|health|online|connected|"
     r"estado|salud|conectad[oa]|funcionando)\b"
     r"|\b(?:status|health|how\s+is|check|estado|salud|c[oó]mo\s+est[aá]|revisa)\b[^.]*"
-    r"\b(?:unifi|wi[ -]?fi|wifi|network|red)\b",
+    r"\b(?:uni\s*fi|wi[ -]?fi|wifi|network|red)\b",
     re.I,
 )
 _CAMERA_STATUS_QUERY = re.compile(
@@ -1311,7 +1311,7 @@ def _english_answer(utterance: str, speaker_context: dict[str, Any] | None) -> b
     locale = str((speaker_context or {}).get("response_locale") or "").lower()
     if locale:
         return locale.startswith("en")
-    return bool(re.search(r"\b(?:status|check|how|what|server|camera|network|unifi)\b", utterance, re.I))
+    return bool(re.search(r"\b(?:status|check|how|what|are|recording|server|camera|network|uni\s*fi)\b", utterance, re.I))
 
 
 def _unifi_status_response(
@@ -1330,7 +1330,13 @@ def _unifi_status_response(
     available = [item for item in entities if str(item.get("state")) not in {"unknown", "unavailable", "offline", "disconnected"}]
     problem = [item for item in entities if item not in available]
     details = []
-    for item in entities[:8]:
+    spoken_entities = [
+        item
+        for item in entities
+        if "uptime" not in str(item.get("entity_id") or "").lower()
+        and "uptime" not in str(item.get("label") or "").lower()
+    ]
+    for item in spoken_entities[:8]:
         label = str(item.get("label") or item.get("entity_id") or "device")
         value = str(item.get("state") or "unknown")
         unit = str(item.get("unit") or "")
@@ -1399,6 +1405,13 @@ def _server_status_response(
         if gpu:
             detail += f", GPU {gpu}"
         if summary:
+            if english:
+                summary = re.sub(
+                    r"(\d+)\s*/\s*(\d+)\s+servicios\s+OK",
+                    r"\1 of \2 services healthy",
+                    summary,
+                    flags=re.I,
+                )
             detail += f", {summary}"
         details.append(detail)
     prefix = "InnerOS read the live server inventory. " if english else "InnerOS leyó el inventario en vivo de servidores. "

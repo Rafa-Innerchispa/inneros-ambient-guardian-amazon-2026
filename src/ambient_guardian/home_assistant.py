@@ -282,11 +282,19 @@ class HomeAssistantBridge:
                 )
                 continue
             attributes = state.get("attributes") or {}
+            label = str(
+                attributes.get("friendly_name")
+                or self.history_labels.get(entity_id)
+                or entity_id
+            ).strip()
+            words = label.split()
+            if len(words) % 2 == 0 and words[: len(words) // 2] == words[len(words) // 2 :]:
+                label = " ".join(words[: len(words) // 2])
             states.append(
                 {
                     "entity_id": entity_id,
                     "state": str(state.get("state") or "unknown"),
-                    "label": str(attributes.get("friendly_name") or self.history_labels.get(entity_id) or entity_id),
+                    "label": label,
                     "unit": str(attributes.get("unit_of_measurement") or ""),
                     "last_updated": state.get("last_updated"),
                 }

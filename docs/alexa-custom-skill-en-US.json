@@ -80,7 +80,9 @@
           "slots": [],
           "samples": [
             "check the UniFi network",
+            "check the uni fi network",
             "give me the UniFi status",
+            "give me the uni fi status",
             "how is the WiFi network",
             "are the UniFi access points connected"
           ]
