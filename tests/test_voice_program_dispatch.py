@@ -275,6 +275,48 @@ def test_voice_program_cli_routes_cursor_and_requests_governed_authorization(mon
     assert captured["do_not_auto_dispatch"] is False
 
 
+def test_voice_program_cli_routes_local_agent_without_owner_authorization(monkeypatch):
+    from ambient_guardian import inneros_voice_program_cli as cli
+
+    runtime = ModuleType("inneros_core_runtime")
+    local_github_plane = ModuleType("inneros_core_runtime.local_github_plane")
+    coordination_live = ModuleType("inneros_core_runtime.coordination_live")
+    runtime.local_github_plane = local_github_plane
+    monkeypatch.setitem(sys.modules, "inneros_core_runtime", runtime)
+    monkeypatch.setitem(sys.modules, "inneros_core_runtime.local_github_plane", local_github_plane)
+    monkeypatch.setitem(sys.modules, "inneros_core_runtime.coordination_live", coordination_live)
+    monkeypatch.setattr(
+        local_github_plane,
+        "create_github_repo",
+        lambda *args, **kwargs: {
+            "ok": True,
+            "repo": "Rafa-Innerchispa/inneros-alexa-amd-local",
+            "url": "https://github.com/Rafa-Innerchispa/inneros-alexa-amd-local",
+        },
+        raising=False,
+    )
+    captured = {}
+
+    def fake_task(**kwargs):
+        captured.update(kwargs)
+        return {"ok": True, "task_id": "ops_local123", "task": {}}
+
+    monkeypatch.setattr(coordination_live, "create_ops_task", fake_task, raising=False)
+    result = cli._dispatch(
+        {
+            "draft_id": "draft-local",
+            "brief": "create a status API",
+            "target": "Local AMD",
+        }
+    )
+
+    assert result["ok"] is True
+    assert result["provider"] == "local-amd-5"
+    assert result["requires_owner_authorization"] is False
+    assert captured["assignee"] == "local-amd-5"
+    assert captured["preferred_provider"] == "local-amd-5"
+
+
 def test_async_voice_program_readies_repo_before_whatsapp_task(monkeypatch):
     from ambient_guardian import inneros_voice_program_cli as cli
 

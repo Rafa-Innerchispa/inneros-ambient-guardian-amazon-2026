@@ -35,6 +35,8 @@ class VoiceProgramBridge:
     @staticmethod
     def _provider(target: str) -> str:
         value = (target or "antigravity").strip().lower()
+        if "local" in value or value == "amd":
+            return "local-amd-5"
         if "cursor" in value:
             return "cursor"
         if "codex" in value:
@@ -125,7 +127,7 @@ class VoiceProgramBridge:
             "task_id": None,
             "repo": repo,
             "repo_url": f"https://github.com/{repo}",
-            "requires_owner_authorization": True,
+            "requires_owner_authorization": provider != "local-amd-5",
         }
         with _ACTIVE_DISPATCHES_LOCK:
             if draft_id in _ACTIVE_DISPATCHES:

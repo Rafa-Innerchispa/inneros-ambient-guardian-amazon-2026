@@ -394,17 +394,29 @@ async def simulated_alexa(request: Request) -> Response:
             task_id = str(dispatch_meta.get("task_id") or "")
             english = str(speaker_context.get("response_locale") or "").lower().startswith("en")
             if queued:
-                if english:
+                if english and dispatch_meta.get("requires_owner_authorization", True):
                     response_payload["answer"] = (
                         f"InnerOS received your request for {provider}. "
                         "I am creating the GitHub repository and task now. "
                         "You will receive a WhatsApp authorization before the agent starts."
                     )
-                else:
+                elif dispatch_meta.get("requires_owner_authorization", True):
                     response_payload["answer"] = (
                         f"Perfecto. InnerOS recibió tu pedido para {provider}. "
                         "Estoy creando el repositorio y la tarea ahora. "
                         "Te llegará la autorización por WhatsApp antes de que el agente comience."
+                    )
+                elif english:
+                    response_payload["answer"] = (
+                        "InnerOS received your request for the local AMD agent. "
+                        "I am creating the GitHub repository and task now. "
+                        "The internal agent can start automatically when its workspace is ready."
+                    )
+                else:
+                    response_payload["answer"] = (
+                        "Perfecto. InnerOS recibió tu pedido para el agente local AMD. "
+                        "Estoy creando el repositorio y la tarea ahora. "
+                        "El agente interno podrá comenzar automáticamente cuando su espacio esté listo."
                     )
             elif dispatch_meta.get("requires_owner_authorization", True):
                 if english:

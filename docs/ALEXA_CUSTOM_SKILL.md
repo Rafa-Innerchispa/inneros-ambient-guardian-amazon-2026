@@ -304,23 +304,31 @@ checks write the authenticated decision; Ambient Guardian consumes that durable
 decision once, invokes Home Assistant, verifies state/uptime, and reports the
 result back to WhatsApp. There is no UniFi approval route in MCP or the web demo.
 
-## Antigravity programming brief
+## Governed programming bridge
 
-Alexa can capture a bounded programming request as a local draft for later review:
+Alexa can capture a bounded programming request for Antigravity, Cursor, Codex,
+or the internal AMD agent:
 
 - `Alexa, pide a Inner Oz que prepare para Antigravity una automatización de bienvenida`
 - `Alexa, ask Inner Oz to prepare for Antigravity a welcome-light automation`
 - `Alexa, abre Inner Oz` → seguimiento: `programa con cursor un repo de prueba para el hackathon`
 - InnerOS crea repositorio y Ops Task, envía autorización por WhatsApp y Cursor solo comienza después de la aprobación del propietario.
 - `Alexa, ask Inner Oz to program this with Antigravity a demo GitHub repo for the hackathon`
+- `Alexa, ask Inner Oz to create a GitHub repository with Codex for a status API`
+- `Alexa, ask Inner Oz to create a GitHub repository with the local agent for a status API`
+
+External providers (Antigravity, Cursor and Codex) remain behind the owner
+authorization sent through WhatsApp. The internal `local-amd-5` route does not
+consume external-agent credits and can start automatically after the repository
+and safe worktree are ready.
 
 **Importante para el video:** frases sueltas del tipo *“Alexa, ayúdame a programar”* o *“programa con Cursor”* **no** entran en esta skill; Alexa responde con Amazon Q u otra skill genérica. Siempre invoca **`Inner Oz`** (skill Custom de Ambient Guardian). Tras grabar, sube el JSON de interacción del locale activo (`docs/alexa-custom-skill-es-US.json` en Ecuador) en el Developer Console → **Save Model** → **Build Model**.
 
-Para el arco “casa + agentes”, encadena lo que ya define Codex: energía (`docs/ALEXA_CUSTOM_SKILL.md`, sección energy-resilience), borrador Antigravity (esta sección) y, si quieres acción gobernada con WhatsApp, `docs/VOICE_ACTION_DEMO.md` (router del estudio). El repo público del hackathon sigue siendo [inneros-ambient-guardian-amazon-2026](https://github.com/Rafa-Innerchispa/inneros-ambient-guardian-amazon-2026); crear un repo nuevo desde voz no está en el boundary de la skill (solo `DRAFT_ONLY`).
-
-The skill returns a `DRAFT_ONLY` work request. It does not contact Antigravity,
-NCP, or any coding agent, and it does not execute code. Dispatch remains a separate
-owner-reviewed integration boundary.
+Para el arco “casa + agentes”, encadena energía, una orden de programación y la
+evidencia del repositorio. Con `AMBIENT_GUARDIAN_VOICE_PROGRAM_DISPATCH=0`, la
+skill conserva el comportamiento seguro `DRAFT_ONLY`. Con el opt-in de demo en
+Intel, crea el repositorio y la Ops Task; el código sólo empieza cuando la
+política de coordinación autoriza el proveedor correspondiente.
 
 
 ## Intelbras audible panic siren

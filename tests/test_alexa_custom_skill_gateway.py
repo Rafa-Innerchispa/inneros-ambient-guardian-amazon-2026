@@ -530,6 +530,29 @@ def test_program_task_intent_preserves_cursor_provider_in_english(monkeypatch):
     assert calls == ["prepare for cursor: create an energy monitor"]
 
 
+def test_local_program_intent_routes_to_internal_agent(monkeypatch):
+    calls = []
+    monkeypatch.setattr(
+        gateway,
+        "_backend_turn",
+        lambda query, speaker_context=None: calls.append(query) or "local task ready",
+    )
+    response = gateway._dispatch(
+        request_payload(
+            intent_request(
+                None,
+                intent_name="LocalProgramIntent",
+                locale="en-US",
+                task="create a GitHub repository with a status API",
+            )
+        )
+    )
+    assert calls == [
+        "prepare for local: create a GitHub repository with a status API"
+    ]
+    assert response["response"]["outputSpeech"]["text"] == "local task ready"
+
+
 def test_amd_demo_intent_is_fixed_and_one_shot_friendly(monkeypatch):
     calls = []
     monkeypatch.setattr(

@@ -20,6 +20,8 @@ def _read_payload() -> dict[str, Any]:
 
 def _provider_from_target(target: str) -> str:
     value = (target or "antigravity").strip().lower()
+    if "local" in value or value == "amd":
+        return "local-amd-5"
     if "cursor" in value:
         return "cursor"
     if "codex" in value:
@@ -241,7 +243,9 @@ def _dispatch(payload: dict[str, Any]) -> dict[str, Any]:
         and (not async_provisioning or onboarding.get("ok"))
     )
     task_record = task.get("task") if isinstance(task.get("task"), dict) else {}
-    requires_owner_authorization = not bool(task_record.get("owner_authorized_at"))
+    requires_owner_authorization = provider != "local-amd-5" and not bool(
+        task_record.get("owner_authorized_at")
+    )
     return {
         "ok": ok,
         "provider": provider,

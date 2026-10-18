@@ -517,13 +517,14 @@ def _guardian_query(request_payload: dict[str, Any]) -> str:
     program_providers = {
         "CursorProgramIntent": "cursor",
         "CodexProgramIntent": "codex",
+        "LocalProgramIntent": "local",
         "AntigravityDraftIntent": "antigravity",
         "ProgramTaskIntent": _slot_value(request_payload, "provider").strip().lower(),
     }
     if intent_name in program_providers:
         provider = program_providers[intent_name]
         task = _slot_value(request_payload, "task")
-        if provider not in {"antigravity", "cursor", "codex"}:
+        if provider not in {"antigravity", "cursor", "codex", "local"}:
             provider = "cursor"
         if english:
             return f"prepare for {provider}: {task}" if task else ""
@@ -606,6 +607,7 @@ def _dispatch(payload: dict[str, Any]) -> dict[str, Any]:
         "AMDDemoProgramIntent",
         "CursorProgramIntent",
         "CodexProgramIntent",
+        "LocalProgramIntent",
         "ProgramTaskIntent",
         "AntigravityDraftIntent",
     }:
