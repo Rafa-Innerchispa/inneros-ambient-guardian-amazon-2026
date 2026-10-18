@@ -94,6 +94,40 @@ def test_authenticated_skill_bridge_queues_voice_program_without_blocking(monkey
     assert client.get("/api/live-evidence").json()["approval_state"] == "DISPATCH_QUEUED"
 
 
+def test_authenticated_skill_bridge_localizes_queued_program_response_to_english(monkeypatch):
+    monkeypatch.setenv("AWS_STRANDS_ENABLED", "0")
+    monkeypatch.setenv("AMBIENT_GUARDIAN_VOICE_PROGRAM_DISPATCH", "1")
+    monkeypatch.setenv("AMBIENT_GUARDIAN_SKILL_BRIDGE_TOKEN", "bridge-secret")
+
+    monkeypatch.setattr(
+        "ambient_guardian.official_server.VoiceProgramBridge.dispatch_background",
+        lambda self, draft: {
+            "ok": True,
+            "queued": True,
+            "provider": "cursor",
+            "task_id": None,
+            "repo": "Rafa-Innerchispa/inneros-alexa-amd-demo",
+            "repo_url": "https://github.com/Rafa-Innerchispa/inneros-alexa-amd-demo",
+            "requires_owner_authorization": True,
+        },
+    )
+    client = TestClient(app)
+    STATE.reset_demo()
+    response = client.post(
+        "/api/alexa",
+        headers={"X-Ambient-Skill-Bridge": "bridge-secret"},
+        json={
+            "utterance": "prepare for cursor: build a one page AMD hackathon status dashboard",
+            "speaker_context": {"response_locale": "en-US"},
+        },
+    )
+
+    assert response.status_code == 200
+    assert response.json()["response"]["answer"].startswith(
+        "InnerOS received your request for cursor"
+    )
+
+
 def test_voice_program_cli_defers_readme_seed_by_default(monkeypatch):
     from ambient_guardian import inneros_voice_program_cli as cli
 

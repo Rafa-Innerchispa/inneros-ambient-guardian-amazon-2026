@@ -392,24 +392,46 @@ async def simulated_alexa(request: Request) -> Response:
             provider = str(dispatch_meta.get("provider") or "antigravity")
             repo_url = str(dispatch_meta.get("repo_url") or "")
             task_id = str(dispatch_meta.get("task_id") or "")
+            english = str(speaker_context.get("response_locale") or "").lower().startswith("en")
             if queued:
-                response_payload["answer"] = (
-                    f"Perfecto. InnerOS recibió tu pedido para {provider}. "
-                    "Estoy creando el repositorio y la tarea ahora. "
-                    "Te llegará la autorización por WhatsApp antes de que el agente comience."
-                )
+                if english:
+                    response_payload["answer"] = (
+                        f"InnerOS received your request for {provider}. "
+                        "I am creating the GitHub repository and task now. "
+                        "You will receive a WhatsApp authorization before the agent starts."
+                    )
+                else:
+                    response_payload["answer"] = (
+                        f"Perfecto. InnerOS recibió tu pedido para {provider}. "
+                        "Estoy creando el repositorio y la tarea ahora. "
+                        "Te llegará la autorización por WhatsApp antes de que el agente comience."
+                    )
             elif dispatch_meta.get("requires_owner_authorization", True):
-                response_payload["answer"] = (
-                    f"Perfecto. InnerOS creó el repositorio en GitHub y la tarea {task_id} "
-                    f"para {provider}. Te enviará la autorización por WhatsApp. "
-                    f"Después de aprobarla, {provider} podrá comenzar. Puedes verificarlo en {repo_url}."
-                )
+                if english:
+                    response_payload["answer"] = (
+                        f"InnerOS created the GitHub repository and task {task_id} for {provider}. "
+                        "It will send the authorization through WhatsApp. "
+                        f"After approval, {provider} can start. You can verify it at {repo_url}."
+                    )
+                else:
+                    response_payload["answer"] = (
+                        f"Perfecto. InnerOS creó el repositorio en GitHub y la tarea {task_id} "
+                        f"para {provider}. Te enviará la autorización por WhatsApp. "
+                        f"Después de aprobarla, {provider} podrá comenzar. Puedes verificarlo en {repo_url}."
+                    )
             else:
-                response_payload["answer"] = (
-                    f"Perfecto. InnerOS recibió tu pedido por Alexa, creó el repositorio en GitHub "
-                    f"y encoló la tarea {task_id} para {provider} en los agentes locales sobre AMD. "
-                    f"Puedes abrir {repo_url} para verificarlo."
-                )
+                if english:
+                    response_payload["answer"] = (
+                        "InnerOS received your Alexa request, created the GitHub repository, "
+                        f"and queued task {task_id} for {provider} on the local AMD agents. "
+                        f"You can open {repo_url} to verify it."
+                    )
+                else:
+                    response_payload["answer"] = (
+                        f"Perfecto. InnerOS recibió tu pedido por Alexa, creó el repositorio en GitHub "
+                        f"y encoló la tarea {task_id} para {provider} en los agentes locales sobre AMD. "
+                        f"Puedes abrir {repo_url} para verificarlo."
+                    )
             response_payload["reasoning_mode"] = "deterministic-voice-program-dispatch"
             result["response"] = response_payload
             result["voice_program_dispatch"] = {
