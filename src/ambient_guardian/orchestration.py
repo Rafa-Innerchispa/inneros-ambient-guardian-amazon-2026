@@ -142,7 +142,8 @@ _MUSIC_PLAY_PREFIX = re.compile(
 _VOICE_PROGRAM_DRAFT = re.compile(
     r"^(?:prepara|preparar|crea|crear|draft|prepare|create|programa|programar)\s+"
     r"(?:(?:una|un|a)\s+)?(?:tarea|brief|solicitud|request|esto)?\s*"
-    r"(?:para|en|for|con|with)\s+(?P<target>antigravity|cursor|codex)\s*:?\s*(?P<task>.+)$",
+    r"(?:para|en|for|con|with)\s+(?P<target>antigravity|cursor|codex|"
+    r"local(?:\s+(?:agent|amd|agente))?|amd)\s*:?\s*(?P<task>.+)$",
     re.I,
 )
 _ANTIGRAVITY_DRAFT = _VOICE_PROGRAM_DRAFT
@@ -1490,6 +1491,8 @@ def _antigravity_task_draft(utterance: str) -> dict[str, Any] | None:
         target = "Cursor"
     elif "codex" in target_raw:
         target = "Codex"
+    elif "local" in target_raw or target_raw == "amd":
+        target = "Local AMD"
     else:
         target = "Antigravity"
     return {

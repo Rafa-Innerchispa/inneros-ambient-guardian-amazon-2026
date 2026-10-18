@@ -62,6 +62,18 @@ Spanish one-shot:
 2. **“Programa con Cursor un script mínimo que muestre latencia AMD para el hackathon.”**
 3. Aprobar por WhatsApp la solicitud gobernada. El autopilot Cursor reclama la tarea autorizada y deja evidencia de commit, pruebas y PR.
 
+English external-agent example:
+
+1. **“Alexa, open Inner Oz.”**
+2. **“Create a GitHub repository with Codex for a small status API.”**
+3. Approve the WhatsApp request before Codex starts.
+
+Local no-credit example:
+
+1. **“Alexa, open Inner Oz.”**
+2. **“Create a GitHub repository with the local agent for a small status API.”**
+3. InnerOS routes the task to `local-amd-5`; no external-agent approval is required.
+
 Expected:
 
 - Alexa speaks that InnerOS queued an ops task and created a public GitHub repo URL.

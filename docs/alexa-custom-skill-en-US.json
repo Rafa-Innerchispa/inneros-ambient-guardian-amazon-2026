@@ -229,7 +229,8 @@
             "program with cursor {task}",
             "program this with cursor {task}",
             "ask cursor to program {task}",
-            "help me program with cursor {task}"
+            "help me program with cursor {task}",
+            "create a GitHub repository with cursor {task}"
           ]
         },
         {
@@ -244,7 +245,8 @@
             "prepare for codex {task}",
             "create a codex task {task}",
             "program with codex {task}",
-            "ask codex to program {task}"
+            "ask codex to program {task}",
+            "create a GitHub repository with codex {task}"
           ]
         },
         {
@@ -259,7 +261,23 @@
             "prepare for antigravity {task}",
             "create an antigravity task {task}",
             "program with antigravity {task}",
-            "ask antigravity to program {task}"
+            "ask antigravity to program {task}",
+            "create a GitHub repository with antigravity {task}"
+          ]
+        },
+        {
+          "name": "LocalProgramIntent",
+          "slots": [
+            {
+              "name": "task",
+              "type": "AMAZON.SearchQuery"
+            }
+          ],
+          "samples": [
+            "prepare for the local agent {task}",
+            "program with the local agent {task}",
+            "program with local AMD {task}",
+            "create a GitHub repository with the local agent {task}"
           ]
         },
         {

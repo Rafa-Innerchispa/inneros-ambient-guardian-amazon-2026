@@ -96,6 +96,20 @@ def test_antigravity_voice_request_creates_local_draft_without_dispatch():
     assert "No lo envié" in result["response"]["answer"]
 
 
+def test_local_amd_voice_request_keeps_internal_provider_identity():
+    result = simulated_alexa_turn(
+        "prepare for local agent: create a GitHub repository with a status API",
+        GuardianState(),
+        FailIfReasonerRuns(),
+        speaker_context={"response_locale": "en-US"},
+    )
+
+    draft = result["work_request_draft"]
+    assert draft["target"] == "Local AMD"
+    assert draft["brief"] == "create a GitHub repository with a status API"
+    assert draft["status"] == "DRAFT_ONLY"
+
+
 def test_voiceops_status_reports_real_readiness_without_placing_call():
     state = GuardianState()
     state.voiceops = VoiceOpsStatus(
