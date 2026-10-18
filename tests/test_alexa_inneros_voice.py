@@ -54,6 +54,14 @@ def test_live_unifi_status_is_read_only_and_deterministic():
     assert result["prepared_action"] is None
 
 
+def test_split_unifi_transcription_uses_live_status_not_generic_model():
+    state = GuardianState()
+    state.home_assistant = LiveHomeInventory()
+    result = simulated_alexa_turn("check the uni fi network", state, FailIfReasonerRuns(), speaker_context={"response_locale": "en-US"})
+    assert result["response"]["reasoning_mode"] == "deterministic-unifi-status"
+    assert "Cloud Gateway: connected" in result["response"]["answer"]
+
+
 def test_live_camera_status_is_read_only_and_deterministic():
     state = GuardianState()
     state.home_assistant = LiveHomeInventory()
