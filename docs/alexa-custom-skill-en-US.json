@@ -171,6 +171,16 @@
           ]
         },
         {
+          "name": "AMDDemoProgramIntent",
+          "slots": [],
+          "samples": [
+            "start the AMD programming demo",
+            "build the AMD hackathon dashboard",
+            "run the Cursor programming demo",
+            "start the Cursor demo"
+          ]
+        },
+        {
           "name": "CursorProgramIntent",
           "slots": [
             {

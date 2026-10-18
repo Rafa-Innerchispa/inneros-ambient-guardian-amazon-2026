@@ -503,6 +503,11 @@ def _guardian_query(request_payload: dict[str, Any]) -> str:
             if english
             else "prepárame una llamada por la central con el reporte del último incidente"
         )
+    if intent_name == "AMDDemoProgramIntent":
+        if english:
+            return "prepare for cursor: build a one page AMD hackathon status dashboard"
+        return "prepara una tarea para cursor: crea un dashboard de una página para el hackathon AMD"
+
     program_providers = {
         "CursorProgramIntent": "cursor",
         "CodexProgramIntent": "codex",
@@ -589,6 +594,7 @@ def _dispatch(payload: dict[str, Any]) -> dict[str, Any]:
         "PBXPrivateDestinationIntent",
         "VoiceOpsStatusIntent",
         "PBXCallbackIntent",
+        "AMDDemoProgramIntent",
         "CursorProgramIntent",
         "CodexProgramIntent",
         "ProgramTaskIntent",

@@ -517,6 +517,26 @@ def test_program_task_intent_preserves_cursor_provider_in_english(monkeypatch):
     assert calls == ["prepare for cursor: create an energy monitor"]
 
 
+def test_amd_demo_intent_is_fixed_and_one_shot_friendly(monkeypatch):
+    calls = []
+    monkeypatch.setattr(
+        gateway,
+        "_backend_turn",
+        lambda query, speaker_context=None: calls.append(query) or "task ready",
+    )
+    response = gateway._dispatch(
+        request_payload(
+            intent_request(
+                None,
+                intent_name="AMDDemoProgramIntent",
+                locale="en-US",
+            )
+        )
+    )
+    assert calls == ["prepare for cursor: build a one page AMD hackathon status dashboard"]
+    assert response["response"]["outputSpeech"]["text"] == "task ready"
+
+
 def test_pin_confirmation_is_opt_in_by_default(monkeypatch):
     calls = []
     monkeypatch.delenv("AMBIENT_GUARDIAN_PIN_CONFIRMATION_ENABLED", raising=False)
