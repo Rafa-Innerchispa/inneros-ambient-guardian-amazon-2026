@@ -76,6 +76,39 @@
           ]
         },
         {
+          "name": "UnifiStatusIntent",
+          "slots": [],
+          "samples": [
+            "check the UniFi network",
+            "give me the UniFi status",
+            "how is the WiFi network",
+            "are the UniFi access points connected"
+          ]
+        },
+        {
+          "name": "CameraStatusIntent",
+          "slots": [],
+          "samples": [
+            "check the cameras",
+            "give me the camera status",
+            "are the cameras recording",
+            "check the NVR recorders"
+          ]
+        },
+        {
+          "name": "ServerStatusIntent",
+          "slots": [],
+          "samples": [
+            "check the Inner OS servers",
+            "give me the server status",
+            "what servers do we have",
+            "how is the Intel server",
+            "how is the AMD server",
+            "check node point four",
+            "check node point five"
+          ]
+        },
+        {
           "name": "ResumeConversationIntent",
           "slots": [],
           "samples": [

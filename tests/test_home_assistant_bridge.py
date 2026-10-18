@@ -31,11 +31,62 @@ def clear_bridge_env(monkeypatch):
         "AMBIENT_GUARDIAN_HISTORY_LABELS",
         "AMBIENT_GUARDIAN_UNIFI_RESTART_ENABLED",
         "AMBIENT_GUARDIAN_UNIFI_RESTART_TARGETS",
+        "AMBIENT_GUARDIAN_UNIFI_STATUS_ENTITIES",
+        "AMBIENT_GUARDIAN_CAMERA_ENTITY_ALLOWLIST",
         "AMBIENT_GUARDIAN_SHARED_ENV_FILE",
         "HA_URL",
         "HA_TOKEN",
     ):
         monkeypatch.delenv(key, raising=False)
+
+
+def test_camera_status_reads_only_explicit_allowlist(monkeypatch):
+    clear_bridge_env(monkeypatch)
+    monkeypatch.setenv("HOME_ASSISTANT_URL", "http://ha.local:8123")
+    monkeypatch.setenv("HOME_ASSISTANT_TOKEN", "test-token")
+    monkeypatch.setenv(
+        "AMBIENT_GUARDIAN_CAMERA_ENTITY_ALLOWLIST",
+        "camera.entrada,device_tracker.nvr_dahua",
+    )
+
+    def fake_get(url, headers, timeout):
+        entity_id = url.rsplit("/", 1)[-1]
+        assert entity_id in {"camera.entrada", "device_tracker.nvr_dahua"}
+        return FakeResponse(
+            {
+                "entity_id": entity_id,
+                "state": "recording" if entity_id.startswith("camera.") else "home",
+                "attributes": {"friendly_name": "Entrada" if entity_id.startswith("camera.") else "NVR Dahua"},
+            }
+        )
+
+    monkeypatch.setattr("ambient_guardian.home_assistant.httpx.get", fake_get)
+    result = HomeAssistantBridge().camera_status()
+    assert result["configured"] is True
+    assert {item["entity_id"] for item in result["entities"]} == {
+        "camera.entrada",
+        "device_tracker.nvr_dahua",
+    }
+
+
+def test_unifi_status_includes_target_telemetry_without_restart(monkeypatch):
+    clear_bridge_env(monkeypatch)
+    monkeypatch.setenv("HOME_ASSISTANT_URL", "http://ha.local:8123")
+    monkeypatch.setenv("HOME_ASSISTANT_TOKEN", "test-token")
+    monkeypatch.setenv(
+        "AMBIENT_GUARDIAN_UNIFI_RESTART_TARGETS",
+        '{"gateway":{"button":"button.gateway_restart","status":"sensor.gateway_state","uptime":"sensor.gateway_uptime","label":"Cloud Gateway"}}',
+    )
+    monkeypatch.setattr(
+        "ambient_guardian.home_assistant.httpx.get",
+        lambda url, headers, timeout: FakeResponse(
+            {"entity_id": url.rsplit("/", 1)[-1], "state": "connected", "attributes": {}}
+        ),
+    )
+    result = HomeAssistantBridge().unifi_status()
+    assert result["configured"] is True
+    assert len(result["entities"]) == 2
+    assert result["targets"][0]["label"] == "Cloud Gateway"
 
 
 def test_home_context_fails_closed_when_unconfigured(monkeypatch):

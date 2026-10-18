@@ -187,7 +187,7 @@ def _backend_turn(
     payload = response.json()
     answer = str(((payload.get("response") or {}).get("answer") or "")).strip()
     if not answer:
-        raise RuntimeError("Ambient Guardian returned no answer")
+        raise RuntimeError("InnerOS returned no answer")
     if len(answer) > MAX_SPEECH_CHARS:
         answer = answer[: MAX_SPEECH_CHARS - 1].rstrip() + "…"
     return answer
@@ -411,7 +411,7 @@ def _session_attributes(payload: dict[str, Any]) -> dict[str, Any]:
 
 def _link_account_response() -> dict[str, Any]:
     response = _plain_response(
-        "Please link your InnerOS owner account in the Alexa app before using Ambient Guardian.",
+        "Please link your InnerOS owner account in the Alexa app before using InnerOS.",
         end_session=True,
     )
     response["response"]["card"] = {"type": "LinkAccount"}
@@ -458,6 +458,12 @@ def _guardian_query(request_payload: dict[str, Any]) -> str:
             if english
             else "dame el estado de resiliencia energética y el plan de ahorro"
         )
+    if intent_name == "UnifiStatusIntent":
+        return "check the live UniFi network status" if english else "revisa el estado en vivo de UniFi"
+    if intent_name == "CameraStatusIntent":
+        return "check the live camera and recorder status" if english else "revisa el estado en vivo de las cámaras y grabadores"
+    if intent_name == "ServerStatusIntent":
+        return "check the live InnerOS server fleet status" if english else "revisa el estado en vivo de los servidores de InnerOS"
     if intent_name == "RingDemoStatusIntent":
         return "what did Ring detect in the demo" if english else "qué detectó Ring en el demo"
     if intent_name == "DMXStatusIntent":
@@ -586,6 +592,9 @@ def _dispatch(payload: dict[str, Any]) -> dict[str, Any]:
         "CapabilitiesIntent",
         "HomeHistoryIntent",
         "EnergyResilienceIntent",
+        "UnifiStatusIntent",
+        "CameraStatusIntent",
+        "ServerStatusIntent",
         "RingDemoStatusIntent",
         "DMXStatusIntent",
         "MusicStatusIntent",
@@ -651,7 +660,7 @@ def _dispatch(payload: dict[str, Any]) -> dict[str, Any]:
             )
         return _plain_response(
             "You can ask whether the home is okay, what happened at the front door, "
-            "or ask Ambient Guardian to prepare an action. Physical actions still "
+            "or ask InnerOS to prepare an action. Physical actions still "
             "require separate human approval.",
             reprompt="What would you like to ask?",
             session_attributes={"fallback_count": 0},
@@ -664,7 +673,7 @@ def _dispatch(payload: dict[str, Any]) -> dict[str, Any]:
         speech = (
             "InnerOS queda en espera."
             if _request_locale(request_payload).lower().startswith("es")
-            else "Ambient Guardian standing by."
+            else "InnerOS is standing by."
         )
         return _plain_response(speech, end_session=True)
 

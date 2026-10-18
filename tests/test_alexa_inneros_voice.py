@@ -15,6 +15,22 @@ class VoiceOpsStatus:
         return dict(self.payload)
 
 
+class LiveHomeInventory:
+    def home_context(self):
+        return {"configured": True, "reachable": True, "alarm": None}
+
+    def unifi_status(self):
+        return {"configured": True, "entities": [{"entity_id": "sensor.gateway_state", "label": "Cloud Gateway", "state": "connected", "unit": ""}], "targets": []}
+
+    def camera_status(self):
+        return {"configured": True, "entities": [{"entity_id": "camera.entrada", "label": "Entrance camera", "state": "recording", "unit": ""}]}
+
+
+class LiveFleetInventory:
+    def fleet_status(self):
+        return {"configured": True, "reachable": True, "nodes": [{"id": "intel-.4", "name": "Intel node point four", "role": "primary", "gpu": "NVIDIA RTX 3060 12GB", "ok": True, "summary": "6 of 6 services healthy", "probes": []}]}
+
+
 def test_capabilities_describe_inneros_boundary_without_model_call():
     result = simulated_alexa_turn(
         "qué puedes hacer dentro de InnerOS",
@@ -28,6 +44,30 @@ def test_capabilities_describe_inneros_boundary_without_model_call():
     assert "no marco números arbitrarios" in speech
     assert "borrador de tarea para Antigravity" in speech
     assert result["prepared_action"] is None
+
+
+def test_live_unifi_status_is_read_only_and_deterministic():
+    state = GuardianState()
+    state.home_assistant = LiveHomeInventory()
+    result = simulated_alexa_turn("give me the UniFi status", state, FailIfReasonerRuns(), speaker_context={"response_locale": "en-US"})
+    assert "Cloud Gateway: connected" in result["response"]["answer"]
+    assert result["prepared_action"] is None
+
+
+def test_live_camera_status_is_read_only_and_deterministic():
+    state = GuardianState()
+    state.home_assistant = LiveHomeInventory()
+    result = simulated_alexa_turn("are the cameras recording", state, FailIfReasonerRuns(), speaker_context={"response_locale": "en-US"})
+    assert "Entrance camera: recording" in result["response"]["answer"]
+    assert result["prepared_action"] is None
+
+
+def test_live_server_inventory_can_focus_node_point_four():
+    state = GuardianState()
+    state.infrastructure = LiveFleetInventory()
+    result = simulated_alexa_turn("check node point four", state, FailIfReasonerRuns(), speaker_context={"response_locale": "en-US"})
+    assert "Intel node point four" in result["response"]["answer"]
+    assert "RTX 3060" in result["response"]["answer"]
 
 
 def test_antigravity_voice_request_creates_local_draft_without_dispatch():

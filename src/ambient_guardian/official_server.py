@@ -451,7 +451,7 @@ async def simulated_alexa(request: Request) -> Response:
     )
     response_payload = result.get("response") if isinstance(result.get("response"), dict) else {}
     reasoning_mode = str(response_payload.get("reasoning_mode") or "unknown")
-    systems = ["Ambient Guardian"]
+    systems = ["InnerOS"]
     if skill_bridge:
         systems.insert(0, "Alexa Custom Skill Gateway")
     if receipt:
@@ -460,6 +460,12 @@ async def simulated_alexa(request: Request) -> Response:
         systems.append("InnerOS Qwen/vLLM")
     else:
         systems.append("Deterministic Safety Layer")
+    if reasoning_mode == "deterministic-unifi-status":
+        systems.append("Home Assistant + UniFi (read only)")
+    elif reasoning_mode == "deterministic-camera-status":
+        systems.append("Home Assistant camera inventory (read only)")
+    elif reasoning_mode == "deterministic-server-status":
+        systems.append("InnerOS Fleet (read only)")
     intent = "guardian_query"
     if receipt:
         intent = "incident_summary"
