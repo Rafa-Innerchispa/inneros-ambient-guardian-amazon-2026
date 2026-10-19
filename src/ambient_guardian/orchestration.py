@@ -893,7 +893,7 @@ def _home_history_response(utterance: str, state: GuardianState) -> dict[str, An
 
 
 def _energy_resilience_response(state: GuardianState) -> dict[str, Any]:
-    """Report a real electrical snapshot and a non-executing resilience plan."""
+    """Report a real electrical snapshot and the configured resilience policy."""
     end = datetime.now(timezone.utc)
     start = end - timedelta(hours=12)
     try:
@@ -939,6 +939,22 @@ def _energy_resilience_response(state: GuardianState) -> dict[str, Any]:
     outage_active = bool(estimate["outage_active"])
     battery_capacity = estimate["battery_capacity_percent"]
     output_power = estimate["output_power_w"]
+    load_shed_targets = dict(
+        getattr(state.home_assistant, "energy_load_shed_targets", {}) or {}
+    )
+    automatic_load_shed = bool(
+        getattr(state.home_assistant, "energy_load_shed_enabled", False)
+        and getattr(
+            state.home_assistant,
+            "energy_load_shed_owner_preauthorized",
+            False,
+        )
+        and load_shed_targets
+    )
+    approved_load_labels = [
+        str(target.get("label") or alias)
+        for alias, target in sorted(load_shed_targets.items())
+    ]
 
     readings = []
     if battery_capacity not in {None, "", "unknown", "unavailable"}:
@@ -969,6 +985,15 @@ def _energy_resilience_response(state: GuardianState) -> dict[str, Any]:
             )
 
     if outage_active:
+        action_text = (
+            f"El notificador de apagón administra automáticamente {len(approved_load_labels)} "
+            "cargas no críticas preautorizadas y verifica cada apagado. Esta consulta no "
+            "ejecutó una acción. Los equipos de red todavía requieren autorización del "
+            "propietario por WhatsApp."
+            if automatic_load_shed
+            else "No desconecté ninguna carga: los equipos de red todavía requieren la "
+            "autorización del propietario por WhatsApp."
+        )
         answer = (
             "InnerOS detecta pérdida de red o respaldo por batería activo. "
             + (f"El corte comenzó aproximadamente a las {outage_time}. " if outage_time else "")
@@ -984,18 +1009,26 @@ def _energy_resilience_response(state: GuardianState) -> dict[str, Any]:
             + "Plan de resiliencia: conservar servidores, red principal, seguridad, Home "
             "Assistant y monitoreo del inversor; suspender cómputo intensivo y preparar "
             "el apagado de la computadora, monitores, puntos Wi-Fi secundarios, Echo no "
-            "esenciales e iluminación decorativa. No desconecté ninguna carga: los equipos "
-            "de red todavía requieren la autorización del propietario por WhatsApp."
+            "esenciales e iluminación decorativa. "
+            + action_text
         )
         mode = "OUTAGE_DETECTED"
         status = "attention_required"
     else:
+        plan_text = (
+            f"El plan de resiliencia está armado: en el próximo apagón administrará "
+            f"automáticamente {len(approved_load_labels)} cargas no críticas "
+            "preautorizadas y verificará su apagado. No ejecuté ninguna acción porque la "
+            "red está normal."
+            if automatic_load_shed
+            else "El plan de resiliencia está listo en vista previa: prioriza servidores, red "
+            "principal, seguridad, Home Assistant y monitoreo del inversor. No desconecté "
+            "ninguna carga."
+        )
         answer = (
             "La red eléctrica está presente y el modo batería no está activo. "
             + (f"La lectura actual muestra {reading_text}. " if reading_text else "")
-            + "El plan de resiliencia está listo en vista previa: prioriza servidores, red "
-            "principal, seguridad, Home Assistant y monitoreo del inversor. No desconecté "
-            "ninguna carga."
+            + plan_text
         )
         mode = "GRID_NORMAL"
         status = "all_clear"
@@ -1012,7 +1045,7 @@ def _energy_resilience_response(state: GuardianState) -> dict[str, Any]:
             **estimate,
             "battery_capacity": battery_capacity,
             "output_power": output_power,
-            "execution": "PREVIEW_ONLY",
+            "execution": "ARMED_ON_OUTAGE" if automatic_load_shed else "PREVIEW_ONLY",
             "executed": False,
             "critical_load_classes": [
                 "servers",
@@ -1024,15 +1057,20 @@ def _energy_resilience_response(state: GuardianState) -> dict[str, Any]:
                 "home_assistant",
                 "inverter_monitoring",
             ],
-            "load_shed_targets": [
-                "desktop_workstation",
-                "external_monitors",
-                "secondary_wifi_access_points",
-                "noncritical_echo_devices",
-                "decorative_and_dmx_lighting",
-                "nonessential_lighting",
-            ],
-            "requires_owner_allowlist": True,
+            "load_shed_targets": (
+                sorted(load_shed_targets)
+                if automatic_load_shed
+                else [
+                    "desktop_workstation",
+                    "external_monitors",
+                    "secondary_wifi_access_points",
+                    "noncritical_echo_devices",
+                    "decorative_and_dmx_lighting",
+                    "nonessential_lighting",
+                ]
+            ),
+            "approved_load_labels": approved_load_labels,
+            "requires_owner_allowlist": not automatic_load_shed,
         },
         "solar_history": solar_history,
         "home_timeline": timeline,
@@ -1191,6 +1229,16 @@ def localize_alexa_result(result: dict[str, Any], locale: str) -> dict[str, Any]
                 runtime_text = spoken_duration(
                     resilience.get("remaining_hours"), english=True
                 )
+                action_text = (
+                    f"The outage notifier automatically manages "
+                    f"{len(resilience.get('approved_load_labels') or [])} "
+                    "owner-preauthorized noncritical loads and verifies each shutdown. "
+                    "This query executed no action. Network equipment still requires owner "
+                    "approval through WhatsApp."
+                    if resilience.get("execution") == "ARMED_ON_OUTAGE"
+                    else "I disconnected no loads; network equipment still requires owner "
+                    "approval through WhatsApp."
+                )
                 response["answer"] = (
                     "InnerOS detects utility loss or active battery backup. "
                     + (f"The outage began at about {outage_time}. " if outage_time else "")
@@ -1206,22 +1254,30 @@ def localize_alexa_result(result: dict[str, Any], locale: str) -> dict[str, Any]
                     + "The resilience plan protects servers, the network core, security, Home "
                     "Assistant, and inverter monitoring. It pauses intensive computing and "
                     "prepares the workstation, monitors, secondary Wi-Fi, nonessential Echo "
-                    "devices, and decorative lighting for shutdown. I disconnected no loads; "
-                    "network equipment still requires owner approval through WhatsApp."
+                    "devices, and decorative lighting for shutdown. "
+                    + action_text
                 )
             else:
+                plan_text = (
+                    f"The energy resilience plan is armed. On the next outage it will "
+                    f"automatically manage {len(resilience.get('approved_load_labels') or [])} "
+                    "owner-preauthorized noncritical loads and verify their shutdown. I took "
+                    "no action because utility power is normal."
+                    if resilience.get("execution") == "ARMED_ON_OUTAGE"
+                    else "The energy resilience plan is ready in preview mode and prioritizes "
+                    "servers, the network core, security, Home Assistant, and inverter "
+                    "monitoring. I disconnected no loads."
+                )
                 response["answer"] = (
                     "Utility power is present and battery mode is not active. "
                     + (f"The current reading shows {reading_text}. " if reading_text else "")
-                    + "The energy resilience plan is ready in preview mode and prioritizes "
-                    "servers, the network core, security, Home Assistant, and inverter "
-                    "monitoring. I disconnected no loads."
+                    + plan_text
                 )
     elif mode == "deterministic-inneros-capabilities":
         response["answer"] = (
             "I am the voice gateway to InnerOS. I can read real Home Assistant history for "
             "security zones, lights, solar power, battery mode, internet, and UniFi. I can "
-            "show a real energy-resilience preview that protects critical infrastructure "
+            "show the real energy-resilience policy that protects critical infrastructure "
             "without shedding unapproved loads. I can "
             "correlate it with a clearly simulated Ring demo, check VoiceOps and Grandstream, "
             "prepare an owner callback, prepare approved UniFi restarts, and control professional "
