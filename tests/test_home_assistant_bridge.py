@@ -33,6 +33,9 @@ def clear_bridge_env(monkeypatch):
         "AMBIENT_GUARDIAN_UNIFI_RESTART_TARGETS",
         "AMBIENT_GUARDIAN_UNIFI_STATUS_ENTITIES",
         "AMBIENT_GUARDIAN_RASPBERRY_STATUS_ENTITIES",
+        "AMBIENT_GUARDIAN_ENERGY_LOAD_SHED_ENABLED",
+        "AMBIENT_GUARDIAN_ENERGY_LOAD_SHED_OWNER_PREAUTHORIZED",
+        "AMBIENT_GUARDIAN_ENERGY_LOAD_SHED_TARGETS",
         "AMBIENT_GUARDIAN_CAMERA_ENTITY_ALLOWLIST",
         "AMBIENT_GUARDIAN_SHARED_ENV_FILE",
         "HA_URL",
@@ -93,6 +96,101 @@ def test_raspberry_status_reads_real_allowlisted_home_assistant_entities(monkeyp
     result = HomeAssistantBridge().raspberry_status()
     assert result["configured"] is True
     assert [item["state"] for item in result["entities"]] == ["home", "online"]
+
+
+def test_configuration_devices_returns_bounded_device_trackers(monkeypatch):
+    clear_bridge_env(monkeypatch)
+    monkeypatch.setenv("HOME_ASSISTANT_URL", "http://ha.local:8123")
+    monkeypatch.setenv("HOME_ASSISTANT_TOKEN", "test-token")
+    monkeypatch.setattr(
+        "ambient_guardian.home_assistant.httpx.get",
+        lambda url, headers, timeout: FakeResponse(
+            [
+                {
+                    "entity_id": "device_tracker.living",
+                    "state": "home",
+                    "last_updated": "2026-10-19T15:42:33+00:00",
+                    "attributes": {"friendly_name": "U6+ U6+"},
+                },
+                {
+                    "entity_id": "sensor.private_value",
+                    "state": "secret",
+                    "attributes": {"friendly_name": "Not a tracker"},
+                },
+            ]
+        ),
+    )
+    result = HomeAssistantBridge().configuration_devices()
+    assert result["configured"] is True
+    assert result["devices"] == [
+        {
+            "entity_id": "device_tracker.living",
+            "label": "U6+",
+            "state": "home",
+            "last_updated": "2026-10-19T15:42:33+00:00",
+            "kind": "network_infrastructure",
+            "source": "unifi",
+        }
+    ]
+
+
+def test_energy_load_shed_turns_off_only_explicit_noncritical_target(monkeypatch):
+    clear_bridge_env(monkeypatch)
+    monkeypatch.setenv("HOME_ASSISTANT_URL", "http://ha.local:8123")
+    monkeypatch.setenv("HOME_ASSISTANT_TOKEN", "test-token")
+    monkeypatch.setenv("AMBIENT_GUARDIAN_ENERGY_LOAD_SHED_ENABLED", "1")
+    monkeypatch.setenv(
+        "AMBIENT_GUARDIAN_ENERGY_LOAD_SHED_OWNER_PREAUTHORIZED", "1"
+    )
+    monkeypatch.setenv(
+        "AMBIENT_GUARDIAN_ENERGY_LOAD_SHED_TARGETS",
+        '{"desk_led":{"entity_id":"light.cinta_escritorio","label":"Desk LED strip"}}',
+    )
+    state = {"value": "on"}
+    posts = []
+
+    def fake_get(url, headers, timeout):
+        return FakeResponse(
+            {
+                "entity_id": "light.cinta_escritorio",
+                "state": state["value"],
+                "attributes": {},
+            }
+        )
+
+    def fake_post(url, headers, json, timeout):
+        posts.append((url, json))
+        state["value"] = "off"
+        return FakeResponse([])
+
+    monkeypatch.setattr("ambient_guardian.home_assistant.httpx.get", fake_get)
+    monkeypatch.setattr("ambient_guardian.home_assistant.httpx.post", fake_post)
+    monkeypatch.setattr("ambient_guardian.home_assistant.time.sleep", lambda _: None)
+    result = HomeAssistantBridge().shed_noncritical_energy_loads()
+    assert result["turned_off"] == 1
+    assert result["verification_failed"] is False
+    assert posts == [
+        (
+            "http://ha.local:8123/api/services/light/turn_off",
+            {"entity_id": "light.cinta_escritorio"},
+        )
+    ]
+
+
+def test_energy_load_shed_rejects_protected_targets(monkeypatch):
+    clear_bridge_env(monkeypatch)
+    monkeypatch.setenv("HOME_ASSISTANT_URL", "http://ha.local:8123")
+    monkeypatch.setenv("HOME_ASSISTANT_TOKEN", "test-token")
+    monkeypatch.setenv(
+        "AMBIENT_GUARDIAN_ENERGY_LOAD_SHED_TARGETS",
+        '{"critical":{"entity_id":"switch.breaker_switch","label":"Main breaker"}}',
+    )
+    try:
+        HomeAssistantBridge()
+    except ValueError as exc:
+        assert "protected load" in str(exc)
+    else:
+        raise AssertionError("protected breaker was accepted for automatic shedding")
 
 
 def test_unifi_status_includes_target_telemetry_without_restart(monkeypatch):
