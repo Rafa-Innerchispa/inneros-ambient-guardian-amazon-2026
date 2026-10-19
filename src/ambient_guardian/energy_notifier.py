@@ -97,7 +97,13 @@ def _critical_key(estimate: dict[str, Any]) -> str | None:
     return None
 
 
-def _message(estimate: dict[str, Any], *, event: str, english: bool) -> str:
+def _message(
+    estimate: dict[str, Any],
+    *,
+    event: str,
+    english: bool,
+    load_shed: dict[str, Any] | None = None,
+) -> str:
     if event == "utility_restored":
         return (
             "Utility power has returned. InnerOS confirms that battery backup is no longer "
@@ -133,12 +139,24 @@ def _message(estimate: dict[str, Any], *, event: str, english: bool) -> str:
                 + ". Review noncritical loads now. Any server shutdown still requires "
                 "owner approval."
             )
-        return (
+        message = (
             "Power outage detected. InnerOS is entering energy-saving mode. Servers, the "
             "core network, security, Home Assistant, and inverter monitoring stay protected. "
             + suffix
             + "."
         )
+        if load_shed and load_shed.get("turned_off"):
+            message += (
+                f" I turned off {int(load_shed['turned_off'])} owner-preauthorized "
+                "noncritical loads."
+            )
+        elif load_shed and load_shed.get("targets") and not load_shed.get(
+            "verification_failed"
+        ):
+            message += " The approved noncritical loads were already off."
+        if load_shed and load_shed.get("verification_failed"):
+            message += " One approved load did not confirm shutdown and needs review."
+        return message[:300]
     detail = []
     if output is not None:
         detail.append(f"La carga protegida actual es de {output:.0f} vatios")
@@ -161,13 +179,25 @@ def _message(estimate: dict[str, Any], *, event: str, english: bool) -> str:
             + ". Revisa ahora las cargas no críticas. Apagar un servidor todavía requiere "
             "autorización del dueño."
         )
-    return (
+    message = (
         "Apagón detectado. InnerOS entra en modo de ahorro energético. Los servidores, la "
         "red principal, la seguridad, Home Assistant y el monitoreo del inversor permanecen "
         "protegidos. "
         + suffix
         + "."
     )
+    if load_shed and load_shed.get("turned_off"):
+        message += (
+            f" Apagué {int(load_shed['turned_off'])} cargas no críticas "
+            "preautorizadas por el dueño."
+        )
+    elif load_shed and load_shed.get("targets") and not load_shed.get(
+        "verification_failed"
+    ):
+        message += " Las cargas no críticas aprobadas ya estaban apagadas."
+    if load_shed and load_shed.get("verification_failed"):
+        message += " Una carga aprobada no confirmó el apagado y requiere revisión."
+    return message[:300]
 
 
 def run_cycle(
@@ -207,12 +237,23 @@ def run_cycle(
     outage_before = bool(previous.get("outage_active"))
     event = None
     delivered: list[str] = []
+    load_shed: dict[str, Any] | None = None
 
     if outage_now and not outage_before:
         event = "outage_started"
         previous["outage_started_at"] = now.astimezone(timezone.utc).isoformat()
         estimate["outage_started_at"] = previous["outage_started_at"]
         previous["last_critical_key"] = _critical_key(estimate)
+        try:
+            load_shed = bridge.shed_noncritical_energy_loads()
+        except (AttributeError, PermissionError, RuntimeError, ValueError) as exc:
+            load_shed = {
+                "enabled": False,
+                "targets": 0,
+                "turned_off": 0,
+                "verification_failed": False,
+                "reason": type(exc).__name__,
+            }
     elif not outage_now and outage_before:
         event = "utility_restored"
         previous["outage_started_at"] = None
@@ -240,6 +281,7 @@ def run_cycle(
             estimate,
             event=event,
             english=english,
+            load_shed=load_shed,
         )
         if not dry_run:
             for target in _targets():
@@ -260,6 +302,7 @@ def run_cycle(
         "dry_run": dry_run,
         "delivered_to": delivered,
         "energy_resilience": estimate,
+        "load_shed": load_shed,
     }
 
 
