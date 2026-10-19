@@ -446,6 +446,15 @@ def _guardian_query(request_payload: dict[str, Any]) -> str:
     english = _request_locale(request_payload).lower().startswith("en")
     if intent_name == "CapabilitiesIntent":
         return "what can you do inside InnerOS" if english else "qué puedes hacer dentro de InnerOS"
+    if intent_name == "SystemStatusQueryIntent":
+        query = _slot_value(request_payload, "query")
+        if not query:
+            return ""
+        return (
+            f"check the live status of {query}"
+            if english
+            else f"revisa el estado en vivo de {query}"
+        )
     if intent_name == "HomeHistoryIntent":
         return (
             "show me the real overnight home events and tell me if the power went out"
@@ -554,15 +563,15 @@ def _dispatch(payload: dict[str, Any]) -> dict[str, Any]:
     if request_type == "LaunchRequest":
         if _request_locale(request_payload).lower().startswith("es"):
             return _plain_response(
-                f"{_voice_name()} listo. ¿Qué revisamos? Puedes decir: "
-                "dame el estado de energía.",
-                reprompt="Sigo aquí. Puedes decir: dame el estado de energía.",
+                f"{_voice_name()} listo. Puedes preguntar por energía, WiFi, cámaras, "
+                "servidores o telefonía.",
+                reprompt="Sigo aquí. Puedes decir: estado del WiFi.",
                 session_attributes={"fallback_count": 0},
             )
         return _plain_response(
-            f"{_voice_name()} is ready. What should I check? You can say: "
-            "give me the energy status.",
-            reprompt="I am still here. You can say: give me the energy status.",
+            f"{_voice_name()} is ready. Ask about energy, WiFi, cameras, servers, "
+            "or telephony.",
+            reprompt="I am still here. You can say: status of the WiFi.",
             session_attributes={"fallback_count": 0},
         )
     if request_type == "SessionEndedRequest":
@@ -590,6 +599,7 @@ def _dispatch(payload: dict[str, Any]) -> dict[str, Any]:
         )
     if intent_name in {
         "AskGuardianIntent",
+        "SystemStatusQueryIntent",
         "CapabilitiesIntent",
         "HomeHistoryIntent",
         "EnergyResilienceIntent",
@@ -687,14 +697,14 @@ def _dispatch(payload: dict[str, Any]) -> dict[str, Any]:
         if _request_locale(request_payload).lower().startswith("es"):
             return _plain_response(
                 "No entendí esa frase y no realicé ninguna acción. Sigo aquí; prueba con: "
-                "dame el estado de energía, o di salir.",
-                reprompt="Puedes decir: dame el estado de energía.",
+                "estado del WiFi, estado de los servidores, o di salir.",
+                reprompt="Puedes decir: estado del WiFi.",
                 session_attributes={"fallback_count": 1},
             )
         return _plain_response(
             "I did not understand that request and took no action. I am still here; "
-            "try: give me the energy status, or say exit.",
-            reprompt="You can say: give me the energy status.",
+            "try: status of the WiFi, or say exit.",
+            reprompt="You can say: status of the WiFi.",
             session_attributes={"fallback_count": 1},
         )
     if _request_locale(request_payload).lower().startswith("es"):
