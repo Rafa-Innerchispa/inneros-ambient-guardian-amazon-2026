@@ -489,14 +489,17 @@ async def simulated_alexa(request: Request) -> Response:
             intent = "draft_antigravity_task"
             systems.append("Antigravity (draft only)")
     if prepared:
+        is_voiceops_callback = str(prepared.get("action") or "").startswith(
+            "voiceops_owner_"
+        )
         intent = (
             "prepare_pbx_callback"
-            if prepared.get("action") == "voiceops_owner_callback"
+            if is_voiceops_callback
             else "prepare_unifi_restart"
             if str(prepared.get("action") or "").startswith("unifi_restart:")
             else "prepare_action"
         )
-        if prepared.get("action") == "voiceops_owner_callback":
+        if is_voiceops_callback:
             systems.append("VoiceOps (prepare only)")
         elif str(prepared.get("action") or "").startswith("unifi_restart:"):
             systems.append("Home Assistant + UniFi (prepare only)")
@@ -540,7 +543,10 @@ async def simulated_alexa(request: Request) -> Response:
                 if prepared
                 and str(prepared.get("action") or "").startswith("unifi_restart:")
                 else "SIMULATED"
-                if prepared and prepared.get("action") != "voiceops_owner_callback"
+                if prepared
+                and not str(prepared.get("action") or "").startswith(
+                    "voiceops_owner_"
+                )
                 else str((STATE.voiceops.status() or {}).get("truth_label") or "CODE_READY")
                 if prepared
                 else "CODE_READY"

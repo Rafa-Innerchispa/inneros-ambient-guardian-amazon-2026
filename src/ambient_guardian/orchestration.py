@@ -64,11 +64,12 @@ _VOICEOPS_STATUS_QUERY = re.compile(
 )
 
 _HOME_HISTORY_QUERY = re.compile(
-    r"\b(?:novedades?|historial|eventos?|madrugada|anoche|esta noche|"
+    r"\b(?:novedades?|historial|eventos?|madrugada|anoche|ayer|anteayer|esta noche|"
     r"qu[eé]\s+pas[oó]\s+(?:en|con)\s+(?:la\s+)?casa|reporte\s+de\s+la\s+casa|"
     r"modo\s+bater[ií]a|corte\s+de\s+(?:luz|energ[ií]a)|se\s+fue\s+la\s+luz|"
     r"ca[ií]da\s+(?:el[eé]ctrica|de\s+(?:energ[ií]a|internet|wifi))|"
-    r"luces?\s+se\s+(?:encendieron|apagaron)|overnight|history|events?|"
+    r"luces?\s+se\s+(?:encendieron|apagaron)|overnight|yesterday|day before yesterday|"
+    r"last month|past month|history|events?|"
     r"power\s+(?:outage|failure)|power\s+went\s+out|lost\s+(?:utility\s+)?power|"
     r"battery\s+(?:backup|mode)|inverter|internet\s+(?:outage|went\s+down)|"
     r"lights?\s+turned\s+(?:on|off))\b",
@@ -109,10 +110,10 @@ _UNIFI_RESTART_QUERY = re.compile(
     re.I,
 )
 _UNIFI_STATUS_QUERY = re.compile(
-    r"\b(?:uni\s*fi|wi[ -]?fi|wifi|network|red)\b[^.]*\b(?:status|health|online|connected|"
+    r"\b(?:uni\s*fi|ubiquiti|wi[ -]?fi|wifi|network|red)\b[^.]*\b(?:status|health|online|connected|"
     r"estado|salud|conectad[oa]|funcionando)\b"
     r"|\b(?:status|health|how\s+is|check|estado|salud|c[oó]mo\s+est[aá]|revisa)\b[^.]*"
-    r"\b(?:uni\s*fi|wi[ -]?fi|wifi|network|red)\b",
+    r"\b(?:uni\s*fi|ubiquiti|wi[ -]?fi|wifi|network|red)\b",
     re.I,
 )
 _CAMERA_STATUS_QUERY = re.compile(
@@ -676,7 +677,21 @@ def _history_window(utterance: str) -> tuple[datetime, datetime, str]:
         local_zone = timezone(timedelta(hours=-5))
     now = datetime.now(timezone.utc).astimezone(local_zone)
     text = utterance.lower()
-    if "madrugada" in text or "overnight" in text or "early morning" in text:
+    if re.search(r"\b(?:[uú]ltimo mes|mes pasado|last month|past month|last 30 days)\b", text):
+        end = now
+        start = end - timedelta(days=30)
+        label = "los últimos treinta días"
+    elif re.search(r"\b(?:anteayer|antes de ayer|day before yesterday)\b", text):
+        day = now.date() - timedelta(days=2)
+        start = datetime.combine(day, clock_time(0, 0), local_zone)
+        end = datetime.combine(day + timedelta(days=1), clock_time(0, 0), local_zone)
+        label = "anteayer"
+    elif re.search(r"\b(?:ayer|yesterday)\b", text):
+        day = now.date() - timedelta(days=1)
+        start = datetime.combine(day, clock_time(0, 0), local_zone)
+        end = datetime.combine(day + timedelta(days=1), clock_time(0, 0), local_zone)
+        label = "ayer"
+    elif "madrugada" in text or "overnight" in text or "early morning" in text:
         start = datetime.combine(now.date(), clock_time(0, 0), local_zone)
         six_am = datetime.combine(now.date(), clock_time(6, 0), local_zone)
         end = min(now, six_am)
@@ -705,6 +720,24 @@ def _history_window(utterance: str) -> tuple[datetime, datetime, str]:
     return start, end, label
 
 
+def _history_categories(utterance: str, start: datetime, end: datetime) -> set[str] | None:
+    text = utterance.lower()
+    selected: set[str] = set()
+    if re.search(r"\b(?:alarma|alarm|intelbras|seguridad|security|zonas?)\b", text):
+        selected.add("security")
+    if re.search(r"\b(?:uni\s*fi|ubiquiti|wifi|wi-fi|red|network|internet|router|gateway)\b", text):
+        selected.add("network")
+    if re.search(r"\b(?:energ[ií]a|electricidad|luz|solar|inversor|bater[ií]a|power|energy|outage)\b", text):
+        selected.add("energy")
+    if re.search(r"\b(?:luces|iluminaci[oó]n|lighting|lights?)\b", text):
+        selected.add("lighting")
+    if selected:
+        return selected
+    if end - start > timedelta(hours=48):
+        return {"security", "network", "energy"}
+    return None
+
+
 def _format_local_time(raw: str) -> str:
     timezone_name = os.getenv(
         "AMBIENT_GUARDIAN_HOME_TIMEZONE", "America/Guayaquil"
@@ -721,8 +754,14 @@ def _format_local_time(raw: str) -> str:
 
 def _home_history_response(utterance: str, state: GuardianState) -> dict[str, Any]:
     start, end, window_label = _history_window(utterance)
+    categories_filter = _history_categories(utterance, start, end)
     try:
-        timeline = state.home_assistant.history_timeline(start, end, max_events=80)
+        timeline = state.home_assistant.history_timeline(
+            start,
+            end,
+            max_events=80,
+            categories=categories_filter,
+        )
     except Exception as exc:
         return {
             "response": {
@@ -752,6 +791,7 @@ def _home_history_response(utterance: str, state: GuardianState) -> dict[str, An
             str(event.get("label") or event.get("entity_id"))
             for event in events
             if "_zona_" in str(event.get("entity_id") or "")
+            and not str(event.get("entity_id") or "").startswith("event.")
             and event.get("state") == "on"
         )
         details = []
@@ -815,10 +855,27 @@ def _home_history_response(utterance: str, state: GuardianState) -> dict[str, An
         ):
             details.append("Lectura actual: " + ", ".join(electrical_snapshot))
         categories = Counter(str(event.get("category") or "home") for event in events)
+        recommendation = ""
+        if categories_filter == {"network"}:
+            offline = [
+                event
+                for event in events
+                if str(event.get("state") or "").lower()
+                in {"off", "unavailable", "unknown", "not_home", "disconnected"}
+            ]
+            if len(offline) >= 3:
+                labels = Counter(str(event.get("label") or "equipo") for event in offline)
+                recurring = labels.most_common(1)[0][0]
+                recommendation = (
+                    f" Recomendación: {recurring} presenta caídas repetidas; revisa primero "
+                    "alimentación, enlace y PoE. Un reinicio solo debe prepararse después de "
+                    "identificar el objetivo y autorizarlo por WhatsApp."
+                )
         answer = (
             f"Informe real de {window_label}: Home Assistant registró {len(events)} cambios. "
             + ". ".join(details)
             + ". No mezclé eventos simulados de Ring."
+            + recommendation
         )
         status = (
             "attention_required"
@@ -1206,13 +1263,23 @@ def localize_alexa_result(result: dict[str, Any], locale: str) -> dict[str, Any]
             else "VoiceOps or the Grandstream PBX is not available right now. I did not place a call."
         )
     elif mode == "deterministic-private-voiceops-destination":
-        response["answer"] = (
-            "For privacy and safety, I do not use or store phone numbers spoken aloud. Today, "
-            "VoiceOps can call only the owner's allowlisted Grandstream or Zoiper extension "
-            "after separate approval. Calling the owner's mobile through the external phone "
-            "line remains blocked until the PBX outbound route and WhatsApp approval path are "
-            "verified."
-        )
+        prepared = result.get("prepared_action")
+        if isinstance(prepared, dict) and prepared.get("approval_delivery") == "sent":
+            response["answer"] = (
+                "I prepared a Grandstream call to the owner's private mobile alias and sent "
+                "the authorization to WhatsApp. I have not dialed yet; VoiceOps will continue "
+                "only after approval there."
+            )
+        elif isinstance(prepared, dict):
+            response["answer"] = (
+                "I prepared the private mobile callback, but WhatsApp authorization could not "
+                "be delivered. I did not dial."
+            )
+        else:
+            response["answer"] = (
+                "For privacy and safety, I do not use or store phone numbers spoken aloud. "
+                "Ask for the owner's mobile alias instead. I did not place a call."
+            )
     elif mode == "deterministic-antigravity-draft":
         response["answer"] = (
             "I prepared an Antigravity task draft. I did not send it or execute code; it requires "
@@ -1331,8 +1398,22 @@ def _unifi_status_response(
             else "InnerOS no puede consultar ahora la telemetría permitida de UniFi. No reinicié nada."
         )
         return {"answer": answer, "status": "attention_required", "reasoning_mode": "deterministic-unifi-status"}, snapshot
-    available = [item for item in entities if str(item.get("state")) not in {"unknown", "unavailable", "offline", "disconnected"}]
-    problem = [item for item in entities if item not in available]
+    def healthy(item: dict[str, Any]) -> bool:
+        entity_id = str(item.get("entity_id") or "").lower()
+        value = str(item.get("state") or "").strip().lower()
+        if "active_incident" in entity_id:
+            return value in {"", "none", "clear", "ok", "no_incident"}
+        if "latency" in entity_id:
+            try:
+                return float(value) < 100.0
+            except ValueError:
+                return False
+        return value not in {
+            "off", "not_home", "unknown", "unavailable", "offline", "disconnected", "down"
+        }
+
+    available = [item for item in entities if healthy(item)]
+    problem = [item for item in entities if not healthy(item)]
     details = []
     spoken_entities = [
         item
@@ -1349,10 +1430,12 @@ def _unifi_status_response(
         answer = f"InnerOS read live UniFi telemetry. {len(available)} of {len(entities)} monitored signals are available. " + "; ".join(details)
         if problem:
             answer += f". {len(problem)} signal or device needs attention."
+            answer += " Check power, uplink, and PoE before preparing an allowlisted restart through WhatsApp."
     else:
         answer = f"InnerOS leyó la telemetría en vivo de UniFi. {len(available)} de {len(entities)} señales monitoreadas están disponibles. " + "; ".join(details)
         if problem:
             answer += f". {len(problem)} señal o equipo requiere atención."
+            answer += " Revisa alimentación, enlace y PoE antes de preparar un reinicio permitido por WhatsApp."
     return {"answer": answer, "status": "attention_required" if problem else "all_clear", "reasoning_mode": "deterministic-unifi-status"}, snapshot
 
 
@@ -1382,10 +1465,39 @@ def _camera_status_response(
 def _server_status_response(
     utterance: str, state: GuardianState, speaker_context: dict[str, Any] | None
 ) -> tuple[dict[str, Any], dict[str, Any]]:
-    snapshot = state.infrastructure.fleet_status()
     english = _english_answer(utterance, speaker_context)
-    nodes = snapshot.get("nodes") or []
     lower = utterance.lower()
+    if re.search(r"raspberry\s*pi|raspberry|\brpi\b", lower):
+        snapshot = state.home_assistant.raspberry_status()
+        entities = list(snapshot.get("entities") or [])
+        if not snapshot.get("configured") or not entities:
+            answer = (
+                "InnerOS cannot reach the allowlisted Raspberry Pi telemetry right now."
+                if english
+                else "InnerOS no puede consultar ahora la telemetría permitida del Raspberry Pi."
+            )
+            return {"answer": answer, "status": "attention_required", "reasoning_mode": "deterministic-raspberry-status"}, snapshot
+        online = [
+            item for item in entities
+            if str(item.get("state") or "").lower() in {"home", "on", "online", "connected"}
+        ]
+        details = [
+            f"{item.get('label')}: {item.get('state')}"
+            for item in entities[:6]
+        ]
+        prefix = (
+            "InnerOS found one monitored Raspberry Pi. "
+            if english
+            else "InnerOS encontró un Raspberry Pi monitoreado. "
+        )
+        return {
+            "answer": prefix + "; ".join(details),
+            "status": "all_clear" if online else "attention_required",
+            "reasoning_mode": "deterministic-raspberry-status",
+        }, snapshot
+
+    snapshot = state.infrastructure.fleet_status()
+    nodes = snapshot.get("nodes") or []
     if re.search(r"(?:\.4|point\s+four|punto\s+cuatro|intel)", lower):
         nodes = [node for node in nodes if "intel" in (str(node).lower()) or ".4" in (str(node).lower())]
     elif re.search(r"(?:\.5|point\s+five|punto\s+cinco|amd)", lower):
@@ -1514,6 +1626,7 @@ def _voiceops_status_response(state: GuardianState) -> dict[str, Any]:
     ready = bool(voiceops.get("callback_ready"))
     real = str(voiceops.get("truth_label") or "CODE_READY") == "REAL"
     confirmed = bool(voiceops.get("owner_confirmed_e2e_calling"))
+    mobile_ready = bool(voiceops.get("owner_mobile_callback_ready"))
     if ready and real:
         answer = (
             "VoiceOps y la central Grandstream están listos para preparar una llamada "
@@ -1538,6 +1651,10 @@ def _voiceops_status_response(state: GuardianState) -> dict[str, Any]:
             "Grandstream. No inicié ninguna llamada."
         )
         status = "attention_required"
+    if mobile_ready:
+        answer += (
+            " La ruta permitida al celular privado también está lista, siempre con autorización por WhatsApp."
+        )
     return {
         "answer": answer,
         "status": status,
@@ -1629,22 +1746,69 @@ def simulated_alexa_turn(
         }
 
     if _PBX_DIRECT_PHONE_REQUEST.search(normalized_utterance):
+        if re.search(r"\+?\d[\d\s().-]{5,}", normalized_utterance):
+            return {
+                "utterance": "[solicitud de llamada con destino redactado]",
+                "response": {
+                    "answer": (
+                        "No uso ni guardo números dictados por voz. Di solamente: llámame a mi "
+                        "celular por Grandstream. InnerOS usará el alias privado permitido y "
+                        "pedirá autorización por WhatsApp. No inicié ninguna llamada."
+                    ),
+                    "status": "attention_required",
+                    "reasoning_mode": "deterministic-private-voiceops-destination",
+                },
+                "prepared_action": None,
+                "evidence_count": len(state.evidence_snapshot()),
+            }
+        voiceops_status = state.voiceops.status()
+        if not voiceops_status.get("owner_mobile_callback_ready"):
+            return {
+                "utterance": utterance,
+                "response": {
+                    "answer": (
+                        "VoiceOps todavía no confirma que el alias privado del celular esté "
+                        "listo en la ruta permitida de Grandstream. No inicié ninguna llamada."
+                    ),
+                    "status": "attention_required",
+                    "reasoning_mode": "deterministic-private-voiceops-destination",
+                },
+                "prepared_action": None,
+                "voiceops": voiceops_status,
+                "evidence_count": len(state.evidence_snapshot()),
+            }
+        try:
+            prepared = state.prepare_action(
+                "voiceops_owner_mobile_callback",
+                "Explicit owner request for the private allowlisted mobile alias",
+            )
+        except ValueError as exc:
+            return {
+                "utterance": utterance,
+                "response": {
+                    "answer": "No pude preparar de forma segura la llamada al celular. No inicié ninguna llamada.",
+                    "status": "attention_required",
+                    "reasoning_mode": "deterministic-private-voiceops-destination",
+                    "prepare_error": str(exc),
+                },
+                "prepared_action": None,
+                "evidence_count": len(state.evidence_snapshot()),
+            }
         return {
-            "utterance": "[solicitud de llamada con destino redactado]",
+            "utterance": utterance,
             "response": {
                 "answer": (
-                    "Por privacidad y seguridad no uso ni guardo números dictados por voz. "
-                    "Hoy VoiceOps solo puede llamar a la extensión permitida de la aplicación "
-                    "Grandstream o Zoiper del propietario. Para esa ruta, di: prepara una llamada "
-                    "por Grandstream con el último incidente. La llamada quedará pendiente de "
-                    "aprobación y no se ejecutará todavía. La salida al celular por la línea "
-                    "externa sigue bloqueada hasta verificar la ruta PBX y la aprobación por "
-                    "WhatsApp."
+                    "Preparé una llamada por la central Grandstream al alias privado de tu "
+                    "celular. Te envié la autorización por WhatsApp. No marqué todavía; "
+                    "VoiceOps solo continuará si confirmas allí."
+                    if prepared.get("approval_delivery") == "sent"
+                    else "Preparé la llamada al alias privado de tu celular, pero no pude "
+                    "entregar la autorización por WhatsApp. No marqué."
                 ),
                 "status": "attention_required",
                 "reasoning_mode": "deterministic-private-voiceops-destination",
             },
-            "prepared_action": None,
+            "prepared_action": prepared,
             "evidence_count": len(state.evidence_snapshot()),
         }
 

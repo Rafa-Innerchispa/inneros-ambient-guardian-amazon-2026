@@ -288,14 +288,13 @@ HTTP approval asks the existing VoiceOps runtime to call its preconfigured
 `voiceops.owner` alias. The Live Evidence Console then shows a sanitized dispatch
 result and the Incident Receipt → action → evidence digest chain.
 
-The currently verified `voiceops.owner` path resolves only to the allowlisted owner
-softphone extensions (`1004`/`1006`, Grandstream or Zoiper). It does not originate a
-PSTN call to a spoken number. The Ecuador mobile/fixed-number policy exists in VoiceOps,
-but mobile execution must remain blocked until the exact UCM outbound-route translation
-is verified and a server-side alias such as `voiceops.owner_mobile` is bound to the
-owner's private number. The number must stay out of Alexa, Git, logs and receipts. The
-intended final flow is: Alexa prepares the call to the alias, InnerOS sends Confirm/Cancel
-to the enrolled owner on WhatsApp, and only the authenticated approval may dispatch it.
+The `voiceops.owner` path resolves to the allowlisted owner softphone extensions
+(`1004`/`1006`, Grandstream or Zoiper). The separately governed
+`voiceops.owner.mobile` path resolves server-side to exactly one private owner number
+matching the read-only verified UCM route `09XXXXXXXX`. Alexa never accepts or stores a
+spoken number. It prepares the alias, InnerOS sends Confirm/Cancel to the enrolled owner
+on WhatsApp, and only that authenticated approval may dispatch it. The full number stays
+out of Alexa, Git, logs and receipts; evidence contains the alias and redacted metadata.
 
 UniFi restarts use a different, stricter approval path. Alexa prepares only an
 allowlisted Home Assistant restart button and InnerOS sends Confirm/Cancel to the

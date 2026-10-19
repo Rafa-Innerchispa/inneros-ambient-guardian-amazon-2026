@@ -19,7 +19,7 @@ from .infrastructure import InfrastructureBridge
 from .incident_store import IncidentStore
 from .music_assistant import MusicAssistantBridge
 from .ring import RingAdapterStatus, RingOfficialAdapter, RingSimulatorAdapter
-from .voiceops import OWNER_TARGET_ALIAS, VoiceOpsBridge
+from .voiceops import OWNER_MOBILE_TARGET_ALIAS, OWNER_TARGET_ALIAS, VoiceOpsBridge
 from .whatsapp_approval import WhatsAppApprovalBridge
 
 
@@ -77,6 +77,7 @@ class GuardianState:
         "enable_delivery_mode",
         "disable_delivery_mode",
         "voiceops_owner_callback",
+        "voiceops_owner_mobile_callback",
     }
 
     def __init__(
@@ -472,6 +473,15 @@ class GuardianState:
             reason = " ".join(
                 f"Incident report {linked_incident['incident_id']}: {incident.get('summary') or 'Review the recorded incident.'}".split()
             )[:600]
+        elif action == "voiceops_owner_mobile_callback":
+            if linked_incident is not None:
+                incident = self.incident_store.get(str(linked_incident["incident_id"])) or {}
+                reason = " ".join(
+                    f"InnerOS owner mobile callback. Incident report {linked_incident['incident_id']}: "
+                    f"{incident.get('summary') or 'Review the recorded incident.'}".split()
+                )[:600]
+            else:
+                reason = "InnerOS owner mobile callback requested by voice and approved through WhatsApp."
         elif unifi_alias:
             target = self.home_assistant.unifi_restart_targets[unifi_alias]
             reason = (
@@ -530,8 +540,42 @@ class GuardianState:
             "linked_incident_id": item.linked_incident_id,
             "linked_incident_digest": item.linked_incident_digest,
         }
-        if action == "voiceops_owner_callback":
-            prepared_result["target_alias"] = OWNER_TARGET_ALIAS
+        if action in {"voiceops_owner_callback", "voiceops_owner_mobile_callback"}:
+            target_alias = (
+                OWNER_MOBILE_TARGET_ALIAS
+                if action == "voiceops_owner_mobile_callback"
+                else OWNER_TARGET_ALIAS
+            )
+            target_label = (
+                "celular privado del propietario"
+                if action == "voiceops_owner_mobile_callback"
+                else "aplicación Grandstream o Zoiper del propietario"
+            )
+            prepared_result["target_alias"] = target_alias
+            prepared_result["target_label"] = target_label
+            delivery = self.approval_bridge.request(
+                {
+                    "action_type": action,
+                    "action_id": action_id,
+                    "action_digest": action_digest,
+                    "target_alias": target_alias,
+                    "target_label": target_label,
+                    "expires_at": item.expires_at,
+                }
+            )
+            prepared_result["approval_channel"] = "whatsapp"
+            prepared_result["approval_delivery"] = (
+                "sent" if delivery.get("ok") else "failed"
+            )
+            if delivery.get("ok"):
+                item.approval_task_id = str(delivery.get("task_id") or "") or None
+                prepared_result["approval_task_id"] = item.approval_task_id
+                if item.approval_task_id:
+                    self.approval_store.bind_task(action_id, item.approval_task_id)
+            else:
+                prepared_result["approval_delivery_error"] = str(
+                    delivery.get("error") or "whatsapp_delivery_failed"
+                )
         elif unifi_alias:
             prepared_result["target_alias"] = unifi_alias
             prepared_result["target_label"] = self.home_assistant.unifi_restart_targets[
@@ -571,7 +615,8 @@ class GuardianState:
                 **dict(self.live_evidence.get("truth") or {}),
                 "action": (
                     "SIMULATED"
-                    if action == "voiceops_owner_callback" and self.voiceops.mode == "simulator"
+                    if action in {"voiceops_owner_callback", "voiceops_owner_mobile_callback"}
+                    and self.voiceops.mode == "simulator"
                     else "CODE_READY"
                 ),
             },
@@ -581,7 +626,7 @@ class GuardianState:
     @staticmethod
     def action_requires_owner(action: str | None) -> bool:
         return bool(
-            action == "voiceops_owner_callback"
+            action in {"voiceops_owner_callback", "voiceops_owner_mobile_callback"}
             or (action or "").startswith("unifi_restart:")
         )
 
@@ -640,10 +685,16 @@ class GuardianState:
             raise ValueError("Action is already executing or has already been closed")
 
         try:
-            if item.action == "voiceops_owner_callback":
+            if item.action in {"voiceops_owner_callback", "voiceops_owner_mobile_callback"}:
                 after = self.voiceops.request_owner_callback(
                     correlation_id=item.action_id,
                     reason=item.reason,
+                    target_alias=(
+                        OWNER_MOBILE_TARGET_ALIAS
+                        if item.action == "voiceops_owner_mobile_callback"
+                        else OWNER_TARGET_ALIAS
+                    ),
+                    approval_id=item.approval_task_id or "",
                 )
                 adapter_verified = bool(after.get("verified"))
             elif item.action.startswith("unifi_restart:"):
@@ -703,7 +754,11 @@ class GuardianState:
         )
         self.record_live_evidence(
             approval_state="VERIFIED" if verified else "FAILED_VERIFICATION",
-            pbx_result=after if item.action == "voiceops_owner_callback" else None,
+            pbx_result=(
+                after
+                if item.action in {"voiceops_owner_callback", "voiceops_owner_mobile_callback"}
+                else None
+            ),
             verified_evidence={
                 "evidence_id": evidence["evidence_id"],
                 "evidence_digest": evidence["evidence_digest"],
@@ -725,7 +780,10 @@ class GuardianState:
         with self._lock:
             pending_items = list(self.pending.values())
         for item in pending_items:
-            if not item.action.startswith("unifi_restart:") or not item.approval_task_id:
+            if not (
+                item.action.startswith("unifi_restart:")
+                or item.action in {"voiceops_owner_callback", "voiceops_owner_mobile_callback"}
+            ) or not item.approval_task_id:
                 continue
             if datetime.fromisoformat(item.expires_at) < utc_now():
                 with self._lock:
@@ -760,7 +818,11 @@ class GuardianState:
                         "action": item.action,
                         "executed": False,
                         "verified": False,
-                        "adapter": "home-assistant-unifi",
+                        "adapter": (
+                            "voiceops-runtime"
+                            if item.action in {"voiceops_owner_callback", "voiceops_owner_mobile_callback"}
+                            else "home-assistant-unifi"
+                        ),
                         "verified_at": iso_now(),
                     },
                 )

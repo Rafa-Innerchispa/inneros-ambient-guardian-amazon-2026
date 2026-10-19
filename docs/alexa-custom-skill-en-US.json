@@ -43,6 +43,8 @@
             "give me information about {query}",
             "what is happening with {query}",
             "what is going on with {query}",
+            "what happened with {query}",
+            "latest events for {query}",
             "check on {query}",
             "verify {query}"
           ]
@@ -106,7 +108,8 @@
             "give me the UniFi status",
             "give me the uni fi status",
             "how is the WiFi network",
-            "are the UniFi access points connected"
+            "are the UniFi access points connected",
+            "check the Ubiquiti network"
           ]
         },
         {
@@ -129,6 +132,7 @@
             "how is the Intel server",
             "how is the AMD server",
             "how are the Raspberry Pis",
+            "how is the Raspberry Pi",
             "give me the Raspberry Pi status",
             "check the home Raspberry Pi",
             "check node point four",

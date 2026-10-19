@@ -205,6 +205,12 @@ class HomeAssistantBridge:
         self.unifi_status_entities = {
             item.strip() for item in raw_unifi_status.split(",") if item.strip()
         }
+        raw_raspberry_status = os.getenv(
+            "AMBIENT_GUARDIAN_RASPBERRY_STATUS_ENTITIES", ""
+        )
+        self.raspberry_status_entities = {
+            item.strip() for item in raw_raspberry_status.split(",") if item.strip()
+        }
 
         self.unifi_restart_enabled = os.getenv(
             "AMBIENT_GUARDIAN_UNIFI_RESTART_ENABLED", "0"
@@ -332,6 +338,15 @@ class HomeAssistantBridge:
             "targets": targets,
         }
 
+    def raspberry_status(self) -> dict[str, Any]:
+        """Return only the explicitly allowlisted Raspberry Pi telemetry."""
+        return {
+            "configured": self.configured and bool(self.raspberry_status_entities),
+            "entities": self._allowlisted_states(self.raspberry_status_entities)
+            if self.configured
+            else [],
+        }
+
     def _expanded_history_entities(self) -> tuple[list[str], dict[str, str]]:
         """Expand explicitly allowlisted prefixes without exposing all HA entities."""
         exact = sorted(
@@ -361,11 +376,16 @@ class HomeAssistantBridge:
                     ).strip()
                     if friendly_name:
                         labels.setdefault(entity_id, friendly_name)
-        return sorted(set(exact))[:64], labels
+        return sorted(set(exact))[:128], labels
 
     @staticmethod
     def _history_category(entity_id: str) -> str:
-        if entity_id.startswith("alarm_control_panel.") or "_zona_" in entity_id:
+        if (
+            entity_id.startswith("alarm_control_panel.")
+            or "_zona_" in entity_id
+            or "panel_home_ralphi_last_event" in entity_id
+            or "panel_home_ralphi_ultimo_disparo" in entity_id
+        ):
             return "security"
         if entity_id.startswith("light."):
             return "lighting"
@@ -413,6 +433,12 @@ class HomeAssistantBridge:
                 "unavailable": "sin conexión",
             }
             return f"La alarma quedó {alarm_states.get(state, state)}"
+        if entity_id.startswith("event.") and "_zona_" in entity_id:
+            return f"{label} registró un evento"
+        if "panel_home_ralphi_last_event" in entity_id:
+            return f"El panel Intelbras informó: {state}"
+        if "panel_home_ralphi_ultimo_disparo" in entity_id:
+            return f"El último disparo Intelbras quedó: {state}"
         if "_zona_" in entity_id:
             return (
                 f"{label} se activó o abrió"
@@ -434,6 +460,7 @@ class HomeAssistantBridge:
         end: datetime,
         *,
         max_events: int = 60,
+        categories: set[str] | None = None,
     ) -> dict[str, Any]:
         """Read a bounded, truth-labeled timeline from Home Assistant Recorder."""
         if not self.configured:
@@ -444,11 +471,20 @@ class HomeAssistantBridge:
             raise ValueError("history timestamps must include a timezone")
         if end <= start:
             raise ValueError("history end must be after start")
-        if (end - start).total_seconds() > 48 * 3600:
-            raise ValueError("history window cannot exceed 48 hours")
+        duration = (end - start).total_seconds()
+        if duration > 31 * 24 * 3600:
+            raise ValueError("history window cannot exceed 31 days")
+        if duration > 48 * 3600 and not categories:
+            raise ValueError("long history windows require a category filter")
         max_events = max(1, min(int(max_events), 100))
 
         entities, labels = self._expanded_history_entities()
+        if categories:
+            entities = [
+                entity_id
+                for entity_id in entities
+                if self._history_category(entity_id) in categories
+            ]
         if not entities:
             raise PermissionError("Home Assistant history allowlist matched no entities")
         response = httpx.get(
@@ -461,7 +497,7 @@ class HomeAssistantBridge:
                 "no_attributes": "1",
                 "significant_changes_only": "1",
             },
-            timeout=max(self.timeout, 12.0),
+            timeout=max(self.timeout, 25.0 if duration > 48 * 3600 else 12.0),
         )
         response.raise_for_status()
         payload = response.json()
@@ -532,7 +568,7 @@ class HomeAssistantBridge:
             keep_remaining = max(0, max_events - min(len(priority), max_events))
             selected_remaining = remaining[-keep_remaining:] if keep_remaining else []
             events = sorted(
-                priority[:max_events] + selected_remaining,
+                priority[-max_events:] + selected_remaining,
                 key=lambda item: str(item["timestamp"]),
             )
         return {

@@ -137,7 +137,7 @@ The strongest Judge Mode path is a three-part story rather than a feature tour:
 1. **Home status:** ask `Alexa, is everything okay at home?` to prove read-only context.
 2. **What happened at 3 AM?:** the demo injects truth-labeled Ring-compatible events at 03:04, 03:07 and 03:11, then reconstructs the incident through the real normalized event pipeline and the read-only `incident_summary` MCP tool.
 3. **Prepare lock:** ask `Alexa, prepare to lock the front door`. The system returns an expiring proposal with `executed=false`. Only the separate human approval surface may execute the bounded simulator action and emit verification evidence.
-4. **PBX escalation:** ask `Alexa, call me through my PBX and give me the incident report`. Ambient Guardian only prepares a callback tied to that Incident Receipt. A separate owner-authenticated HTTP approval asks VoiceOps to call its preconfigured `voiceops.owner` alias, then records sanitized verification evidence.
+4. **PBX escalation:** ask `Alexa, call me through my PBX and give me the incident report` for the private softphone alias, or `Alexa, ask Inner Oz to call my cell phone using Grandstream` for the single owner-mobile alias. Both are prepare-only in Alexa; InnerOS sends WhatsApp approval, VoiceOps rejects supplied numbers, and a confirmed request records sanitized verification evidence.
 5. **Governed UniFi restart:** ask Alexa to restart an allowlisted UniFi device. Alexa only prepares it; InnerOS sends Confirm/Cancel to the enrolled owner's WhatsApp. Approval is durable, expires after a bounded interval, executes at most once, and sends verified completion back to WhatsApp.
 
 The demo always distinguishes the **SIMULATED Ring edge** from the **REAL MCP/runtime, temporal correlation, policy and evidence pipeline**. The 3 AM scenario also writes a persistent Incident Receipt so the same incident can be recovered in a later session.
@@ -165,7 +165,7 @@ The project reports each integration separately so a code-complete path is never
 
 - **Physical Echo via Custom Skill:** code-complete signed gateway at `/alexa/skill`, with owner Account Linking and authenticated gateway-to-backend identity forwarding. It remains `CODE_READY` until a physical request/response is captured.
 - **Direct Alexa+ MCP Toolkit:** entitlement is `NOT_PROVEN`; it is not claimed as LIVE.
-- **VoiceOps/PBX:** the app sends no destination, number, extension, or SIP credential. After separate owner approval it calls the existing private VoiceOps contract and verifies the dispatch receipt. Simulator mode is explicitly `SIMULATED`.
+- **VoiceOps/PBX:** the app sends only a stable server-side alias, never a number, extension, or SIP credential. After WhatsApp owner approval it calls the private VoiceOps contract and verifies the dispatch receipt. `voiceops.owner.mobile` is limited to one preconfigured route-verified number; arbitrary and autonomous PSTN stay disabled. Simulator mode is explicitly `SIMULATED`.
 - **Ring:** the official adapter targets `https://api.amazonvision.com/v1`, verifies signed webhook ingress fail-closed, and normalizes JSON:API events. Ring track eligibility remains unclaimed until a live developer token/test account/session is verified.
 
 Alexa speech from Ambient Guardian is intentionally not an MCP tool. It requires a separate owner-authorized HTTP route, an explicit enable flag, and an allowlisted Home Assistant notify entity.
@@ -226,7 +226,7 @@ See [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md) for production host/origin settin
 | `AMBIENT_GUARDIAN_UNIFI_RESTART_ENABLED` | `0` | Enables only the two-phase owner-approved UniFi restart path |
 | `AMBIENT_GUARDIAN_UNIFI_RESTART_TARGETS` | unset | JSON allowlist mapping spoken aliases to HA restart, status, and uptime entities |
 | `AMBIENT_GUARDIAN_UNIFI_VERIFY_SECONDS` | `0` | Bounded post-approval state/uptime verification window, maximum 90 seconds |
-| `AMBIENT_GUARDIAN_WHATSAPP_APPROVAL_ENABLED` | `0` | Uses the existing authenticated InnerOS WhatsApp owner lane for UniFi decisions |
+| `AMBIENT_GUARDIAN_WHATSAPP_APPROVAL_ENABLED` | `0` | Uses the existing authenticated InnerOS WhatsApp owner lane for governed UniFi and VoiceOps decisions |
 | `AMBIENT_GUARDIAN_APPROVAL_TTL_SECONDS` | `900` in production server | Expiry for a prepared physical action |
 | `AMBIENT_GUARDIAN_ACTION_DB` | `var/ambient_guardian_actions.sqlite3` | Durable, single-consumer action state and replay protection |
 | `AMBIENT_GUARDIAN_INNEROS_PLATFORM_DIR` | InnerOS platform path | Existing approval runtime; no WhatsApp credentials are copied into this project |
