@@ -25,6 +25,25 @@ class LiveHomeInventory:
     def camera_status(self):
         return {"configured": True, "entities": [{"entity_id": "camera.entrada", "label": "Entrance camera", "state": "recording", "unit": ""}]}
 
+    def raspberry_status(self):
+        return {
+            "configured": True,
+            "entities": [
+                {
+                    "entity_id": "device_tracker.innerspark_pi_server_2",
+                    "label": "InnerSpark-PI-Server InnerOs-Pi01",
+                    "state": "home",
+                    "unit": "",
+                },
+                {
+                    "entity_id": "sensor.inneros_pi01_solar_status",
+                    "label": "InnerOS Pi01 Solar Status",
+                    "state": "online",
+                    "unit": "",
+                },
+            ],
+        }
+
 
 class LiveFleetInventory:
     def fleet_status(self):
@@ -80,14 +99,40 @@ def test_live_server_inventory_can_focus_node_point_four():
 
 def test_live_server_inventory_recognizes_raspberry_pi_status_query():
     state = GuardianState()
-    state.infrastructure = LiveFleetInventory()
+    state.home_assistant = LiveHomeInventory()
     result = simulated_alexa_turn(
         "revisa el estado en vivo de los Raspberry Pi",
         state,
         FailIfReasonerRuns(),
     )
-    assert result["response"]["reasoning_mode"] == "deterministic-server-status"
-    assert "Intel node point four" in result["response"]["answer"]
+    assert result["response"]["reasoning_mode"] == "deterministic-raspberry-status"
+    assert "un Raspberry Pi monitoreado" in result["response"]["answer"]
+    assert "InnerSpark-PI-Server InnerOs-Pi01: home" in result["response"]["answer"]
+
+
+def test_live_unifi_status_flags_real_active_incident_and_recommends_safe_checks():
+    state = GuardianState()
+    state.home_assistant = LiveHomeInventory()
+    state.home_assistant.unifi_status = lambda: {
+        "configured": True,
+        "entities": [
+            {
+                "entity_id": "sensor.bellini_active_incident",
+                "label": "Bellini Active Incident",
+                "state": "SINGLE_AP_OUTAGE_bellini_ap_207_gwn7052f",
+                "unit": "",
+            }
+        ],
+        "targets": [],
+    }
+    result = simulated_alexa_turn(
+        "revisa el estado de Ubiquiti",
+        state,
+        FailIfReasonerRuns(),
+    )
+    assert result["response"]["status"] == "attention_required"
+    assert "requiere atención" in result["response"]["answer"]
+    assert "WhatsApp" in result["response"]["answer"]
 
 
 def test_telephony_synonym_routes_to_live_voiceops_status():

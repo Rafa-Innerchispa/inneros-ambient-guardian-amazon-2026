@@ -1,7 +1,12 @@
 import time
 
 from ambient_guardian.core import GuardianReasoner, GuardianState
-from ambient_guardian.orchestration import localize_alexa_result, simulated_alexa_turn
+from ambient_guardian.orchestration import (
+    _history_categories,
+    _history_window,
+    localize_alexa_result,
+    simulated_alexa_turn,
+)
 
 
 class FailIfReasonerRuns:
@@ -40,8 +45,8 @@ class StubHomeAssistant:
     def home_context(self):
         return {"configured": True, "reachable": True, "alarm": None, "detail": "stub"}
 
-    def history_timeline(self, start, end, max_events=60):
-        del start, end, max_events
+    def history_timeline(self, start, end, max_events=60, categories=None):
+        del start, end, max_events, categories
         return {
             "truth": "REAL",
             "source": "home-assistant-recorder",
@@ -170,6 +175,32 @@ def test_overnight_report_uses_real_history_without_ring_demo():
     assert "simulados de Ring" in answer
 
 
+def test_history_window_supports_yesterday_day_before_and_bounded_month():
+    yesterday_start, yesterday_end, yesterday_label = _history_window(
+        "últimos eventos de la alarma ayer"
+    )
+    before_start, before_end, before_label = _history_window(
+        "eventos Intelbras anteayer"
+    )
+    month_start, month_end, month_label = _history_window(
+        "algo relevante de UniFi del último mes"
+    )
+
+    assert yesterday_end - yesterday_start == before_end - before_start
+    assert (yesterday_end - yesterday_start).total_seconds() == 24 * 3600
+    assert before_start < yesterday_start
+    assert yesterday_label == "ayer"
+    assert before_label == "anteayer"
+    assert 29 <= (month_end - month_start).days <= 30
+    assert month_label == "los últimos treinta días"
+    assert _history_categories(
+        "últimos eventos de la alarma ayer", yesterday_start, yesterday_end
+    ) == {"security"}
+    assert _history_categories(
+        "algo relevante de UniFi del último mes", month_start, month_end
+    ) == {"network"}
+
+
 def test_overnight_report_can_be_rendered_in_english():
     result = simulated_alexa_turn(
         "show me the real overnight home events and tell me if the power went out",
@@ -248,24 +279,26 @@ def test_spoken_phone_number_is_rejected_and_redacted():
         FailIfReasonerRuns(),
     )
     assert "números dictados" in result["response"]["answer"]
-    assert "Grandstream o Zoiper" in result["response"]["answer"]
-    assert "línea externa sigue bloqueada" in result["response"]["answer"]
+    assert "alias privado" in result["response"]["answer"]
+    assert "WhatsApp" in result["response"]["answer"]
     assert "099" not in result["utterance"]
     assert result["prepared_action"] is None
 
 
 def test_private_phone_destination_explains_current_english_boundary():
+    approval = StubWhatsAppApproval()
     result = simulated_alexa_turn(
         "call my cell phone using Grandstream",
-        _state(),
+        _state(approval),
         FailIfReasonerRuns(),
     )
 
     localized = localize_alexa_result(result, "en-US")
     answer = localized["response"]["answer"]
-    assert "Grandstream or Zoiper extension" in answer
-    assert "external phone line remains blocked" in answer
-    assert result["prepared_action"] is None
+    assert "private mobile alias" in answer
+    assert "authorization to WhatsApp" in answer
+    assert result["prepared_action"]["action"] == "voiceops_owner_mobile_callback"
+    assert result["prepared_action"]["approval_delivery"] == "sent"
 
 
 def test_unifi_restart_is_prepared_then_executes_only_after_approval():

@@ -13,6 +13,7 @@ import httpx
 
 VOICEOPS_CONTRACT_VERSION = "voiceops.fieldops.telephony.v1"
 OWNER_TARGET_ALIAS = "voiceops.owner"
+OWNER_MOBILE_TARGET_ALIAS = "voiceops.owner.mobile"
 
 
 class VoiceOpsConfigurationError(RuntimeError):
@@ -23,7 +24,13 @@ class VoiceOpsClient(Protocol):
     def status(self) -> Mapping[str, Any]: ...
 
     def request_owner_callback(
-        self, *, correlation_id: str, reason: str, requested_by: str
+        self,
+        *,
+        correlation_id: str,
+        reason: str,
+        requested_by: str,
+        target_alias: str = OWNER_TARGET_ALIAS,
+        approval_id: str = "",
     ) -> Mapping[str, Any]: ...
 
     def receipt(self, correlation_id: str) -> Mapping[str, Any]: ...
@@ -75,7 +82,13 @@ class LocalVoiceOpsRuntimeClient:
         return self._json("/v1/telephony/status")
 
     def request_owner_callback(
-        self, *, correlation_id: str, reason: str, requested_by: str
+        self,
+        *,
+        correlation_id: str,
+        reason: str,
+        requested_by: str,
+        target_alias: str = OWNER_TARGET_ALIAS,
+        approval_id: str = "",
     ) -> Mapping[str, Any]:
         return self._json(
             "/v1/callbacks",
@@ -84,6 +97,9 @@ class LocalVoiceOpsRuntimeClient:
                 "correlation_id": correlation_id,
                 "reason": " ".join(reason.split())[:600],
                 "requested_by": requested_by[:80],
+                "target_alias": OWNER_TARGET_ALIAS,
+                "approval_channel": "whatsapp" if approval_id else "",
+                "approval_id": approval_id[:120],
             },
         )
 
@@ -150,6 +166,9 @@ class VoiceOpsBridge:
                 "callback_ready": True,
                 "execution_owner": "voiceops-simulator",
                 "autonomous_pstn_enabled": False,
+                "owner_mobile_callback_ready": True,
+                "owner_mobile_target_alias": OWNER_MOBILE_TARGET_ALIAS,
+                "owner_mobile_requires_whatsapp_approval": True,
             }
         try:
             contract = dict(self.client.status())  # type: ignore[union-attr]
@@ -165,6 +184,7 @@ class VoiceOpsBridge:
                 "blocker": f"voiceops_unreachable:{type(exc).__name__}",
             }
         runtime = contract.get("runtime") if isinstance(contract.get("runtime"), Mapping) else {}
+        mobile = contract.get("owner_mobile") if isinstance(contract.get("owner_mobile"), Mapping) else {}
         valid = contract.get("contract_version") == VOICEOPS_CONTRACT_VERSION
         ready = bool(valid and contract.get("state") == "READY" and runtime.get("ok"))
         return {
@@ -179,15 +199,30 @@ class VoiceOpsBridge:
             ),
             "autonomous_pstn_enabled": bool(runtime.get("autonomous_pstn_enabled")),
             "public_sip_rtp": bool(runtime.get("public_sip_rtp")),
+            "owner_mobile_callback_ready": bool(mobile.get("callback_ready")),
+            "owner_mobile_target_alias": str(
+                mobile.get("target_alias") or OWNER_MOBILE_TARGET_ALIAS
+            ),
+            "owner_mobile_requires_whatsapp_approval": bool(
+                mobile.get("requires_whatsapp_approval", True)
+            ),
+            "owner_mobile_last_four": str(mobile.get("dial_string_last_four") or ""),
         }
 
-    def request_owner_callback(self, *, correlation_id: str, reason: str) -> dict[str, Any]:
+    def request_owner_callback(
+        self,
+        *,
+        correlation_id: str,
+        reason: str,
+        target_alias: str = OWNER_TARGET_ALIAS,
+        approval_id: str = "",
+    ) -> dict[str, Any]:
         if self.mode == "simulator":
             simulated = {
                 "contract_version": VOICEOPS_CONTRACT_VERSION,
                 "correlation_id": correlation_id,
                 "status": "simulated_completed",
-                "target_alias": OWNER_TARGET_ALIAS,
+                "target_alias": target_alias,
                 "autonomous_pstn_enabled": False,
             }
             return {
@@ -196,7 +231,7 @@ class VoiceOpsBridge:
                 "adapter": "voiceops-simulator",
                 "truth_label": "SIMULATED",
                 "callback_status": "simulated_completed",
-                "target_alias": OWNER_TARGET_ALIAS,
+                "target_alias": target_alias,
                 "verification_scope": "simulator_receipt",
                 "voiceops_receipt_digest": _digest(simulated),
             }
@@ -208,6 +243,8 @@ class VoiceOpsBridge:
                     correlation_id=correlation_id,
                     reason=reason,
                     requested_by="ambient-guardian",
+                    target_alias=target_alias,
+                    approval_id=approval_id,
                 )
             )
             readback = dict(self.client.receipt(correlation_id))
@@ -248,7 +285,11 @@ class VoiceOpsBridge:
             and status in {"dispatched", "duplicate"}
             and call_id
             and call_id == dispatched_call_id
-            and target in owner_targets
+            and (
+                target in owner_targets
+                if target_alias == OWNER_TARGET_ALIAS
+                else target == OWNER_MOBILE_TARGET_ALIAS
+            )
             and not bool(readback.get("autonomous_pstn_enabled"))
             and not bool(runtime.get("public_sip_rtp"))
         )
@@ -258,7 +299,7 @@ class VoiceOpsBridge:
             "adapter": "voiceops-runtime",
             "truth_label": "REAL" if verified else "CODE_READY",
             "callback_status": status or "unknown",
-            "target_alias": OWNER_TARGET_ALIAS,
+            "target_alias": target_alias,
             "call_id_hash": hashlib.sha256(call_id.encode("utf-8")).hexdigest()
             if call_id
             else None,

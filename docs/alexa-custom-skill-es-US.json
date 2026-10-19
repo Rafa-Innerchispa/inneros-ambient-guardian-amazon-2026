@@ -45,6 +45,8 @@
             "dame información de {query}",
             "dame información sobre {query}",
             "qué pasa con {query}",
+            "qué pasó con {query}",
+            "últimos eventos de {query}",
             "verifica {query}",
             "comprueba {query}"
           ]
@@ -111,7 +113,8 @@
             "dame el estado de UniFi",
             "dame el estado de uni fi",
             "cómo está la red wifi",
-            "están conectados los puntos de acceso UniFi"
+            "están conectados los puntos de acceso UniFi",
+            "revisa la red Ubiquiti"
           ]
         },
         {
@@ -134,6 +137,7 @@
             "cómo está el servidor Intel",
             "cómo está el servidor AMD",
             "cómo están los Raspberry Pi",
+            "cómo está el Raspberry Pi",
             "dame el estado de los Raspberry Pi",
             "revisa el Raspberry Pi de la casa",
             "revisa el nodo punto cuatro",

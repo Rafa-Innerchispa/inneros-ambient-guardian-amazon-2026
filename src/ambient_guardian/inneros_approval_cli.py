@@ -38,6 +38,14 @@ def _request(payload: dict[str, Any]) -> dict[str, Any]:
     action_id = str(payload.get("action_id") or "").strip()
     action_digest = str(payload.get("action_digest") or "").strip()
     target_label = str(payload.get("target_label") or "equipo UniFi").strip()[:120]
+    action_type = str(payload.get("action_type") or "unifi_restart").strip()
+    allowed_action_types = {
+        "unifi_restart",
+        "voiceops_owner_callback",
+        "voiceops_owner_mobile_callback",
+    }
+    if action_type not in allowed_action_types:
+        raise ValueError("unsupported approval action type")
     expires_at = str(payload.get("expires_at") or "").strip()
     if not action_id or len(action_digest) != 64 or not expires_at:
         raise ValueError("incomplete action approval request")
@@ -66,18 +74,29 @@ def _request(payload: dict[str, Any]) -> dict[str, Any]:
         "AMBIENT_GUARDIAN_APPROVAL_REPO",
         "Rafa-Innerchispa/inneros-ambient-guardian-amazon-2026",
     ).strip()
+    is_telephony = action_type.startswith("voiceops_")
+    title = (
+        f"Autorizar llamada Grandstream: {target_label}"
+        if is_telephony
+        else f"Autorizar reinicio UniFi: {target_label}"
+    )
+    objective = (
+        f"Autorizar o rechazar la llamada gobernada a {target_label} solicitada por Alexa."
+        if is_telephony
+        else f"Autorizar o rechazar el reinicio físico de {target_label} solicitado por Alexa."
+    )
     doc = {
         "task_id": task_id,
         "workflow_id": f"ambient_guardian:{action_id}",
-        "title": f"Autorizar reinicio UniFi: {target_label}",
-        "objective": f"Autorizar o rechazar el reinicio físico de {target_label} solicitado por Alexa.",
+        "title": title,
+        "objective": objective,
         "assignee": "local",
         "assigned_to": "local",
         "owner": "local",
         "from_agent": "ambient_guardian_alexa",
         "preferred_provider": "local",
         "execution_lane": "internal",
-        "task_class": "device_action",
+        "task_class": "telephony_action" if is_telephony else "device_action",
         "status": "awaiting_owner_approval",
         "priority": "high",
         "repo": repo,
@@ -88,7 +107,7 @@ def _request(payload: dict[str, Any]) -> dict[str, Any]:
         "updated_at": now,
         "revision": int((existing or {}).get("revision") or 0) + 1,
         "payload": {
-            "action_type": "ambient_guardian_unifi_restart",
+            "action_type": f"ambient_guardian_{action_type}",
             "action_id": action_id,
             "action_digest": action_digest,
             "target_alias": str(payload.get("target_alias") or "")[:80],
@@ -104,12 +123,19 @@ def _request(payload: dict[str, Any]) -> dict[str, Any]:
     )
 
     short = task_id.replace("ops_", "")[:6]
-    body = (
-        "🔐 *Ambient Guardian · autorización física*\n"
-        f"Alexa solicitó reiniciar *{target_label}*.\n"
+    action_text = (
+        f"Alexa solicitó llamar a *{target_label}* mediante la central Grandstream.\n"
+        "Todavía no se ejecutó ninguna llamada. Al confirmar, VoiceOps marcará "
+        "únicamente el alias privado permitido; no se aceptan números dictados.\n"
+        if is_telephony
+        else f"Alexa solicitó reiniciar *{target_label}*.\n"
         "Todavía no se ejecutó ninguna acción. Al confirmar, Ambient Guardian "
         "reiniciará solamente ese equipo mediante Home Assistant y verificará que vuelva.\n"
-        f"Referencia: `{task_id}`\nCaduca: {expires_at}\n\n"
+    )
+    body = (
+        "🔐 *Ambient Guardian · autorización física*\n"
+        + action_text
+        + f"Referencia: `{task_id}`\nCaduca: {expires_at}\n\n"
         "Usa *Confirmar* / *Cancelar*. Si no aparecen botones, responde:\n"
         f"• *CONFIRMAR {short}*\n• *CANCELAR {short}*"
     )

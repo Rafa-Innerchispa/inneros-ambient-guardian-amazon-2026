@@ -32,6 +32,7 @@ def clear_bridge_env(monkeypatch):
         "AMBIENT_GUARDIAN_UNIFI_RESTART_ENABLED",
         "AMBIENT_GUARDIAN_UNIFI_RESTART_TARGETS",
         "AMBIENT_GUARDIAN_UNIFI_STATUS_ENTITIES",
+        "AMBIENT_GUARDIAN_RASPBERRY_STATUS_ENTITIES",
         "AMBIENT_GUARDIAN_CAMERA_ENTITY_ALLOWLIST",
         "AMBIENT_GUARDIAN_SHARED_ENV_FILE",
         "HA_URL",
@@ -67,6 +68,31 @@ def test_camera_status_reads_only_explicit_allowlist(monkeypatch):
         "camera.entrada",
         "device_tracker.nvr_dahua",
     }
+
+
+def test_raspberry_status_reads_real_allowlisted_home_assistant_entities(monkeypatch):
+    clear_bridge_env(monkeypatch)
+    monkeypatch.setenv("HOME_ASSISTANT_URL", "http://ha.local:8123")
+    monkeypatch.setenv("HOME_ASSISTANT_TOKEN", "test-token")
+    monkeypatch.setenv(
+        "AMBIENT_GUARDIAN_RASPBERRY_STATUS_ENTITIES",
+        "device_tracker.innerspark_pi_server_2,sensor.inneros_pi01_solar_status",
+    )
+
+    def fake_get(url, headers, timeout):
+        entity_id = url.rsplit("/", 1)[-1]
+        return FakeResponse(
+            {
+                "entity_id": entity_id,
+                "state": "home" if entity_id.startswith("device_tracker.") else "online",
+                "attributes": {"friendly_name": "InnerOS Pi01"},
+            }
+        )
+
+    monkeypatch.setattr("ambient_guardian.home_assistant.httpx.get", fake_get)
+    result = HomeAssistantBridge().raspberry_status()
+    assert result["configured"] is True
+    assert [item["state"] for item in result["entities"]] == ["home", "online"]
 
 
 def test_unifi_status_includes_target_telemetry_without_restart(monkeypatch):
