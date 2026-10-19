@@ -17,6 +17,7 @@
           ],
           "samples": [
             "pregunta {query}",
+            "por {query}",
             "dime {query}",
             "revisa {query}",
             "consulta {query}",
