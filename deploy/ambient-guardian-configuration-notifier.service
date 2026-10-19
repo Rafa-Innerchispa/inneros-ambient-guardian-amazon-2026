@@ -1,0 +1,18 @@
+[Unit]
+Description=Ambient Guardian home configuration change notifier
+After=network-online.target inneros-ambient-guardian-demo.service
+
+[Service]
+Type=oneshot
+WorkingDirectory=/home/rlopez/inneros/inneros_core/workspaces/inneros-ambient-guardian-amazon-2026
+Environment=PYTHONPATH=/home/rlopez/inneros/inneros_core/workspaces/inneros-ambient-guardian-amazon-2026/src
+Environment=AMBIENT_GUARDIAN_SHARED_ENV_FILE=/home/rlopez/inneros/inneros_core/platform/.env
+Environment=AMBIENT_GUARDIAN_ALEXA_SPEAK_ENABLED=1
+Environment=AMBIENT_GUARDIAN_ALEXA_NOTIFY_ALLOWLIST=notify.echo_cuarto_speak
+Environment=AMBIENT_GUARDIAN_CONFIGURATION_ALERT_TARGETS=notify.echo_cuarto_speak
+Environment=AMBIENT_GUARDIAN_CONFIGURATION_ALERT_LANGUAGE=en
+Environment=AMBIENT_GUARDIAN_CONFIGURATION_BOOTSTRAP_RECENT_MINUTES=120
+Environment=AMBIENT_GUARDIAN_CONFIGURATION_DAY_START_HOUR=8
+Environment=AMBIENT_GUARDIAN_CONFIGURATION_DAY_END_HOUR=22
+Environment=AMBIENT_GUARDIAN_HOME_TIMEZONE=America/Guayaquil
+ExecStart=/home/rlopez/inneros/inneros_core/workspaces/inneros-ambient-guardian-amazon-2026/.venv/bin/python -m ambient_guardian.configuration_notifier

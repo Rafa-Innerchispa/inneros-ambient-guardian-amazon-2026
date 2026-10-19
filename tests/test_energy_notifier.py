@@ -42,6 +42,46 @@ def test_outage_is_announced_once_even_during_quiet_hours(tmp_path, monkeypatch)
     assert "estimated runtime" in bridge.messages[0][1]
 
 
+def test_outage_executes_owner_preauthorized_noncritical_shed_once(
+    tmp_path, monkeypatch
+):
+    class ShedBridge(StubBridge):
+        def __init__(self):
+            super().__init__(outage=True)
+            self.shed_calls = 0
+
+        def shed_noncritical_energy_loads(self):
+            self.shed_calls += 1
+            return {
+                "enabled": True,
+                "owner_preauthorized": True,
+                "targets": 3,
+                "turned_off": 2,
+                "verification_failed": False,
+                "results": [],
+            }
+
+    monkeypatch.setenv("AMBIENT_GUARDIAN_ENERGY_ALERT_LANGUAGE", "en")
+    bridge = ShedBridge()
+    path = tmp_path / "state.json"
+    first = run_cycle(
+        bridge,
+        now=datetime(2026, 10, 15, 14, 0, tzinfo=timezone.utc),
+        state_path=path,
+        dry_run=False,
+    )
+    second = run_cycle(
+        bridge,
+        now=datetime(2026, 10, 15, 14, 1, tzinfo=timezone.utc),
+        state_path=path,
+        dry_run=False,
+    )
+    assert first["load_shed"]["turned_off"] == 2
+    assert second["load_shed"] is None
+    assert bridge.shed_calls == 1
+    assert "turned off 2" in bridge.messages[0][1]
+
+
 def test_restoration_is_announced_once(tmp_path):
     path = tmp_path / "state.json"
     bridge = StubBridge(outage=True)

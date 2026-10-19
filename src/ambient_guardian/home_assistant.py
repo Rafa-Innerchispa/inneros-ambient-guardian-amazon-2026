@@ -211,6 +211,62 @@ class HomeAssistantBridge:
         self.raspberry_status_entities = {
             item.strip() for item in raw_raspberry_status.split(",") if item.strip()
         }
+        self.energy_load_shed_enabled = os.getenv(
+            "AMBIENT_GUARDIAN_ENERGY_LOAD_SHED_ENABLED", "0"
+        ) == "1"
+        self.energy_load_shed_owner_preauthorized = os.getenv(
+            "AMBIENT_GUARDIAN_ENERGY_LOAD_SHED_OWNER_PREAUTHORIZED", "0"
+        ) == "1"
+        raw_load_shed_targets = os.getenv(
+            "AMBIENT_GUARDIAN_ENERGY_LOAD_SHED_TARGETS", ""
+        ).strip()
+        self.energy_load_shed_targets: dict[str, dict[str, str]] = {}
+        protected_fragments = {
+            "alarm",
+            "alarma",
+            "aquarium",
+            "battery",
+            "breaker",
+            "camera",
+            "cinta_mural",
+            "escalera",
+            "gateway",
+            "inverter",
+            "inversor",
+            "pecera",
+            "rack",
+            "router",
+            "server",
+            "solar",
+            "stairs",
+            "unifi",
+            "wifi",
+        }
+        if raw_load_shed_targets:
+            try:
+                parsed_loads = json.loads(raw_load_shed_targets)
+            except json.JSONDecodeError as exc:
+                raise ValueError(
+                    "AMBIENT_GUARDIAN_ENERGY_LOAD_SHED_TARGETS must be valid JSON"
+                ) from exc
+            if not isinstance(parsed_loads, dict):
+                raise ValueError("energy load-shed targets must be an object")
+            for alias, raw_target in parsed_loads.items():
+                if not isinstance(raw_target, dict):
+                    raise ValueError("energy load-shed targets must be objects")
+                entity_id = str(raw_target.get("entity_id") or "").strip()
+                label = str(raw_target.get("label") or alias).strip()
+                if not entity_id.startswith(("light.", "switch.")):
+                    raise ValueError("energy load-shed targets must be lights or switches")
+                normalized = f"{entity_id} {label}".lower()
+                if any(fragment in normalized for fragment in protected_fragments):
+                    raise ValueError(
+                        f"protected load cannot be configured for shedding: {alias}"
+                    )
+                self.energy_load_shed_targets[str(alias).strip().lower()] = {
+                    "entity_id": entity_id,
+                    "label": label,
+                }
 
         self.unifi_restart_enabled = os.getenv(
             "AMBIENT_GUARDIAN_UNIFI_RESTART_ENABLED", "0"
@@ -345,6 +401,114 @@ class HomeAssistantBridge:
             "entities": self._allowlisted_states(self.raspberry_status_entities)
             if self.configured
             else [],
+        }
+
+    def configuration_devices(self) -> dict[str, Any]:
+        """Return a bounded device inventory suitable for durable change detection."""
+        if not self.configured:
+            return {"configured": False, "devices": []}
+        response = httpx.get(
+            f"{self.url}/api/states",
+            headers=self._headers(),
+            timeout=max(self.timeout, 10.0),
+        )
+        response.raise_for_status()
+        devices: list[dict[str, Any]] = []
+        for item in response.json():
+            entity_id = str(item.get("entity_id") or "")
+            if not entity_id.startswith("device_tracker."):
+                continue
+            attributes = item.get("attributes") or {}
+            label = str(attributes.get("friendly_name") or "").strip()
+            words = label.split()
+            if (
+                words
+                and len(words) % 2 == 0
+                and words[: len(words) // 2] == words[len(words) // 2 :]
+            ):
+                label = " ".join(words[: len(words) // 2])
+            lowered = f"{entity_id} {label}".lower()
+            infrastructure = any(
+                marker in lowered
+                for marker in ("u6+", "u6 plus", "u7", "access point", "gateway")
+            )
+            devices.append(
+                {
+                    "entity_id": entity_id,
+                    "label": label,
+                    "state": str(item.get("state") or "unknown"),
+                    "last_updated": item.get("last_updated"),
+                    "kind": "network_infrastructure"
+                    if infrastructure
+                    else "network_client",
+                    "source": "unifi"
+                    if entity_id.startswith("device_tracker.unifi_") or infrastructure
+                    else "home_assistant",
+                }
+            )
+        return {
+            "configured": True,
+            "devices": sorted(devices, key=lambda item: item["entity_id"])[:512],
+        }
+
+    def shed_noncritical_energy_loads(self) -> dict[str, Any]:
+        """Turn off only owner-preauthorized, explicitly allowlisted noncritical loads."""
+        if not self.configured:
+            raise RuntimeError("Home Assistant bridge is not configured")
+        if not self.energy_load_shed_enabled:
+            raise PermissionError("automatic energy load shedding is disabled")
+        if not self.energy_load_shed_owner_preauthorized:
+            raise PermissionError("automatic energy load shedding is not owner preauthorized")
+
+        results: list[dict[str, Any]] = []
+        for alias, target in sorted(self.energy_load_shed_targets.items()):
+            entity_id = target["entity_id"]
+            before = self.get_entity_state(entity_id)
+            before_state = str(before.get("state") or "unknown")
+            if before_state != "on":
+                results.append(
+                    {
+                        "alias": alias,
+                        "label": target["label"],
+                        "entity_id": entity_id,
+                        "before": before_state,
+                        "after": before_state,
+                        "status": "already_off",
+                    }
+                )
+                continue
+            domain = entity_id.split(".", 1)[0]
+            response = httpx.post(
+                f"{self.url}/api/services/{domain}/turn_off",
+                headers=self._headers(),
+                json={"entity_id": entity_id},
+                timeout=self.timeout,
+            )
+            response.raise_for_status()
+            time.sleep(0.25)
+            after = self.get_entity_state(entity_id)
+            after_state = str(after.get("state") or "unknown")
+            results.append(
+                {
+                    "alias": alias,
+                    "label": target["label"],
+                    "entity_id": entity_id,
+                    "before": before_state,
+                    "after": after_state,
+                    "status": "completed"
+                    if after_state == "off"
+                    else "verification_failed",
+                }
+            )
+        return {
+            "enabled": True,
+            "owner_preauthorized": True,
+            "targets": len(self.energy_load_shed_targets),
+            "turned_off": sum(item["status"] == "completed" for item in results),
+            "verification_failed": any(
+                item["status"] == "verification_failed" for item in results
+            ),
+            "results": results,
         }
 
     def _expanded_history_entities(self) -> tuple[list[str], dict[str, str]]:
