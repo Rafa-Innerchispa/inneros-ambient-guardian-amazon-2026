@@ -17,6 +17,9 @@ Environment=AMBIENT_GUARDIAN_ENERGY_DAY_END_HOUR=22
 Environment=AMBIENT_GUARDIAN_ENERGY_DAY_INTERVAL_MINUTES=30
 Environment=AMBIENT_GUARDIAN_ENERGY_CRITICAL_RUNTIME_HOURS=1
 Environment=AMBIENT_GUARDIAN_ENERGY_CRITICAL_SOC_PERCENT=25
+Environment=AMBIENT_GUARDIAN_ENERGY_LOAD_SHED_ENABLED=1
+Environment=AMBIENT_GUARDIAN_ENERGY_LOAD_SHED_OWNER_PREAUTHORIZED=1
+Environment='AMBIENT_GUARDIAN_ENERGY_LOAD_SHED_TARGETS={"desk_led":{"entity_id":"light.cinta_escritorio","label":"Desk LED strip"},"outdoor_umbrella":{"entity_id":"light.sombrilla","label":"Outdoor umbrella light"},"dmx_rgb":{"entity_id":"light.controller_rgb_ir_3e551f","label":"DMX RGB controller"}}'
 Environment="AMBIENT_GUARDIAN_BATTERY_NAME=TECLAM LiFePO4"
 Environment=AMBIENT_GUARDIAN_BATTERY_NOMINAL_WH=5888
 Environment=AMBIENT_GUARDIAN_BATTERY_RESERVE_PERCENT=20

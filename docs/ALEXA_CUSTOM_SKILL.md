@@ -123,7 +123,7 @@ for that locale before testing on the physical Echo.
 For the hackathon video, the canonical English path is `en-US` with:
 `Alexa, open Inner Oz`.
 
-The energy-resilience demo is read-only and fail-closed:
+The energy-resilience demo is fail-closed:
 
 - `Alexa, ask Inner Oz for the energy resilience status`
 - it reads the real grid, battery/inverter, capacity, voltage and output state from Home Assistant;
@@ -131,8 +131,15 @@ The energy-resilience demo is read-only and fail-closed:
   reserve and live load to estimate remaining runtime and the projected reserve time;
 - it reports the real outage start captured by Home Assistant Recorder;
 - it explains which critical load classes would be protected;
-- it keeps load shedding in `PREVIEW_ONLY` until the owner approves an explicit
-  Home Assistant circuit allowlist. It never interprets “turn off everything” as authority.
+- automatic load shedding remains disabled unless both the feature flag and the
+  owner-preauthorization flag are set and every target is present in an exact Home
+  Assistant entity allowlist. It never interprets “turn off everything” as authority;
+- the real-home profile preauthorizes only the desk LED strip, the outdoor umbrella
+  light and the DMX RGB controller. Alarm, aquarium, breaker, camera, stairs, rack,
+  routers, servers, solar/inverter and UniFi/Wi-Fi loads are rejected at configuration
+  time;
+- on a new outage transition, each approved load is turned off and read back for
+  verification. Restoration never turns a load back on automatically.
 
 ## Energy notifications and quiet hours
 
@@ -145,6 +152,20 @@ speaks once on the outage transition, once on restoration, and every 30 minutes 
 outage remains active between 08:00 and 22:00. Between 22:00 and 08:00 it stays silent
 unless the grid state changes or battery/runtime crosses a critical threshold. Repeated
 polls and repeated thresholds are deduplicated in a durable state file.
+
+## Home configuration change notifications
+
+`ambient-guardian-configuration-notifier.timer` inventories Home Assistant
+`device_tracker` entities every 15 seconds. It stores a private durable snapshot and
+announces newly added UniFi infrastructure or network clients through the allowlisted
+Echo target. A newly adopted U6 Plus is therefore reported as a configuration change,
+while ordinary `home`/`not_home` transitions for an already-known device do not create
+new-device announcements.
+
+The first run only announces recently updated infrastructure, which prevents a flood of
+old client notifications during installation. Changes detected between 22:00 and 08:00
+in `America/Guayaquil` are queued and spoken after quiet hours. Spoken messages omit MAC
+addresses and raw entity IDs; the private local state file is mode `0600`.
 
 Ordinary spoken briefs are limited to 08:00, 11:00, 16:00 and 18:00 in
 `America/Guayaquil`. Install `deploy/ralfia-daily-companion-safe-schedule.conf` as a
