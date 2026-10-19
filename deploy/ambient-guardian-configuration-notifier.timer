@@ -1,0 +1,12 @@
+[Unit]
+Description=Check Home Assistant for new devices every fifteen seconds
+
+[Timer]
+OnBootSec=15
+OnUnitActiveSec=15
+AccuracySec=2
+Persistent=false
+Unit=ambient-guardian-configuration-notifier.service
+
+[Install]
+WantedBy=timers.target
