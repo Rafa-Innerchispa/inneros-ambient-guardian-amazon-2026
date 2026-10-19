@@ -26,6 +26,28 @@
           ]
         },
         {
+          "name": "SystemStatusQueryIntent",
+          "slots": [
+            {
+              "name": "query",
+              "type": "AMAZON.SearchQuery"
+            }
+          ],
+          "samples": [
+            "status of {query}",
+            "what is the status of {query}",
+            "how is {query}",
+            "how are {query}",
+            "what do you know about {query}",
+            "tell me about {query}",
+            "give me information about {query}",
+            "what is happening with {query}",
+            "what is going on with {query}",
+            "check on {query}",
+            "verify {query}"
+          ]
+        },
+        {
           "name": "CapabilitiesIntent",
           "slots": [],
           "samples": [
@@ -106,6 +128,9 @@
             "what servers do we have",
             "how is the Intel server",
             "how is the AMD server",
+            "how are the Raspberry Pis",
+            "give me the Raspberry Pi status",
+            "check the home Raspberry Pi",
             "check node point four",
             "check node point five"
           ]
@@ -192,6 +217,8 @@
           "samples": [
             "is voice ops ready",
             "check the phone system",
+            "check the telephony system",
+            "give me the telephony status",
             "is grandstream ready"
           ]
         },

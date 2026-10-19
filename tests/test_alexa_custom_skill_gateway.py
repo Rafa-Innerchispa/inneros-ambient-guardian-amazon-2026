@@ -205,7 +205,7 @@ def test_spanish_launch_is_short_and_prompts_for_a_domain(monkeypatch):
     )
     speech = response["response"]["outputSpeech"]["text"]
     assert "InnerOS" in speech
-    assert "dame el estado de energía" in speech
+    assert "energía, WiFi, cámaras, servidores o telefonía" in speech
     assert response["response"]["shouldEndSession"] is False
     assert "Sigo aquí" in response["response"]["reprompt"]["outputSpeech"]["text"]
 
@@ -226,7 +226,40 @@ def test_spanish_fallback_allows_one_retry_inside_same_session():
     assert response["sessionAttributes"]["fallback_count"] == 1
     speech = response["response"]["outputSpeech"]["text"]
     assert "No entendí" in speech
-    assert "estado de energía" in speech
+    assert "estado del WiFi" in speech
+
+
+@pytest.mark.parametrize(
+    ("locale", "query", "expected"),
+    [
+        ("es-US", "wifi", "revisa el estado en vivo de wifi"),
+        ("es-US", "los Raspberry Pi", "revisa el estado en vivo de los Raspberry Pi"),
+        ("en-US", "the phone system", "check the live status of the phone system"),
+    ],
+)
+def test_general_status_intent_preserves_the_requested_subsystem(
+    monkeypatch, locale, query, expected
+):
+    calls = []
+    monkeypatch.setattr(
+        gateway,
+        "_backend_turn",
+        lambda backend_query, speaker_context=None: calls.append(backend_query)
+        or "respuesta",
+    )
+
+    response = gateway._dispatch(
+        request_payload(
+            intent_request(
+                query,
+                intent_name="SystemStatusQueryIntent",
+                locale=locale,
+            )
+        )
+    )
+
+    assert calls == [expected]
+    assert response["response"]["shouldEndSession"] is False
 
 
 def test_second_spanish_fallback_ends_session_without_looping():

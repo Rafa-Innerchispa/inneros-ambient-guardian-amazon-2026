@@ -55,8 +55,11 @@ _CAPABILITIES_QUERY = re.compile(
 )
 _VOICEOPS_STATUS_QUERY = re.compile(
     r"\b(?:c[oó]mo\s+est[aá]|estado\s+de|est[aá]\s+lista|funciona)\b[^.]*"
-    r"\b(?:voice\s*ops|central|pbx|grandstream|sistema\s+de\s+llamadas)\b"
-    r"|\b(?:voice\s*ops|pbx|grandstream)\b[^.]*\b(?:status|ready|working)\b",
+    r"\b(?:voice\s*ops|central|pbx|grandstream|sistema\s+de\s+llamadas|telefon[ií]a)\b"
+    r"|\b(?:voice\s*ops|pbx|grandstream|phone\s+system|telephony)\b[^.]*"
+    r"\b(?:status|ready|working|health)\b"
+    r"|\b(?:status|health|check|how\s+is|revisa)\b[^.]*"
+    r"\b(?:voice\s*ops|pbx|grandstream|phone\s+system|telephony|telefon[ií]a|central)\b",
     re.I,
 )
 
@@ -120,11 +123,11 @@ _CAMERA_STATUS_QUERY = re.compile(
     re.I,
 )
 _SERVER_STATUS_QUERY = re.compile(
-    r"\b(?:servers?|servidores?|fleet|flota|intel|amd|node|nodo|(?:one|uno|1)?\s*point\s*(?:four|five)|"
+    r"\b(?:servers?|servidores?|fleet|flota|intel|amd|node|nodo|raspberry\s*pi(?:s)?|(?:one|uno|1)?\s*point\s*(?:four|five)|"
     r"punto\s+(?:cuatro|cinco)|\.4|\.5)\b[^.]*\b(?:status|health|services?|gpu|inventory|"
     r"estado|salud|servicios?|inventario|tiene|tenemos)\b"
     r"|\b(?:status|health|what|which|check|estado|salud|qu[eé]|cu[aá]les|revisa)\b[^.]*"
-    r"\b(?:servers?|servidores?|fleet|flota|intel|amd|node|nodo|punto\s+(?:cuatro|cinco)|\.4|\.5)\b",
+    r"\b(?:servers?|servidores?|fleet|flota|intel|amd|node|nodo|raspberry\s*pi(?:s)?|punto\s+(?:cuatro|cinco)|\.4|\.5)\b",
     re.I,
 )
 

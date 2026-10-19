@@ -26,6 +26,30 @@
           ]
         },
         {
+          "name": "SystemStatusQueryIntent",
+          "slots": [
+            {
+              "name": "query",
+              "type": "AMAZON.SearchQuery"
+            }
+          ],
+          "samples": [
+            "estado de {query}",
+            "estado del {query}",
+            "cómo está {query}",
+            "cómo están {query}",
+            "qué sabes de {query}",
+            "qué sabes del {query}",
+            "háblame de {query}",
+            "háblame del {query}",
+            "dame información de {query}",
+            "dame información sobre {query}",
+            "qué pasa con {query}",
+            "verifica {query}",
+            "comprueba {query}"
+          ]
+        },
+        {
           "name": "CapabilitiesIntent",
           "slots": [],
           "samples": [
@@ -109,6 +133,9 @@
             "qué servidores tenemos",
             "cómo está el servidor Intel",
             "cómo está el servidor AMD",
+            "cómo están los Raspberry Pi",
+            "dame el estado de los Raspberry Pi",
+            "revisa el Raspberry Pi de la casa",
             "revisa el nodo punto cuatro",
             "revisa el nodo punto cinco"
           ]
@@ -195,6 +222,8 @@
           "slots": [],
           "samples": [
             "cómo está el sistema de llamadas",
+            "cómo está el sistema de telefonía",
+            "dame el estado de telefonía",
             "está lista la central",
             "puede llamarme voice ops",
             "cómo está la central grandstream"

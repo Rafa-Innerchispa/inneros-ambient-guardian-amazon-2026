@@ -78,6 +78,37 @@ def test_live_server_inventory_can_focus_node_point_four():
     assert "RTX 3060" in result["response"]["answer"]
 
 
+def test_live_server_inventory_recognizes_raspberry_pi_status_query():
+    state = GuardianState()
+    state.infrastructure = LiveFleetInventory()
+    result = simulated_alexa_turn(
+        "revisa el estado en vivo de los Raspberry Pi",
+        state,
+        FailIfReasonerRuns(),
+    )
+    assert result["response"]["reasoning_mode"] == "deterministic-server-status"
+    assert "Intel node point four" in result["response"]["answer"]
+
+
+def test_telephony_synonym_routes_to_live_voiceops_status():
+    state = GuardianState()
+    state.voiceops = VoiceOpsStatus(
+        {
+            "state": "READY",
+            "truth_label": "REAL",
+            "callback_ready": True,
+            "owner_confirmed_e2e_calling": True,
+        }
+    )
+    result = simulated_alexa_turn(
+        "revisa el estado en vivo de telefonía",
+        state,
+        FailIfReasonerRuns(),
+    )
+    assert result["response"]["reasoning_mode"] == "deterministic-voiceops-status"
+    assert "están listos" in result["response"]["answer"]
+
+
 def test_antigravity_voice_request_creates_local_draft_without_dispatch():
     result = simulated_alexa_turn(
         "prepara una tarea para Antigravity: crear una escena de bienvenida",
