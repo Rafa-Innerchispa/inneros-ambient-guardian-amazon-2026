@@ -66,6 +66,32 @@ The Alexa+ MCP Toolkit path should be used only if the owner account/device is e
 
 For Ring, keep the simulator enabled until the owner has a Ring Developer app, OAuth/account linking, webhook signing configuration, and either an official test account or a real device. Do not label the Ring track complete before that binding is demonstrated.
 
+## Real-home notification services
+
+Install the service and timer units without exposing Home Assistant credentials in Git:
+
+```bash
+install -m 0644 deploy/ambient-guardian-energy-notifier.service ~/.config/systemd/user/
+install -m 0644 deploy/ambient-guardian-energy-notifier.timer ~/.config/systemd/user/
+install -m 0644 deploy/ambient-guardian-configuration-notifier.service ~/.config/systemd/user/
+install -m 0644 deploy/ambient-guardian-configuration-notifier.timer ~/.config/systemd/user/
+systemctl --user daemon-reload
+systemctl --user enable --now ambient-guardian-energy-notifier.timer
+systemctl --user enable --now ambient-guardian-configuration-notifier.timer
+```
+
+The configuration notifier polls the bounded Home Assistant device inventory every 15
+seconds and announces only newly added entities. Its snapshot is private and durable, so
+ordinary reconnects do not repeat an announcement. Quiet-hour changes are queued until
+08:00 `America/Guayaquil`.
+
+Automatic outage load shedding is disabled by default. The real-home service opts in to
+an exact owner-preauthorized allowlist containing only three noncritical lights. Protected
+names such as breakers, cameras, aquarium equipment, stairs, rack, servers, solar,
+inverter, UniFi and Wi-Fi are rejected during bridge initialization. Each permitted
+shutdown is verified by reading the entity back, and utility restoration does not restore
+loads automatically.
+
 ## Cloud portability
 
 The container only requires HTTP ingress. It can run on Cloud Run, ECS/Fargate, Kubernetes, a VM, or the existing local InnerOS host. The default demo remains functional without a model connection because it has a deterministic local fallback.
