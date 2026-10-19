@@ -236,6 +236,38 @@ def test_energy_resilience_reports_real_outage_but_never_sheds_loads():
     assert "autonomía estimada" in result["response"]["answer"]
 
 
+def test_energy_resilience_reports_exact_owner_preauthorized_policy():
+    state = _state()
+    state.home_assistant.energy_load_shed_enabled = True
+    state.home_assistant.energy_load_shed_owner_preauthorized = True
+    state.home_assistant.energy_load_shed_targets = {
+        "desk_led": {
+            "entity_id": "light.cinta_escritorio",
+            "label": "Desk LED strip",
+        },
+        "dmx_rgb": {
+            "entity_id": "light.controller_rgb_ir_3e551f",
+            "label": "DMX RGB controller",
+        },
+    }
+    result = simulated_alexa_turn(
+        "dame el estado de resiliencia energética y el plan de ahorro",
+        state,
+        FailIfReasonerRuns(),
+    )
+
+    plan = result["energy_resilience"]
+    assert plan["execution"] == "ARMED_ON_OUTAGE"
+    assert plan["requires_owner_allowlist"] is False
+    assert plan["load_shed_targets"] == ["desk_led", "dmx_rgb"]
+    assert "2 cargas no críticas preautorizadas" in result["response"]["answer"]
+    assert "Esta consulta no ejecutó una acción" in result["response"]["answer"]
+
+    localized = localize_alexa_result(result, "en-US")
+    assert "2 owner-preauthorized noncritical loads" in localized["response"]["answer"]
+    assert "This query executed no action" in localized["response"]["answer"]
+
+
 def test_plain_energy_information_uses_deterministic_real_home_report():
     result = simulated_alexa_turn(
         "información de energía",
