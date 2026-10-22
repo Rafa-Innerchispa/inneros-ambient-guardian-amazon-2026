@@ -37,6 +37,18 @@ class StubHomeAssistant:
             "status": "sensor.estudio_state",
             "uptime": "sensor.estudio_uptime",
         },
+        "cuarto": {
+            "label": "Punto de acceso Cuarto",
+            "button": "button.cuarto_restart",
+            "status": "sensor.cuarto_state",
+            "uptime": "sensor.cuarto_uptime",
+        },
+        "bedroom": {
+            "label": "Punto de acceso Cuarto",
+            "button": "button.cuarto_restart",
+            "status": "sensor.cuarto_state",
+            "uptime": "sensor.cuarto_uptime",
+        },
     }
 
     def __init__(self):
@@ -401,6 +413,43 @@ def test_english_study_router_phrase_prepares_allowlisted_alias_only():
     assert result["prepared_action"]["action"] == "unifi_restart:study"
     assert result["prepared_action"]["executed"] is False
     assert result["prepared_action"]["approval_delivery"] == "sent"
+    assert state.home_assistant.restart_calls == []
+
+
+def test_cuarto_restart_explicitly_requests_whatsapp_authorization_in_spanish():
+    approval = StubWhatsAppApproval()
+    state = _state(approval)
+
+    result = simulated_alexa_turn(
+        "prepara reiniciar el punto de acceso cuarto",
+        state,
+        FailIfReasonerRuns(),
+    )
+
+    answer = result["response"]["answer"]
+    assert result["prepared_action"]["action"] == "unifi_restart:cuarto"
+    assert "Punto de acceso Cuarto" in answer
+    assert "Necesito tu autorización por WhatsApp antes de reiniciarlo" in answer
+    assert "Todavía no reinicié ningún equipo" in answer
+    assert state.home_assistant.restart_calls == []
+
+
+def test_bedroom_alias_names_cuarto_and_requests_whatsapp_authorization_in_english():
+    approval = StubWhatsAppApproval()
+    state = _state(approval)
+
+    result = simulated_alexa_turn(
+        "prepare to restart access point bedroom",
+        state,
+        FailIfReasonerRuns(),
+    )
+    localized = localize_alexa_result(result, "en-US")
+
+    answer = localized["response"]["answer"]
+    assert result["prepared_action"]["action"] == "unifi_restart:bedroom"
+    assert "the Cuarto access point" in answer
+    assert "I need your authorization through WhatsApp before I restart it" in answer
+    assert "No device has restarted yet" in answer
     assert state.home_assistant.restart_calls == []
 
 
