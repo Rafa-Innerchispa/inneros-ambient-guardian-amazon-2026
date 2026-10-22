@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import subprocess
@@ -75,8 +76,37 @@ class WhatsAppApprovalBridge:
             return {"ok": False, "error": "inneros_approval_bridge_invalid_response"}
         return output if isinstance(output, dict) else {"ok": False, "error": "invalid_response"}
 
+    @staticmethod
+    def task_id_for_digest(action_digest: str) -> str:
+        digest = hashlib.sha256(
+            f"ambient-guardian:{action_digest}".encode("utf-8")
+        ).hexdigest()
+        return f"ops_{digest[:12]}"
+
     def request(self, payload: dict[str, Any]) -> dict[str, Any]:
-        return self._run("request", payload)
+        result = self._run("request", payload)
+        if result.get("ok") or result.get("error") != "TimeoutExpired":
+            return result
+
+        # The InnerOS request is intentionally durable-before-notify. A slow
+        # WhatsApp provider can therefore persist and deliver the approval just
+        # before the subprocess timeout. Reconcile that deterministic record so
+        # the caller does not announce a false delivery failure or orphan the
+        # already-delivered authorization.
+        action_digest = str(payload.get("action_digest") or "")
+        if len(action_digest) != 64:
+            return result
+        task_id = self.task_id_for_digest(action_digest)
+        recovered = self.status(task_id)
+        if not recovered.get("ok"):
+            return result
+        return {
+            "ok": True,
+            "task_id": task_id,
+            "channel": "whatsapp",
+            "status": str(recovered.get("status") or "awaiting_owner_approval"),
+            "reconciled_after_timeout": True,
+        }
 
     def status(self, task_id: str) -> dict[str, Any]:
         return self._run("status", {"task_id": task_id})

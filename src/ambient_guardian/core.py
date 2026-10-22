@@ -175,9 +175,80 @@ class GuardianState:
             if datetime.fromisoformat(item.expires_at) < utc_now():
                 self.approval_store.finish(item.action_id, "expired")
                 continue
+            if (
+                not item.approval_task_id
+                and self.action_requires_owner(item.action)
+                and self.approval_bridge.enabled
+            ):
+                task_id_factory = getattr(
+                    self.approval_bridge, "task_id_for_digest", None
+                )
+                if callable(task_id_factory):
+                    candidate = str(task_id_factory(item.action_digest) or "")
+                    recovered = (
+                        self.approval_bridge.status(candidate) if candidate else {}
+                    )
+                    if recovered.get("ok"):
+                        item.approval_task_id = candidate
+                        self.approval_store.bind_task(item.action_id, candidate)
             restored[item.token] = item
         with self._lock:
             self.pending.update(restored)
+
+    def _unifi_target_identity(self, item: PendingAction) -> str | None:
+        if not item.action.startswith("unifi_restart:"):
+            return None
+        alias = item.action.split(":", 1)[1]
+        target = self.home_assistant.unifi_restart_targets.get(alias) or {}
+        return str(target.get("button") or target.get("label") or alias)
+
+    def _cancel_duplicate_unifi_actions(self, completed: PendingAction) -> None:
+        identity = self._unifi_target_identity(completed)
+        if not identity:
+            return
+        with self._lock:
+            duplicates = [
+                (token, item)
+                for token, item in self.pending.items()
+                if item.action_id != completed.action_id
+                and self._unifi_target_identity(item) == identity
+            ]
+            for token, _item in duplicates:
+                self.pending.pop(token, None)
+        for _token, item in duplicates:
+            self.approval_store.finish(item.action_id, "cancelled")
+            if item.approval_task_id:
+                self.approval_bridge.close(item.approval_task_id, "cancelled")
+
+    def _announce_unifi_completion(
+        self, item: PendingAction, *, executed: bool, verified: bool
+    ) -> bool:
+        if not item.action.startswith("unifi_restart:"):
+            return False
+        alias = item.action.split(":", 1)[1]
+        if alias not in {"cuarto", "bedroom"}:
+            return False
+        if alias == "bedroom":
+            message = (
+                "Authorization confirmed. The Cuarto access point restarted successfully "
+                "and is back online."
+                if executed and verified
+                else "Authorization confirmed. The Cuarto access point restart was attempted, "
+                "but I could not verify that it came back online. I will not retry automatically."
+            )
+        else:
+            message = (
+                "Autorización confirmada. El punto de acceso Cuarto se reinició correctamente "
+                "y está nuevamente en línea."
+                if executed and verified
+                else "Autorización confirmada. Se intentó reiniciar el punto de acceso Cuarto, "
+                "pero no pude verificar que volviera en línea. No lo intentaré otra vez automáticamente."
+            )
+        try:
+            self.home_assistant.speak("notify.echo_cuarto_speak", message)
+        except Exception:
+            return False
+        return True
 
     def add_event(
         self,
@@ -780,6 +851,12 @@ class GuardianState:
         with self._lock:
             pending_items = list(self.pending.values())
         for item in pending_items:
+            with self._lock:
+                if not any(
+                    current.action_id == item.action_id
+                    for current in self.pending.values()
+                ):
+                    continue
             if not (
                 item.action.startswith("unifi_restart:")
                 or item.action in {"voiceops_owner_callback", "voiceops_owner_mobile_callback"}
@@ -811,6 +888,10 @@ class GuardianState:
                     expected_action=item.action,
                 )
             except Exception as exc:
+                self._cancel_duplicate_unifi_actions(item)
+                completion_announced = self._announce_unifi_completion(
+                    item, executed=False, verified=False
+                )
                 failure_notice = self.approval_bridge.complete(
                     item.approval_task_id,
                     {
@@ -832,9 +913,16 @@ class GuardianState:
                         "status": "failed",
                         "error": str(exc),
                         "completion_notified": bool(failure_notice.get("ok")),
+                        "completion_announced": completion_announced,
                     }
                 )
                 continue
+            self._cancel_duplicate_unifi_actions(item)
+            completion_announced = self._announce_unifi_completion(
+                item,
+                executed=bool(evidence.get("executed")),
+                verified=bool(evidence.get("verified")),
+            )
             completion = self.approval_bridge.complete(
                 item.approval_task_id,
                 evidence,
@@ -853,6 +941,7 @@ class GuardianState:
                         evidence.get("verification_truth_label") or "CODE_READY"
                     ),
                     "completion_notified": bool(completion.get("ok")),
+                    "completion_announced": completion_announced,
                 }
             )
         return outcomes
