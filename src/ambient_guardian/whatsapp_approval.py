@@ -119,6 +119,7 @@ class WhatsAppApprovalBridge:
                 "action",
                 "executed",
                 "verified",
+                "online_verified",
                 "adapter",
                 "verified_at",
                 "evidence_digest",

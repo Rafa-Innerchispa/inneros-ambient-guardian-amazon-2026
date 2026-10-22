@@ -1350,6 +1350,7 @@ def localize_alexa_result(result: dict[str, Any], locale: str) -> dict[str, Any]
             english_target = {
                 "Punto de acceso Cuarto": "the Cuarto access point",
                 "Punto de acceso Estudio": "the Estudio access point",
+                "Punto de acceso Living": "the Living access point",
             }.get(target_label, target_label)
             response["answer"] = (
                 f"I prepared the controlled restart of {english_target}. I need your "
@@ -1443,6 +1444,20 @@ def _inneros_capabilities_response() -> dict[str, Any]:
 
 
 def _english_answer(utterance: str, speaker_context: dict[str, Any] | None) -> bool:
+    if re.search(
+        r"\b(?:prepara|reinicia|reiniciar|estado|revisa|cuarto|estudio|red|"
+        r"cámaras?|servidores?|energía|llama|celular)\b",
+        utterance,
+        re.I,
+    ):
+        return False
+    if re.search(
+        r"\b(?:prepare|restart|status|check|bedroom|study|network|cameras?|"
+        r"servers?|energy|call|phone)\b",
+        utterance,
+        re.I,
+    ):
+        return True
     locale = str((speaker_context or {}).get("response_locale") or "").lower()
     if locale:
         return locale.startswith("en")
@@ -1981,6 +1996,10 @@ def simulated_alexa_turn(
             prepared = state.prepare_action(
                 f"unifi_restart:{alias}",
                 "Explicit owner voice request; separate authenticated approval required",
+                response_locale=str(
+                    (speaker_context or {}).get("response_locale") or ""
+                )
+                or None,
             )
         except ValueError as exc:
             return {

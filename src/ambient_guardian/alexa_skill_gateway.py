@@ -436,14 +436,53 @@ def _request_locale(request_payload: dict[str, Any]) -> str:
     return str(request_payload.get("locale") or "en-US").strip()
 
 
+def _response_locale(payload: dict[str, Any], request_payload: dict[str, Any]) -> str:
+    """Prefer the language the owner actually used over the Echo locale.
+
+    Alexa does not include the spoken invocation in a LaunchRequest, but intent
+    slots retain enough text to keep Spanish questions in Spanish and English
+    questions in English on a bilingual household device.
+    """
+    intent = request_payload.get("intent") or {}
+    slots = intent.get("slots") or {}
+    spoken = " ".join(
+        str(slot.get("value") or "")
+        for slot in slots.values()
+        if isinstance(slot, dict)
+    ).strip()
+    if re.search(
+        r"[áéíóúñ¿¡]|\b(?:prepara|reinicia|reiniciar|estado|revisa|cuarto|"
+        r"estudio|red|cámaras?|servidores?|energía|llama|celular|qué|cómo|"
+        r"ayer|madrugada)\b",
+        spoken,
+        re.I,
+    ):
+        return "es-US"
+    if re.search(
+        r"\b(?:prepare|restart|status|check|bedroom|study|network|cameras?|"
+        r"servers?|energy|call|phone|what|how|overnight)\b",
+        spoken,
+        re.I,
+    ):
+        return "en-US"
+    session_locale = str(_session_attributes(payload).get("response_locale") or "")
+    if session_locale.lower().startswith(("en", "es")):
+        return session_locale
+    return _request_locale(request_payload)
+
+
 def _voice_name() -> str:
     return os.getenv("AMBIENT_GUARDIAN_VOICE_NAME", "InnerOS").strip() or "InnerOS"
 
 
-def _guardian_query(request_payload: dict[str, Any]) -> str:
+def _guardian_query(
+    request_payload: dict[str, Any], *, response_locale: str | None = None
+) -> str:
     """Translate stable Alexa intents into the bounded InnerOS voice vocabulary."""
     intent_name = str(((request_payload.get("intent") or {}).get("name") or ""))
-    english = _request_locale(request_payload).lower().startswith("en")
+    english = str(
+        response_locale or _request_locale(request_payload)
+    ).lower().startswith("en")
     if intent_name == "CapabilitiesIntent":
         return "what can you do inside InnerOS" if english else "qué puedes hacer dentro de InnerOS"
     if intent_name == "SystemStatusQueryIntent":
@@ -672,10 +711,14 @@ def _dispatch(payload: dict[str, Any]) -> dict[str, Any]:
         "ProgramTaskIntent",
         "AntigravityDraftIntent",
     }:
-        query = _guardian_query(request_payload)
+        response_locale = _response_locale(payload, request_payload)
+        query = _guardian_query(
+            request_payload,
+            response_locale=response_locale,
+        )
         speaker = _speaker_context(payload)
         speaker["account_linked"] = linked
-        speaker["response_locale"] = _request_locale(request_payload)
+        speaker["response_locale"] = response_locale
         speaker["_request_id"] = str(request_payload.get("requestId") or "")
         if (
             _pin_confirmation_enabled()
@@ -688,11 +731,11 @@ def _dispatch(payload: dict[str, Any]) -> dict[str, Any]:
         except ValueError:
             speech = (
                 "Haz una pregunta específica sobre la casa."
-                if _request_locale(request_payload).lower().startswith("es")
+                if response_locale.lower().startswith("es")
                 else "Please ask a specific question about the home."
             )
         except Exception:
-            if _request_locale(request_payload).lower().startswith("es"):
+            if response_locale.lower().startswith("es"):
                 speech = (
                     f"{_voice_name()} no puede conectarse con el cerebro local de la casa ahora. "
                     "No se realizó ninguna acción física."
@@ -706,10 +749,13 @@ def _dispatch(payload: dict[str, Any]) -> dict[str, Any]:
             speech,
             reprompt=(
                 "¿Qué más quieres consultar?"
-                if _request_locale(request_payload).lower().startswith("es")
+                if response_locale.lower().startswith("es")
                 else "What else would you like to know?"
             ),
-            session_attributes={"fallback_count": 0},
+            session_attributes={
+                "fallback_count": 0,
+                "response_locale": response_locale,
+            },
         )
     if intent_name == "AMAZON.HelpIntent":
         if _request_locale(request_payload).lower().startswith("es"):

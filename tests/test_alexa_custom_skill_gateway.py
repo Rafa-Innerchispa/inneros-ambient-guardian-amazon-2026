@@ -503,6 +503,82 @@ def test_english_unifi_restart_intent_maps_to_prepare_only_query(monkeypatch):
     assert calls == ["prepare to restart UniFi study"]
 
 
+def test_spanish_target_overrides_english_echo_locale(monkeypatch):
+    calls = []
+    monkeypatch.setattr(
+        gateway,
+        "_backend_turn",
+        lambda query, speaker_context=None: calls.append((query, speaker_context))
+        or "respuesta",
+    )
+
+    response = gateway._dispatch(
+        request_payload(
+            intent_request(
+                None,
+                intent_name="UnifiRestartIntent",
+                locale="en-US",
+                target="cuarto",
+            )
+        )
+    )
+
+    assert calls[0][0] == "prepara reiniciar el UniFi cuarto"
+    assert calls[0][1]["response_locale"] == "es-US"
+    assert response["sessionAttributes"]["response_locale"] == "es-US"
+
+
+def test_english_target_overrides_spanish_echo_locale(monkeypatch):
+    calls = []
+    monkeypatch.setattr(
+        gateway,
+        "_backend_turn",
+        lambda query, speaker_context=None: calls.append((query, speaker_context))
+        or "answer",
+    )
+
+    response = gateway._dispatch(
+        request_payload(
+            intent_request(
+                None,
+                intent_name="UnifiRestartIntent",
+                locale="es-US",
+                target="bedroom",
+            )
+        )
+    )
+
+    assert calls[0][0] == "prepare to restart UniFi bedroom"
+    assert calls[0][1]["response_locale"] == "en-US"
+    assert response["sessionAttributes"]["response_locale"] == "en-US"
+
+
+def test_ambiguous_living_target_keeps_session_language(monkeypatch):
+    calls = []
+    monkeypatch.setattr(
+        gateway,
+        "_backend_turn",
+        lambda query, speaker_context=None: calls.append((query, speaker_context))
+        or "respuesta",
+    )
+
+    response = gateway._dispatch(
+        request_payload(
+            intent_request(
+                None,
+                intent_name="UnifiRestartIntent",
+                locale="en-US",
+                target="Living",
+            ),
+            session_attributes={"response_locale": "es-US"},
+        )
+    )
+
+    assert calls[0][0] == "prepara reiniciar el UniFi Living"
+    assert calls[0][1]["response_locale"] == "es-US"
+    assert response["sessionAttributes"]["response_locale"] == "es-US"
+
+
 def test_play_music_intent_preserves_query_and_optional_speaker(monkeypatch):
     calls = []
     monkeypatch.setattr(
