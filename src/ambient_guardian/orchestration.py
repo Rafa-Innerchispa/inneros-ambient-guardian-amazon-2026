@@ -1344,9 +1344,17 @@ def localize_alexa_result(result: dict[str, Any], locale: str) -> dict[str, Any]
     elif mode == "deterministic-unifi-restart":
         prepared = result.get("prepared_action")
         if isinstance(prepared, dict) and prepared.get("approval_delivery") == "sent":
+            target_label = str(
+                prepared.get("target_label") or "the approved UniFi device"
+            )
+            english_target = {
+                "Punto de acceso Cuarto": "the Cuarto access point",
+                "Punto de acceso Estudio": "the Estudio access point",
+            }.get(target_label, target_label)
             response["answer"] = (
-                "I prepared the controlled UniFi restart and sent an authorization request to "
-                "the owner's WhatsApp. Nothing has restarted yet."
+                f"I prepared the controlled restart of {english_target}. I need your "
+                "authorization through WhatsApp before I restart it. Please review the "
+                "message and confirm there. No device has restarted yet."
             )
         elif isinstance(prepared, dict):
             response["answer"] = (
@@ -1993,10 +2001,9 @@ def simulated_alexa_turn(
             "utterance": utterance,
             "response": {
                 "answer": (
-                    f"Preparé el reinicio controlado de {target['label']} por UniFi y Home "
-                    "Assistant. Te envié la autorización al WhatsApp del propietario. "
-                    "No se ejecutó todavía; si la confirmas allí, reiniciaré solamente ese "
-                    "equipo y después verificaré su estado o tiempo de actividad."
+                    f"Preparé el reinicio controlado de {target['label']}. Necesito tu "
+                    "autorización por WhatsApp antes de reiniciarlo. Revisa el mensaje y "
+                    "confirma allí. Todavía no reinicié ningún equipo."
                     if prepared.get("approval_delivery") == "sent"
                     else f"Preparé el reinicio controlado de {target['label']}, pero no pude "
                     "entregar la autorización por WhatsApp. No reinicié ningún equipo."
