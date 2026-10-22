@@ -262,6 +262,50 @@ def test_general_status_intent_preserves_the_requested_subsystem(
     assert response["response"]["shouldEndSession"] is False
 
 
+@pytest.mark.parametrize(
+    ("locale", "query", "expected"),
+    [
+        ("en-US", "WiFi network", "check the live UniFi network status"),
+        ("en-US", "servers", "check the live InnerOS server fleet status"),
+        ("en-US", "Raspberry Pi", "check the live Raspberry Pi status"),
+        ("en-US", "cameras", "check the live camera and recorder status"),
+        ("es-US", "wifi", "revisa el estado en vivo de UniFi"),
+        (
+            "es-US",
+            "servidores",
+            "revisa el estado en vivo de los servidores de InnerOS",
+        ),
+        ("es-US", "Raspberry Pi", "revisa el estado en vivo del Raspberry Pi"),
+        (
+            "es-US",
+            "cámaras",
+            "revisa el estado en vivo de las cámaras y grabadores",
+        ),
+    ],
+)
+def test_broad_search_intent_canonicalizes_bare_subsystem_names(
+    monkeypatch, locale, query, expected
+):
+    calls = []
+    monkeypatch.setattr(
+        gateway,
+        "_backend_turn",
+        lambda backend_query, speaker_context=None: calls.append(
+            (backend_query, speaker_context)
+        )
+        or "answer",
+    )
+
+    gateway._dispatch(
+        request_payload(
+            intent_request(query, intent_name="AskGuardianIntent", locale=locale)
+        )
+    )
+
+    assert calls[0][0] == expected
+    assert calls[0][1]["response_locale"] == locale
+
+
 def test_second_spanish_fallback_ends_session_without_looping():
     response = gateway._dispatch(
         request_payload(
@@ -278,7 +322,7 @@ def test_second_spanish_fallback_ends_session_without_looping():
     assert "reprompt" not in response["response"]
     speech = response["response"]["outputSpeech"]["text"]
     assert "evitar un ciclo" in speech
-    assert "Inner Oz" in speech
+    assert "Atlas Control" in speech
 
 
 def test_resume_conversation_intent_keeps_session_open():

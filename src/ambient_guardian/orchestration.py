@@ -1459,6 +1459,10 @@ def _unifi_status_response(
         value = str(item.get("state") or "").strip().lower()
         if "active_incident" in entity_id:
             return value in {"", "none", "clear", "ok", "no_incident"}
+        if entity_id.startswith("update."):
+            # Home Assistant update entities use `off` to mean that the
+            # installed firmware is current, not that the device is offline.
+            return value in {"off", "idle", "up_to_date"}
         if "latency" in entity_id:
             try:
                 return float(value) < 100.0

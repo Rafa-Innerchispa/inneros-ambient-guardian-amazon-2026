@@ -540,6 +540,57 @@ def _guardian_query(request_payload: dict[str, Any]) -> str:
         return f"prepara una tarea para {provider}: {task}" if task else ""
 
     query = _slot_value(request_payload, "query")
+    # ``AskGuardianIntent`` deliberately accepts an AMAZON.SearchQuery so owners
+    # can speak naturally.  Alexa sometimes gives that broad intent precedence
+    # over the dedicated status intents and strips the leading verb, leaving a
+    # slot such as ``WiFi network`` or ``servers``.  Canonicalize those bare
+    # subsystem names here so they stay on the fast, deterministic telemetry
+    # paths instead of falling through to the slower general LLM response.
+    normalized_query = " ".join(query.lower().split())
+    if re.fullmatch(
+        r"(?:the |el |la )?(?:uni\s*fi|ubiquiti|wi[ -]?fi)(?: network| red)?",
+        normalized_query,
+    ):
+        return (
+            "check the live UniFi network status"
+            if english
+            else "revisa el estado en vivo de UniFi"
+        )
+    if re.fullmatch(r"(?:the |el |la )?(?:network|red)", normalized_query):
+        return (
+            "check the live UniFi network status"
+            if english
+            else "revisa el estado en vivo de UniFi"
+        )
+    if re.fullmatch(
+        r"(?:the |los? |las? )?"
+        r"(?:servers?|servidores?|server fleet|flota de servidores)",
+        normalized_query,
+    ):
+        return (
+            "check the live InnerOS server fleet status"
+            if english
+            else "revisa el estado en vivo de los servidores de InnerOS"
+        )
+    if re.fullmatch(
+        r"(?:the |el |la )?(?:raspberry(?: pi)?|raspberry pis|rpi)",
+        normalized_query,
+    ):
+        return (
+            "check the live Raspberry Pi status"
+            if english
+            else "revisa el estado en vivo del Raspberry Pi"
+        )
+    if re.fullmatch(
+        r"(?:the |los? |las? )?"
+        r"(?:cameras?|c[aá]maras?|recorders?|grabadores?|nvr)",
+        normalized_query,
+    ):
+        return (
+            "check the live camera and recorder status"
+            if english
+            else "revisa el estado en vivo de las cámaras y grabadores"
+        )
     when = _slot_value(request_payload, "when")
     if when:
         query = f"qué pasó a las {when}"
@@ -710,12 +761,12 @@ def _dispatch(payload: dict[str, Any]) -> dict[str, Any]:
     if _request_locale(request_payload).lower().startswith("es"):
         return _plain_response(
             "Todavía no entendí. Cierro esta conversación para evitar un ciclo; "
-            "cuando quieras, di: Alexa, pide a Inner Oz el estado de energía.",
+            "cuando quieras, di: Alexa, pide a Atlas Control el estado de energía.",
             end_session=True,
         )
     return _plain_response(
         "I still did not understand. I am closing this conversation to avoid a loop. "
-        "When ready, say: Alexa, ask Inner Oz for the energy status.",
+        "When ready, say: Alexa, ask Atlas Control for the energy status.",
         end_session=True,
     )
 

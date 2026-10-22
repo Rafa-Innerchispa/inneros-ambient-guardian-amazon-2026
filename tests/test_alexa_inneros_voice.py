@@ -135,6 +135,30 @@ def test_live_unifi_status_flags_real_active_incident_and_recommends_safe_checks
     assert "WhatsApp" in result["response"]["answer"]
 
 
+def test_live_unifi_status_treats_current_firmware_as_healthy():
+    state = GuardianState()
+    state.home_assistant = LiveHomeInventory()
+    state.home_assistant.unifi_status = lambda: {
+        "configured": True,
+        "entities": [
+            {
+                "entity_id": "update.living_firmware",
+                "label": "Living Firmware",
+                "state": "off",
+                "unit": "",
+            }
+        ],
+        "targets": [],
+    }
+    result = simulated_alexa_turn(
+        "check the live UniFi network status",
+        state,
+        FailIfReasonerRuns(),
+    )
+    assert result["response"]["status"] == "all_clear"
+    assert "1 of 1 monitored signals are available" in result["response"]["answer"]
+
+
 def test_telephony_synonym_routes_to_live_voiceops_status():
     state = GuardianState()
     state.voiceops = VoiceOpsStatus(

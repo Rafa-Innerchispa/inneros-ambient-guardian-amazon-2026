@@ -6,7 +6,7 @@ the gateway, core switch, AMD server, Intel server, or another critical device.
 
 ## English take
 
-1. Say: **“Alexa, ask Inner Oz to restart the study router.”**
+1. Say: **“Alexa, ask Atlas Control to restart the study router.”**
 2. Alexa must say the restart was **prepared** and that owner confirmation is
    required. It must not claim that the device was restarted.
 3. Show the WhatsApp request and press **Confirm** as the enrolled owner. Do not
@@ -18,7 +18,7 @@ the gateway, core switch, AMD server, Intel server, or another critical device.
 
 ## Spanish take
 
-1. Di: **“Alexa, pide a Inner Oz que reinicie el router del estudio.”**
+1. Di: **“Alexa, pide a Atlas Control que reinicie el router del estudio.”**
 2. Alexa debe decir que el reinicio quedó **preparado** y que necesita la
    confirmación del propietario.
 3. Confirma la solicitud en WhatsApp con la identidad del propietario.
@@ -58,19 +58,19 @@ Default remains `DRAFT_ONLY` when the flag is off (Codex safety boundary).
 
 Spanish one-shot:
 
-1. **“Alexa, abre Inner Oz.”**
+1. **“Alexa, abre Atlas Control.”**
 2. **“Programa con Cursor un script mínimo que muestre latencia AMD para el hackathon.”**
 3. Aprobar por WhatsApp la solicitud gobernada. El autopilot Cursor reclama la tarea autorizada y deja evidencia de commit, pruebas y PR.
 
 English external-agent example:
 
-1. **“Alexa, open Inner Oz.”**
+1. **“Alexa, open Atlas Control.”**
 2. **“Create a GitHub repository with Codex for a small status API.”**
 3. Approve the WhatsApp request before Codex starts.
 
 Local no-credit example:
 
-1. **“Alexa, open Inner Oz.”**
+1. **“Alexa, open Atlas Control.”**
 2. **“Create a GitHub repository with the local agent for a small status API.”**
 3. InnerOS routes the task to `local-amd-5`; no external-agent approval is required.
 

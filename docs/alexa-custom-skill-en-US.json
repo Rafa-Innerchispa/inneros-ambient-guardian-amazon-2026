@@ -1,7 +1,7 @@
 {
   "interactionModel": {
     "languageModel": {
-      "invocationName": "inner oz",
+      "invocationName": "atlas control",
       "intents": [
         {
           "name": "AskGuardianIntent",
