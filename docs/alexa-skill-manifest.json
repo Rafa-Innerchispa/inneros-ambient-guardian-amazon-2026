@@ -1,0 +1,87 @@
+{
+  "manifest": {
+    "manifestVersion": "1.0",
+    "publishingInformation": {
+      "category": "KNOWLEDGE_AND_TRIVIA",
+      "distributionCountries": [],
+      "isAvailableWorldwide": true,
+      "locales": {
+        "en-US": {
+          "name": "Atlas Control",
+          "summary": "A governed voice interface for live InnerOS home and infrastructure telemetry.",
+          "description": "Atlas Control connects Alexa to InnerOS for read-only energy, UniFi, server, Raspberry Pi, camera, alarm, and VoiceOps status. Sensitive operations remain governed and require the configured approval path.",
+          "examplePhrases": [
+            "Alexa, open Atlas Control",
+            "Alexa, ask Atlas Control for the energy status",
+            "Alexa, ask Atlas Control to check the WiFi network"
+          ],
+          "keywords": [
+            "InnerOS",
+            "energy",
+            "infrastructure",
+            "automation"
+          ]
+        },
+        "es-US": {
+          "name": "Atlas Control",
+          "summary": "Interfaz de voz gobernada para la telemetría en vivo de InnerOS.",
+          "description": "Atlas Control conecta Alexa con InnerOS para consultar energía, UniFi, servidores, Raspberry Pi, cámaras, alarma y VoiceOps. Las operaciones sensibles conservan el flujo de autorización configurado.",
+          "examplePhrases": [
+            "Alexa, abre Atlas Control",
+            "Alexa, pide a Atlas Control el estado de energía",
+            "Alexa, pide a Atlas Control revisar la red WiFi"
+          ],
+          "keywords": [
+            "InnerOS",
+            "energía",
+            "infraestructura",
+            "automatización"
+          ]
+        },
+        "es-MX": {
+          "name": "Atlas Control",
+          "summary": "Interfaz de voz gobernada para la telemetría en vivo de InnerOS.",
+          "description": "Atlas Control conecta Alexa con InnerOS para consultar energía, UniFi, servidores, Raspberry Pi, cámaras, alarma y VoiceOps. Las operaciones sensibles conservan el flujo de autorización configurado.",
+          "examplePhrases": [
+            "Alexa, abre Atlas Control",
+            "Alexa, pide a Atlas Control el estado de energía",
+            "Alexa, pide a Atlas Control revisar la red WiFi"
+          ],
+          "keywords": [
+            "InnerOS",
+            "energía",
+            "infraestructura",
+            "automatización"
+          ]
+        },
+        "es-ES": {
+          "name": "Atlas Control",
+          "summary": "Interfaz de voz gobernada para la telemetría en vivo de InnerOS.",
+          "description": "Atlas Control conecta Alexa con InnerOS para consultar energía, UniFi, servidores, Raspberry Pi, cámaras, alarma y VoiceOps. Las operaciones sensibles conservan el flujo de autorización configurado.",
+          "examplePhrases": [
+            "Alexa, abre Atlas Control",
+            "Alexa, pide a Atlas Control el estado de energía",
+            "Alexa, pide a Atlas Control revisar la red WiFi"
+          ],
+          "keywords": [
+            "InnerOS",
+            "energía",
+            "infraestructura",
+            "automatización"
+          ]
+        }
+      },
+      "testingInstructions": "Use the development-stage skill. Open Atlas Control, then ask for energy, WiFi, server, Raspberry Pi, or camera status. Status queries are read-only. Do not execute phone calls or physical restart actions during review."
+    },
+    "apis": {
+      "custom": {
+        "endpoint": {
+          "sslCertificateType": "Wildcard",
+          "uri": "https://voz.pcdoctor.ai/alexa/skill"
+        },
+        "interfaces": [],
+        "locales": {}
+      }
+    }
+  }
+}
