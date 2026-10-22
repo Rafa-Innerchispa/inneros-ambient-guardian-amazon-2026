@@ -43,6 +43,7 @@ class PendingAction:
     linked_incident_id: str | None = None
     linked_incident_digest: str | None = None
     approval_task_id: str | None = None
+    response_locale: str | None = None
 
 
 class SimulatorAdapter:
@@ -163,6 +164,7 @@ class GuardianState:
             "linked_incident_id": item.linked_incident_id,
             "linked_incident_digest": item.linked_incident_digest,
             "approval_task_id": item.approval_task_id,
+            "response_locale": item.response_locale,
         }
 
     def _restore_pending_actions(self) -> None:
@@ -221,31 +223,47 @@ class GuardianState:
                 self.approval_bridge.close(item.approval_task_id, "cancelled")
 
     def _announce_unifi_completion(
-        self, item: PendingAction, *, executed: bool, verified: bool
+        self, item: PendingAction, *, evidence: dict[str, Any] | None
     ) -> bool:
         if not item.action.startswith("unifi_restart:"):
             return False
         alias = item.action.split(":", 1)[1]
-        if alias not in {"cuarto", "bedroom"}:
+        target = self.home_assistant.unifi_restart_targets.get(alias) or {}
+        notify_entity = str(target.get("notify") or "notify.echo_cuarto_speak")
+        if notify_entity not in self.home_assistant.alexa_notify_allowlist:
             return False
-        if alias == "bedroom":
+        target_label = str(target.get("label") or alias)
+        executed = bool((evidence or {}).get("executed"))
+        verified = bool((evidence or {}).get("verified"))
+        online_verified = bool((evidence or {}).get("online_verified"))
+        stored_locale = str(item.response_locale or "").lower()
+        english = stored_locale.startswith("en") or (
+            not stored_locale and alias in {"bedroom", "study"}
+        )
+        if english:
             message = (
-                "Authorization confirmed. The Cuarto access point restarted successfully "
+                f"Authorization confirmed. {target_label} restarted successfully "
                 "and is back online."
+                if executed and verified and online_verified
+                else f"Authorization confirmed. The restart of {target_label} was detected, "
+                "and the access point is reconnecting."
                 if executed and verified
-                else "Authorization confirmed. The Cuarto access point restart was attempted, "
-                "but I could not verify that it came back online. I will not retry automatically."
+                else f"Authorization confirmed. The restart of {target_label} was attempted, "
+                "but I could not verify it. I will not retry automatically."
             )
         else:
             message = (
-                "Autorización confirmada. El punto de acceso Cuarto se reinició correctamente "
+                f"Autorización confirmada. {target_label} se reinició correctamente "
                 "y está nuevamente en línea."
+                if executed and verified and online_verified
+                else f"Autorización confirmada. Detecté el reinicio de {target_label} "
+                "y el punto de acceso se está reconectando."
                 if executed and verified
-                else "Autorización confirmada. Se intentó reiniciar el punto de acceso Cuarto, "
-                "pero no pude verificar que volviera en línea. No lo intentaré otra vez automáticamente."
+                else f"Autorización confirmada. Se intentó reiniciar {target_label}, pero no pude verificarlo. "
+                "No lo intentaré otra vez automáticamente."
             )
         try:
-            self.home_assistant.speak("notify.echo_cuarto_speak", message)
+            self.home_assistant.speak(notify_entity, message)
         except Exception:
             return False
         return True
@@ -525,7 +543,13 @@ class GuardianState:
             "home_context": self.home_assistant.home_context(),
         }
 
-    def prepare_action(self, action: str, reason: str = "") -> dict[str, Any]:
+    def prepare_action(
+        self,
+        action: str,
+        reason: str = "",
+        *,
+        response_locale: str | None = None,
+    ) -> dict[str, Any]:
         unifi_alias = None
         if action.startswith("unifi_restart:"):
             unifi_alias = action.split(":", 1)[1].strip().lower()
@@ -571,6 +595,7 @@ class GuardianState:
             "expires_at": expires.isoformat(),
             "linked_incident_id": linked_incident.get("incident_id") if linked_incident else None,
             "linked_incident_digest": linked_incident.get("digest") if linked_incident else None,
+            "response_locale": response_locale,
         }
         action_digest = hashlib.sha256(
             json.dumps(
@@ -594,6 +619,7 @@ class GuardianState:
             linked_incident_digest=(
                 str(linked_incident.get("digest")) if linked_incident else None
             ),
+            response_locale=response_locale,
         )
         with self._lock:
             self.pending[token] = item
@@ -801,6 +827,7 @@ class GuardianState:
             "reason": item.reason,
             "executed": executed,
             "verified": verified,
+            "online_verified": bool(after.get("online_verified")),
             "verification_truth_label": verification_truth_label,
             "adapter": after.get("adapter", "simulator"),
             "observed_state": after,
@@ -890,7 +917,7 @@ class GuardianState:
             except Exception as exc:
                 self._cancel_duplicate_unifi_actions(item)
                 completion_announced = self._announce_unifi_completion(
-                    item, executed=False, verified=False
+                    item, evidence=None
                 )
                 failure_notice = self.approval_bridge.complete(
                     item.approval_task_id,
@@ -919,9 +946,7 @@ class GuardianState:
                 continue
             self._cancel_duplicate_unifi_actions(item)
             completion_announced = self._announce_unifi_completion(
-                item,
-                executed=bool(evidence.get("executed")),
-                verified=bool(evidence.get("verified")),
+                item, evidence=evidence
             )
             completion = self.approval_bridge.complete(
                 item.approval_task_id,

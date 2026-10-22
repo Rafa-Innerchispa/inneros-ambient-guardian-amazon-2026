@@ -1,5 +1,7 @@
 import time
 
+import pytest
+
 from ambient_guardian.core import GuardianReasoner, GuardianState
 from ambient_guardian.orchestration import (
     _history_categories,
@@ -17,37 +19,54 @@ class FailIfReasonerRuns:
 class StubHomeAssistant:
     light_control_enabled = False
     light_allowlist = set()
+    alexa_notify_allowlist = {
+        "notify.echo_cuarto_speak",
+        "notify.echo_estudio_speak",
+        "notify.echo_sala_speak",
+    }
     unifi_restart_enabled = True
     unifi_restart_targets = {
         "u7 living": {
-            "label": "U7 Living",
+            "label": "Punto de acceso Living",
             "button": "button.u7_lite_restart",
             "status": "sensor.u7_lite_state",
             "uptime": "sensor.u7_lite_uptime",
+            "notify": "notify.echo_cuarto_speak",
+        },
+        "living": {
+            "label": "Punto de acceso Living",
+            "button": "button.u7_lite_restart",
+            "status": "sensor.u7_lite_state",
+            "uptime": "sensor.u7_lite_uptime",
+            "notify": "notify.echo_cuarto_speak",
         },
         "study": {
             "label": "Punto de acceso Estudio",
             "button": "button.estudio_restart",
             "status": "sensor.estudio_state",
             "uptime": "sensor.estudio_uptime",
+            "notify": "notify.echo_cuarto_speak",
         },
         "estudio": {
             "label": "Punto de acceso Estudio",
             "button": "button.estudio_restart",
             "status": "sensor.estudio_state",
             "uptime": "sensor.estudio_uptime",
+            "notify": "notify.echo_cuarto_speak",
         },
         "cuarto": {
             "label": "Punto de acceso Cuarto",
             "button": "button.cuarto_restart",
             "status": "sensor.cuarto_state",
             "uptime": "sensor.cuarto_uptime",
+            "notify": "notify.echo_cuarto_speak",
         },
         "bedroom": {
             "label": "Punto de acceso Cuarto",
             "button": "button.cuarto_restart",
             "status": "sensor.cuarto_state",
             "uptime": "sensor.cuarto_uptime",
+            "notify": "notify.echo_cuarto_speak",
         },
     }
 
@@ -113,6 +132,7 @@ class StubHomeAssistant:
         return {
             "executed": True,
             "verified": True,
+            "online_verified": True,
             "truth_label": "REAL",
             "adapter": "home-assistant-unifi",
             "target_alias": alias,
@@ -161,6 +181,19 @@ class UnverifiedHomeAssistant(StubHomeAssistant):
         return {
             "executed": True,
             "verified": False,
+            "truth_label": "REAL",
+            "adapter": "home-assistant-unifi",
+            "target_alias": alias,
+        }
+
+
+class ReconnectingHomeAssistant(StubHomeAssistant):
+    def restart_unifi_device(self, alias):
+        self.restart_calls.append(alias)
+        return {
+            "executed": True,
+            "verified": True,
+            "online_verified": False,
             "truth_label": "REAL",
             "adapter": "home-assistant-unifi",
             "target_alias": alias,
@@ -439,6 +472,45 @@ def test_cuarto_restart_explicitly_requests_whatsapp_authorization_in_spanish():
     assert state.home_assistant.restart_calls == []
 
 
+@pytest.mark.parametrize(
+    ("utterance", "expected_action", "expected_label"),
+    [
+        (
+            "prepara reiniciar el punto de acceso estudio",
+            "unifi_restart:estudio",
+            "Punto de acceso Estudio",
+        ),
+        (
+            "prepara reiniciar el punto de acceso cuarto",
+            "unifi_restart:cuarto",
+            "Punto de acceso Cuarto",
+        ),
+        (
+            "prepara reiniciar el punto de acceso living",
+            "unifi_restart:living",
+            "Punto de acceso Living",
+        ),
+    ],
+)
+def test_three_named_access_points_prepare_only_after_whatsapp(
+    utterance, expected_action, expected_label
+):
+    approval = StubWhatsAppApproval()
+    state = _state(approval)
+
+    result = simulated_alexa_turn(
+        utterance,
+        state,
+        FailIfReasonerRuns(),
+        speaker_context={"response_locale": "es-US"},
+    )
+
+    assert result["prepared_action"]["action"] == expected_action
+    assert result["prepared_action"]["target_label"] == expected_label
+    assert result["prepared_action"]["approval_delivery"] == "sent"
+    assert state.home_assistant.restart_calls == []
+
+
 def test_bedroom_alias_names_cuarto_and_requests_whatsapp_authorization_in_english():
     approval = StubWhatsAppApproval()
     state = _state(approval)
@@ -500,6 +572,33 @@ def test_bedroom_approval_restarts_once_announces_completion_and_cancels_duplica
         "cancelled",
     ) in approval.closed
     assert state.process_whatsapp_approvals() == []
+
+
+def test_verified_restart_does_not_claim_online_while_reconnecting():
+    approval = StubWhatsAppApproval()
+    state = _state(approval)
+    state.home_assistant = ReconnectingHomeAssistant()
+    result = simulated_alexa_turn(
+        "prepara reiniciar el punto de acceso living",
+        state,
+        FailIfReasonerRuns(),
+        speaker_context={"response_locale": "es-US"},
+    )
+    task_id = result["prepared_action"]["approval_task_id"]
+    approval.decisions[task_id] = {
+        "ok": True,
+        "approved": True,
+        "rejected": False,
+    }
+
+    outcomes = state.process_whatsapp_approvals()
+
+    assert outcomes[0]["status"] == "completed"
+    assert state.home_assistant.restart_calls == ["living"]
+    assert len(state.home_assistant.speak_calls) == 1
+    _, message = state.home_assistant.speak_calls[0]
+    assert "se está reconectando" in message
+    assert "nuevamente en línea" not in message
 
 
 def test_unifi_expired_whatsapp_approval_never_executes():

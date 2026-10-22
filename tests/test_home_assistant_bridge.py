@@ -674,3 +674,59 @@ def test_unifi_restart_requires_allowlist_and_returns_real_receipt(monkeypatch):
         assert "allowlisted" in str(exc)
     else:
         raise AssertionError("non-allowlisted UniFi target was restarted")
+
+
+def test_unifi_restart_waits_for_reconnection_before_claiming_online(monkeypatch):
+    clear_bridge_env(monkeypatch)
+    monkeypatch.setenv("HOME_ASSISTANT_URL", "http://ha.local:8123")
+    monkeypatch.setenv("HOME_ASSISTANT_TOKEN", "test-token")
+    monkeypatch.setenv("AMBIENT_GUARDIAN_UNIFI_RESTART_ENABLED", "1")
+    monkeypatch.setenv("AMBIENT_GUARDIAN_UNIFI_VERIFY_SECONDS", "5")
+    monkeypatch.setenv(
+        "AMBIENT_GUARDIAN_UNIFI_RESTART_TARGETS",
+        '{"living":{"label":"Punto de acceso Living",'
+        '"button":"button.u7_lite_restart","status":"sensor.u7_lite_state",'
+        '"uptime":"sensor.u7_lite_uptime",'
+        '"notify":"notify.echo_cuarto_speak"}}',
+    )
+    states = {
+        "sensor.u7_lite_state": iter(["connected", "disconnected", "connected"]),
+        "sensor.u7_lite_uptime": iter(["old", "unknown", "new"]),
+    }
+    clock = {"value": 0.0}
+
+    def fake_get(url, headers, timeout):
+        entity_id = url.rsplit("/", 1)[-1]
+        return FakeResponse(
+            {
+                "entity_id": entity_id,
+                "state": next(states[entity_id]),
+                "attributes": {},
+                "last_updated": "2026-10-22T22:54:18+00:00",
+            }
+        )
+
+    def fake_monotonic():
+        clock["value"] += 0.5
+        return clock["value"]
+
+    monkeypatch.setattr("ambient_guardian.home_assistant.httpx.get", fake_get)
+    monkeypatch.setattr(
+        "ambient_guardian.home_assistant.httpx.post",
+        lambda *args, **kwargs: FakeResponse({}),
+    )
+    monkeypatch.setattr("ambient_guardian.home_assistant.time.sleep", lambda _: None)
+    monkeypatch.setattr(
+        "ambient_guardian.home_assistant.time.monotonic", fake_monotonic
+    )
+
+    bridge = HomeAssistantBridge()
+    result = bridge.restart_unifi_device("living")
+
+    assert bridge.unifi_restart_targets["living"]["notify"] == (
+        "notify.echo_cuarto_speak"
+    )
+    assert result["status"] == "restart_online_verified"
+    assert result["verified"] is True
+    assert result["online_verified"] is True
+    assert result["observed_status"]["state"] == "connected"

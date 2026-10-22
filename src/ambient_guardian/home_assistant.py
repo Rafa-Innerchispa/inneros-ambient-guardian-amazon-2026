@@ -288,6 +288,7 @@ class HomeAssistantBridge:
                 button = str(raw_target.get("button") or "").strip()
                 status_entity = str(raw_target.get("status") or "").strip()
                 uptime_entity = str(raw_target.get("uptime") or "").strip()
+                notify_entity = str(raw_target.get("notify") or "").strip()
                 label = str(raw_target.get("label") or alias).strip()
                 if not button.startswith("button."):
                     raise ValueError("UniFi restart targets require a Home Assistant button")
@@ -299,10 +300,15 @@ class HomeAssistantBridge:
                     raise ValueError("UniFi status entity has an unsupported domain")
                 if uptime_entity and not uptime_entity.startswith("sensor."):
                     raise ValueError("UniFi uptime entity must be a Home Assistant sensor")
+                if notify_entity and not notify_entity.startswith("notify."):
+                    raise ValueError(
+                        "UniFi completion target must be a Home Assistant notify entity"
+                    )
                 self.unifi_restart_targets[str(alias).strip().lower()] = {
                     "button": button,
                     "status": status_entity,
                     "uptime": uptime_entity,
+                    "notify": notify_entity,
                     "label": label,
                 }
 
@@ -781,7 +787,8 @@ class HomeAssistantBridge:
                 90.0,
             ),
         )
-        verified = False
+        transition_verified = False
+        online_verified = False
         observed_status = before_status
         observed_uptime = before_uptime
         deadline = time.monotonic() + verify_seconds
@@ -805,12 +812,32 @@ class HomeAssistantBridge:
                 and observed_uptime.get("state") != before_uptime.get("state")
             )
             if status_changed or uptime_changed:
-                verified = True
+                transition_verified = True
+            status_value = str((observed_status or {}).get("state") or "").lower()
+            uptime_value = str((observed_uptime or {}).get("state") or "").lower()
+            status_online = status_value in {"connected", "online", "home", "on"}
+            uptime_online = bool(uptime_value) and uptime_value not in {
+                "unknown",
+                "unavailable",
+                "none",
+            }
+            if transition_verified and (
+                (status_entity and status_online)
+                or (not status_entity and uptime_entity and uptime_online)
+            ):
+                online_verified = True
                 break
         return {
-            "status": "restart_verified" if verified else "restart_command_accepted",
+            "status": (
+                "restart_online_verified"
+                if online_verified
+                else "restart_transition_verified"
+                if transition_verified
+                else "restart_command_accepted"
+            ),
             "executed": True,
-            "verified": verified,
+            "verified": transition_verified,
+            "online_verified": online_verified,
             "adapter": "home-assistant-unifi",
             "truth_label": "REAL",
             "target_alias": alias,

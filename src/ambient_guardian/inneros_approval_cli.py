@@ -232,6 +232,7 @@ def _complete(payload: dict[str, Any]) -> dict[str, Any]:
     if not row or not row.get("owner_authorized_at"):
         return {"ok": False, "error": "authenticated_owner_approval_missing"}
     verified = bool(evidence.get("verified"))
+    online_verified = bool(evidence.get("online_verified"))
     executed = bool(evidence.get("executed"))
     terminal = "completed" if verified and executed else "failed"
     database[OPS_TASKS_COL].update_one(
@@ -248,8 +249,10 @@ def _complete(payload: dict[str, Any]) -> dict[str, Any]:
     )
     pending.clear_pending(task_id)
     target = str(((row.get("payload") or {}).get("target_label") or "equipo UniFi"))
-    if terminal == "completed":
-        message = f"✅ Ambient Guardian · {target} se reinició y la verificación posterior fue correcta.\nRef: `{task_id}`"
+    if terminal == "completed" and online_verified:
+        message = f"✅ Ambient Guardian · {target} se reinició y volvió a estar en línea.\nRef: `{task_id}`"
+    elif terminal == "completed":
+        message = f"✅ Ambient Guardian · se confirmó el reinicio de {target}; el equipo continúa reconectándose.\nRef: `{task_id}`"
     else:
         message = f"⚠️ Ambient Guardian · la acción sobre {target} no pudo verificarse; no se repetirá automáticamente.\nRef: `{task_id}`"
     delivery = send_alert_whatsapp(message, prefix_node=True)
