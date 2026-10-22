@@ -104,28 +104,28 @@ the device locale does not match a configured skill locale.
 Use the interaction model that matches the Echo language:
 
 - `en-US`: `docs/alexa-custom-skill-en-US.json`
-  - invocation: `inner oz`
-  - smoke phrase: `Alexa, open Inner Oz`
+  - invocation: `atlas control`
+  - smoke phrase: `Alexa, open Atlas Control`
 - `es-US`: `docs/alexa-custom-skill-es-US.json`
-  - invocation: `inner oz`
-  - smoke phrase: `Alexa, abre Inner Oz`
+  - invocation: `atlas control`
+  - smoke phrase: `Alexa, abre Atlas Control`
 - `es-MX`: `docs/alexa-custom-skill-es-MX.json`
-  - invocation: `inner oz`
-  - smoke phrase: `Alexa, abre Inner Oz`
+  - invocation: `atlas control`
+  - smoke phrase: `Alexa, abre Atlas Control`
 - `es-ES`: `docs/alexa-custom-skill-es-ES.json`
-  - invocation: `inner oz`
-  - smoke phrase: `Alexa, abre Inner Oz`
+  - invocation: `atlas control`
+  - smoke phrase: `Alexa, abre Atlas Control`
 
 In Developer Console, add the locale under **Language Settings**, import/paste
 the corresponding interaction model, then **Save Model** and **Build Model**
 for that locale before testing on the physical Echo.
 
 For the hackathon video, the canonical English path is `en-US` with:
-`Alexa, open Inner Oz`.
+`Alexa, open Atlas Control`.
 
 The energy-resilience demo is fail-closed:
 
-- `Alexa, ask Inner Oz for the energy resilience status`
+- `Alexa, ask Atlas Control for the energy resilience status`
 - it reads the real grid, battery/inverter, capacity, voltage and output state from Home Assistant;
 - it uses the canonical TECLAM LiFePO4 profile (25.6V, 230Ah, 5,888Wh), a configurable
   reserve and live load to estimate remaining runtime and the projected reserve time;
@@ -264,12 +264,12 @@ execute other consequential physical actions.
 ## Owner test phrases
 
 Enabling the skill and invoking it are different operations. The skill stays enabled
-for the Amazon account until the owner disables it; saying `Inner Oz` does not enable
+for the Amazon account until the owner disables it; saying `Atlas Control` does not enable
 or disable anything. It starts a short Alexa skill session:
 
-- Open once with `Alexa, open Inner Oz`, then use follow-up commands without repeating
+- Open once with `Alexa, open Atlas Control`, then use follow-up commands without repeating
   the invocation name while Alexa keeps the microphone/session open.
-- Use a one-shot command such as `Alexa, ask Inner Oz what happened overnight` when no
+- Use a one-shot command such as `Alexa, ask Atlas Control what happened overnight` when no
   session is open.
 - A Custom Skill cannot remain the active Alexa conversation forever. Alexa closes an
   idle session after a few seconds and one reprompt. English `en-US` can later be
@@ -279,13 +279,13 @@ or disable anything. It starts a short Alexa skill session:
 The Custom Skill must be invoked explicitly for each new session until a separate
 name-free or Smart Home surface is added:
 
-- `Alexa, open Inner Oz`
+- `Alexa, open Atlas Control`
 - then: `arm the alarm`
-- or one-shot: `Alexa, ask Inner Oz to arm the alarm`
+- or one-shot: `Alexa, ask Atlas Control to arm the alarm`
 
 For disarm:
 
-- `Alexa, ask Inner Oz to disarm the alarm`
+- `Alexa, ask Atlas Control to disarm the alarm`
 
 Alexa should then ask for the **Alexa profile PIN**. That PIN belongs to the
 owner's Alexa profile; it is not an Intelbras code and is never stored by
@@ -295,13 +295,13 @@ Ambient Guardian.
 
 After an Incident Receipt exists, the owner can say:
 
-`Alexa, ask Inner Oz to call me through my PBX and give me the incident report`
+`Alexa, ask Atlas Control to call me through my PBX and give me the incident report`
 
 With the canonical Ecuador `es-US` model, the equivalent phrases include:
 
-- `Alexa, abre Inner Oz y pregúntale qué puede hacer`
-- `Alexa, pregunta a Inner Oz cómo está la central Grandstream`
-- `Alexa, pide a Inner Oz que me prepare una llamada por la central con el último incidente`
+- `Alexa, abre Atlas Control y pregúntale qué puede hacer`
+- `Alexa, pregunta a Atlas Control cómo está la central Grandstream`
+- `Alexa, pide a Atlas Control que me prepare una llamada por la central con el último incidente`
 
 This request only prepares `voiceops_owner_callback`. It does not place a call
 and Alexa never receives a destination or extension. A separate owner-authenticated
@@ -329,20 +329,20 @@ result back to WhatsApp. There is no UniFi approval route in MCP or the web demo
 Alexa can capture a bounded programming request for Antigravity, Cursor, Codex,
 or the internal AMD agent:
 
-- `Alexa, pide a Inner Oz que prepare para Antigravity una automatización de bienvenida`
-- `Alexa, ask Inner Oz to prepare for Antigravity a welcome-light automation`
-- `Alexa, abre Inner Oz` → seguimiento: `programa con cursor un repo de prueba para el hackathon`
+- `Alexa, pide a Atlas Control que prepare para Antigravity una automatización de bienvenida`
+- `Alexa, ask Atlas Control to prepare for Antigravity a welcome-light automation`
+- `Alexa, abre Atlas Control` → seguimiento: `programa con cursor un repo de prueba para el hackathon`
 - InnerOS crea repositorio y Ops Task, envía autorización por WhatsApp y Cursor solo comienza después de la aprobación del propietario.
-- `Alexa, ask Inner Oz to program this with Antigravity a demo GitHub repo for the hackathon`
-- `Alexa, ask Inner Oz to create a GitHub repository with Codex for a status API`
-- `Alexa, ask Inner Oz to create a GitHub repository with the local agent for a status API`
+- `Alexa, ask Atlas Control to program this with Antigravity a demo GitHub repo for the hackathon`
+- `Alexa, ask Atlas Control to create a GitHub repository with Codex for a status API`
+- `Alexa, ask Atlas Control to create a GitHub repository with the local agent for a status API`
 
 External providers (Antigravity, Cursor and Codex) remain behind the owner
 authorization sent through WhatsApp. The internal `local-amd-5` route does not
 consume external-agent credits and can start automatically after the repository
 and safe worktree are ready.
 
-**Importante para el video:** frases sueltas del tipo *“Alexa, ayúdame a programar”* o *“programa con Cursor”* **no** entran en esta skill; Alexa responde con Amazon Q u otra skill genérica. Siempre invoca **`Inner Oz`** (skill Custom de Ambient Guardian). Tras grabar, sube el JSON de interacción del locale activo (`docs/alexa-custom-skill-es-US.json` en Ecuador) en el Developer Console → **Save Model** → **Build Model**.
+**Importante para el video:** frases sueltas del tipo *“Alexa, ayúdame a programar”* o *“programa con Cursor”* **no** entran en esta skill; Alexa responde con Amazon Q u otra skill genérica. Siempre invoca **`Atlas Control`** (skill Custom de Ambient Guardian). Tras grabar, sube el JSON de interacción del locale activo (`docs/alexa-custom-skill-es-US.json` en Ecuador) en el Developer Console → **Save Model** → **Build Model**.
 
 Para el arco “casa + agentes”, encadena energía, una orden de programación y la
 evidencia del repositorio. Con `AMBIENT_GUARDIAN_VOICE_PROGRAM_DISPATCH=0`, la
@@ -387,7 +387,7 @@ For a physical Echo used in Ecuador, the canonical compatibility profile is:
 
 - Alexa language / skill locale: `es-US` (Spanish - United States).
 - Marketplace path: Amazon.com-compatible skill locale.
-- Invocation: `inner oz` in every locale; the skill display name remains `Ambient Guardian`.
+- Invocation: `atlas control` in every locale; the skill display name remains `Ambient Guardian` until the publishing metadata is completed.
 - Physical country does not require `es-MX` or `es-ES`.
 - Alexa+ is not required for this path; this is a standard Alexa Custom Skill.
 

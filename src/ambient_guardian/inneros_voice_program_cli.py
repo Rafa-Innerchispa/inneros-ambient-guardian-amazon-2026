@@ -39,7 +39,7 @@ def _seed_readme(repo_full: str, brief: str, draft_id: str) -> dict[str, Any]:
         return {"ok": False, "error": "gh_missing"}
     body = (
         "# InnerOS Alexa → AMD demo\n\n"
-        f"Pedido por voz (Ambient Guardian / Inner Oz): **{brief}**\n\n"
+        f"Pedido por voz (InnerOS / Atlas Control): **{brief}**\n\n"
         f"- Draft: `{draft_id}`\n"
         "- Inferencia local: Qwen3-Coder en AMD (ROCm/vLLM)\n"
         "- Orquestación: InnerOS agentes\n"

@@ -29,7 +29,7 @@ def test_all_locales_have_general_status_and_live_infrastructure_intents():
     for path in MODEL_PATHS:
         model = _model(path)
         names = {intent["name"] for intent in model["intents"]}
-        assert model["invocationName"] == "inner oz"
+        assert model["invocationName"] == "atlas control"
         assert required <= names, f"{path.name} is missing {sorted(required - names)}"
 
 

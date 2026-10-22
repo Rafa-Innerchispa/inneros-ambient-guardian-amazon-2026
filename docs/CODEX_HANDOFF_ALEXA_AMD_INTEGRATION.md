@@ -12,16 +12,16 @@
 
 | Hackathon | Qué debe brillar en video |
 |-----------|---------------------------|
-| Amazon / Alexa | Voz física: **Inner Oz** → casa (energía) → pedido de programación |
+| Amazon / Alexa | Voz física: **Atlas Control** → casa (energía) → pedido de programación |
 | AMD / inferencia local | **Qwen/vLLM en .5**, agentes InnerOS, repo GitHub verificable |
 
 Cadena deseada en cámara:
 
-1. `Alexa, abre Inner Oz` → estado de energía (read-only, ya Codex).
+1. `Alexa, abre Atlas Control` → estado de energía (read-only, ya Codex).
 2. `Programa con antigravity …` → InnerOS crea **repo público** + **ops task** antigravity (nuevo, opt-in).
 3. (Opcional) `Reinicia el router del estudio` → gobierno WhatsApp (PR #47, `VOICE_ACTION_DEMO.md`).
 
-**No confundir:** `Alexa, ayúdame a programar` **sin** invocar Inner Oz → Amazon Q / skill genérica. Eso no es bug del backend.
+**No confundir:** `Alexa, ayúdame a programar` **sin** invocar Atlas Control → Amazon Q / skill genérica. Eso no es bug del backend.
 
 ---
 
@@ -76,7 +76,7 @@ Orchestration: regex `_VOICE_PROGRAM_DRAFT` acepta **antigravity | cursor | code
 
 ### 3. Documentación
 
-- `docs/ALEXA_CUSTOM_SKILL.md` — nota invocación Inner Oz + límite GitHub.
+- `docs/ALEXA_CUSTOM_SKILL.md` — nota invocación Atlas Control + límite GitHub.
 - `docs/VOICE_ACTION_DEMO.md` — sección “Alexa → AMD agents → GitHub”.
 
 ---
@@ -110,7 +110,7 @@ curl -s -X POST http://127.0.0.1:8794/api/alexa \
 ## Checklist Codex (owner no hace clics)
 
 1. **Publicar interaction models** desde repo → skill `4a096414-e312-49d1-b2f5-4e538d7fdb93` (método que ya uses: browser autenticado, SMAPI, CI, etc.).
-2. **Probar Echo físico** (es-US): abre Inner Oz → frase programación → confirmar TTS menciona GitHub/ops (no “Amazon Q”).
+2. **Probar Echo físico** (es-US): abre Atlas Control → frase programación → confirmar TTS menciona GitHub/ops (no “Amazon Q”).
 3. **Verificar gateway 8795** sigue apuntando a `http://127.0.0.1:8794/api/alexa` + skill-bridge token en `~/.config/ambient-guardian/skill-bridge.env`.
 4. **Live Evidence** (`/dashboard` o API): intent `voice_program_dispatch`, systems incluyen GitHub + Ops + AMD lane.
 5. **No desactivar** gobierno UniFi/WhatsApp; no mover `VOICE_PROGRAM_DISPATCH` a default on en prod post-hackathon (documentar rollback).
@@ -134,7 +134,7 @@ curl -s -X POST http://127.0.0.1:8794/api/alexa \
 Toma ops_7550a9ab66cd. Repo inneros-ambient-guardian-amazon-2026 @ main (ca4309f).
 Lee docs/CODEX_HANDOFF_ALEXA_AMD_INTEGRATION.md.
 Tu parte: publicar alexa-custom-skill-es-US.json (Build Model) sin que Rafael haga clic;
-probar Echo “abre Inner Oz” + “programa con cursor …”; aprobar la solicitud de WhatsApp y verificar claim/commit/PR de Cursor.
+probar Echo “abre Atlas Control” + “programa con cursor …”; aprobar la solicitud de WhatsApp y verificar claim/commit/PR de Cursor.
 Backend Intel ya tiene VOICE_PROGRAM_DISPATCH=1; gateway 8795; demo 8794.
 No reviertas DRAFT_ONLY default ni flujo UniFi WhatsApp.
 ```
