@@ -53,6 +53,7 @@ class StubHomeAssistant:
 
     def __init__(self):
         self.restart_calls = []
+        self.speak_calls = []
 
     def home_context(self):
         return {"configured": True, "reachable": True, "alarm": None, "detail": "stub"}
@@ -116,6 +117,10 @@ class StubHomeAssistant:
             "adapter": "home-assistant-unifi",
             "target_alias": alias,
         }
+
+    def speak(self, notify_entity, message):
+        self.speak_calls.append((notify_entity, message))
+        return {"status": "sent", "notify_entity": notify_entity}
 
 
 class StubWhatsAppApproval:
@@ -451,6 +456,50 @@ def test_bedroom_alias_names_cuarto_and_requests_whatsapp_authorization_in_engli
     assert "I need your authorization through WhatsApp before I restart it" in answer
     assert "No device has restarted yet" in answer
     assert state.home_assistant.restart_calls == []
+
+
+def test_bedroom_approval_restarts_once_announces_completion_and_cancels_duplicate():
+    class SequencedApproval(StubWhatsAppApproval):
+        def request(self, payload):
+            self.requests.append(payload)
+            return {
+                "ok": True,
+                "task_id": f"ops_task_{len(self.requests)}",
+                "channel": "whatsapp",
+            }
+
+    approval = SequencedApproval()
+    state = _state(approval)
+    first = simulated_alexa_turn(
+        "prepare to restart access point bedroom",
+        state,
+        FailIfReasonerRuns(),
+    )
+    second = simulated_alexa_turn(
+        "prepare to restart access point bedroom",
+        state,
+        FailIfReasonerRuns(),
+    )
+    approval.decisions[first["prepared_action"]["approval_task_id"]] = {
+        "ok": True,
+        "approved": True,
+        "rejected": False,
+    }
+
+    outcomes = state.process_whatsapp_approvals()
+
+    assert state.home_assistant.restart_calls == ["bedroom"]
+    assert len(state.home_assistant.speak_calls) == 1
+    notify_entity, message = state.home_assistant.speak_calls[0]
+    assert notify_entity == "notify.echo_cuarto_speak"
+    assert "Authorization confirmed" in message
+    assert "back online" in message
+    assert outcomes[0]["completion_announced"] is True
+    assert (
+        second["prepared_action"]["approval_task_id"],
+        "cancelled",
+    ) in approval.closed
+    assert state.process_whatsapp_approvals() == []
 
 
 def test_unifi_expired_whatsapp_approval_never_executes():
