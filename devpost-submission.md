@@ -69,7 +69,7 @@ We also encountered a shared host with an older MCP package. We treated that as 
 - Receipt-pinned PBX callback preparation and sanitized verification evidence.
 - Existing three Judge Mode scenarios preserved.
 - Live Evidence Console added to the existing frontend.
-- **288 automated tests passed** on the current Ring sandbox evidence candidate.
+- **289 automated tests passed** on the current Ring sandbox evidence candidate.
 - `compileall` passed.
 - Official MCP client connected over real Streamable HTTP.
 - Tool discovery proved MCP cannot approve or execute physical actions.
