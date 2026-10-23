@@ -96,7 +96,12 @@ class RingOfficialAdapter:
         allowed = {
             "RING_TOKEN",
             "RING_REFRESH_TOKEN",
+            "RING_CLIENT_ID",
+            "RING_CLIENT_SECRET",
             "RING_WEBHOOK_SECRET",
+            "RING_TOKEN_STORE_KEY",
+            "RING_TOKEN_STORE_PATH",
+            "RING_OWNER_ACCOUNT_IDENTIFIER",
             "RING_DEVICE_ID",
             "RING_ACCOUNT_ID",
             "RING_API_URL",

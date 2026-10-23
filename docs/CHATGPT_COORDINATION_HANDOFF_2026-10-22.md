@@ -150,15 +150,33 @@ Ring has two deliberately separate paths.
   physical Ring device has been verified.
 - An authenticated Ring Developer Portal flow has been prepared for a private app
   named `InnerOS Atlas Control`, with `Cameras and Doorbells` plus the automatic
-  `Account and Lifecycle` scope. Creation is paused at Amazon's mandatory legal
-  acceptance gate for the Ring Appstore Schedule; the owner must explicitly accept
-  that agreement before Codex may create the app.
+  `Account and Lifecycle` scope. The owner accepted the Ring Appstore Schedule and
+  the private app was created on 2026-10-23. Its one-time credentials were stored
+  outside Git and must never be copied into chat, documentation, commits, or logs.
+- Atlas now provides the official one-way account-linking boundaries required by
+  Ring: encrypted token exchange, time-bounded HMAC nonce matching, explicit owner
+  sign-in, POST+PATCH integration completion, app management, and the existing
+  signed webhook receiver. Provider-live status still requires a successful Ring
+  account link and official device/sandbox evidence.
 - Targeted server tests completed `14 passed` for official-adapter security,
   physical-integration boundaries, and the simulated incident flow.
 
 Therefore the submission may show the Ring-compatible scenario only with a visible
 `SIMULATED` label. Do not select or claim the Ring track as provider-live until an
 official API/SDK/simulator/test-account session is captured in evidence.
+
+## Bellini / external-site boundary
+
+- Bellini is a separate external site, not another name for the home's UniFi network.
+- Read-only Bellini status exists in the infrastructure query path. Automated Alexa
+  announcements for Bellini offline/recovered changes are still pending verified
+  event ingestion from the external connector that another agent is repairing.
+- Preserve tenant/site separation and never reuse home control permissions for
+  Bellini. The intended demo claim is multi-site observability: Atlas can report
+  homes, offices, or buildings through bounded connectors, while actions remain
+  separately allowlisted and owner-governed.
+- Do not claim real-time Bellini alerts until a real transition is received, persisted,
+  announced by Alexa in the correct language, and captured in evidence.
 
 ## Alexa+ entitlement: what was and was not used
 

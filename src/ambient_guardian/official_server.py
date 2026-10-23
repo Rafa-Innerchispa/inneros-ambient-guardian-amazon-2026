@@ -5,8 +5,10 @@ import re
 import secrets
 import threading
 import time
+from html import escape
 from pathlib import Path
 from typing import Any
+from urllib.parse import parse_qs
 
 from mcp.server import MCPServer
 from mcp.server.transport_security import TransportSecuritySettings
@@ -16,6 +18,7 @@ from starlette.responses import HTMLResponse, JSONResponse, Response
 from . import aws_strands
 from .core import GuardianReasoner, GuardianState
 from .orchestration import localize_alexa_result, simulated_alexa_turn
+from .ring_oauth import RingOAuthService
 from .voice_program_bridge import VoiceProgramBridge
 
 APP_VERSION = "0.6.0"
@@ -33,6 +36,7 @@ STATE = GuardianState(
     ),
 )
 REASONER = GuardianReasoner()
+RING_OAUTH = RingOAuthService.from_env()
 STATIC_DIR = Path(__file__).parent / "static"
 
 mcp = MCPServer(
@@ -110,6 +114,7 @@ def integration_status() -> dict[str, Any]:
     """Report MCP, Alexa+ demo, Ring adapter, local LLM, and AWS Strands readiness."""
     return {
         **STATE.integration_status(),
+        "ring_oauth": RING_OAUTH.status(),
         "official_mcp_sdk": "python-sdk-v2",
         "approval_channel": "authenticated owner WhatsApp; not exposed as an MCP tool",
         "aws_strands": aws_strands.status(),
@@ -153,6 +158,7 @@ def _state_payload() -> dict[str, Any]:
         "live_evidence": STATE.live_evidence_snapshot(),
         "integrations": {
             **STATE.integration_status(),
+            "ring_oauth": RING_OAUTH.status(),
             "approval_channel": "human-only web/API route; not exposed as an MCP tool",
             "aws_strands": aws_strands.status(),
         },
@@ -167,6 +173,36 @@ async def _read_object(request: Request) -> dict[str, Any]:
     if not isinstance(payload, dict):
         raise ValueError("JSON body must be an object")
     return payload
+
+
+async def _read_urlencoded(request: Request) -> dict[str, str]:
+    raw = await request.body()
+    if len(raw) > 16_384:
+        raise ValueError("Form body is too large")
+    try:
+        parsed = parse_qs(raw.decode("utf-8"), keep_blank_values=True)
+    except UnicodeDecodeError as exc:
+        raise ValueError("Form body must be UTF-8") from exc
+    return {key: str(values[-1]) for key, values in parsed.items() if values}
+
+
+def _ring_page(title: str, body: str, *, status_code: int = 200) -> HTMLResponse:
+    response = HTMLResponse(
+        "<!doctype html><html lang='en'><head><meta charset='utf-8'>"
+        "<meta name='viewport' content='width=device-width,initial-scale=1'>"
+        f"<title>{escape(title)}</title>"
+        "<style>body{font-family:system-ui;max-width:42rem;margin:4rem auto;padding:0 1rem;"
+        "color:#14213d}main{border:1px solid #dbe2ef;border-radius:16px;padding:2rem;"
+        "box-shadow:0 8px 28px #14213d14}label{display:block;margin:1rem 0 .4rem}"
+        "input{box-sizing:border-box;width:100%;padding:.8rem;border:1px solid #9aa7bd;"
+        "border-radius:8px}button{margin-top:1rem;padding:.8rem 1.2rem;border:0;border-radius:8px;"
+        "background:#2457d6;color:white;font-weight:700}.muted{color:#53627a}</style>"
+        f"</head><body><main><h1>{escape(title)}</h1>{body}</main></body></html>",
+        status_code=status_code,
+    )
+    response.headers["Cache-Control"] = "no-store"
+    response.headers["Content-Security-Policy"] = "default-src 'none'; style-src 'unsafe-inline'; form-action 'self'"
+    return response
 
 
 @mcp.custom_route("/", methods=["GET"])
@@ -267,6 +303,94 @@ async def ring_official_webhook(request: Request) -> Response:
             "guardian": STATE.guardian_status(),
         }
     )
+
+
+@mcp.custom_route("/api/ring/oauth/token", methods=["POST"])
+async def ring_oauth_token_exchange(request: Request) -> Response:
+    """Receive Ring's one-time code and retain the resulting tokens encrypted."""
+    try:
+        form = await _read_urlencoded(request)
+        result = RING_OAUTH.exchange_authorization_code(str(form.get("code") or ""))
+    except ValueError as exc:
+        return JSONResponse({"detail": str(exc)}, status_code=400)
+    except RuntimeError:
+        return JSONResponse({"detail": "Ring token exchange failed"}, status_code=502)
+    return JSONResponse({"status": "accepted", **result})
+
+
+@mcp.custom_route("/ring/link", methods=["GET", "POST"])
+async def ring_account_link(request: Request) -> Response:
+    """Owner-authenticated Ring one-way linking page with nonce verification."""
+    if request.method == "GET":
+        nonce = str(request.query_params.get("nonce") or "")
+        timestamp_ms = str(request.query_params.get("time") or "")
+        try:
+            RING_OAUTH.match_nonce(nonce, timestamp_ms)
+        except (RuntimeError, ValueError):
+            return _ring_page(
+                "Atlas Control Ring link",
+                "<p>This Ring link is invalid, expired, or not ready.</p>",
+                status_code=400,
+            )
+        return _ring_page(
+            "Link Ring to Atlas Control",
+            "<p>Sign in as the Atlas Control owner to claim this Ring connection.</p>"
+            "<form method='post' action='/ring/link'>"
+            f"<input type='hidden' name='nonce' value='{escape(nonce, quote=True)}'>"
+            f"<input type='hidden' name='time' value='{escape(timestamp_ms, quote=True)}'>"
+            "<label for='owner_token'>Owner authorization</label>"
+            "<input id='owner_token' name='owner_token' type='password' required "
+            "autocomplete='current-password'>"
+            "<button type='submit'>Authorize Ring connection</button></form>"
+            "<p class='muted'>The credential is sent only to the Atlas Control backend over HTTPS.</p>",
+        )
+
+    try:
+        form = await _read_urlencoded(request)
+        expected = os.getenv("AMBIENT_GUARDIAN_OWNER_TOKEN", "")
+        supplied = str(form.get("owner_token") or "")
+        if not expected or not supplied or not secrets.compare_digest(expected, supplied):
+            return _ring_page(
+                "Atlas Control Ring link",
+                "<p>Owner authorization failed. No Ring token was claimed.</p>",
+                status_code=401,
+            )
+        linked = RING_OAUTH.complete_link(
+            nonce=str(form.get("nonce") or ""),
+            timestamp_ms=str(form.get("time") or ""),
+            account_identifier=os.getenv("RING_OWNER_ACCOUNT_IDENTIFIER", ""),
+        )
+        STATE.ring_official.token = linked.access_token
+    except ValueError as exc:
+        return _ring_page(
+            "Atlas Control Ring link",
+            f"<p>{escape(str(exc))}</p>",
+            status_code=400,
+        )
+    except RuntimeError:
+        return _ring_page(
+            "Atlas Control Ring link",
+            "<p>Ring could not complete the connection. No provider-live claim was recorded.</p>",
+            status_code=502,
+        )
+    return _ring_page(
+        "Ring connected to Atlas Control",
+        "<p>The Ring account was verified and linked. Atlas Control can now validate provider data.</p>",
+    )
+
+
+@mcp.custom_route("/ring/config", methods=["GET"])
+async def ring_configuration_home(request: Request) -> Response:
+    del request
+    status = RING_OAUTH.status()
+    configured = "ready" if status["configured"] else "pending secure runtime configuration"
+    body = (
+        "<p>Private Ring integration for Atlas Control.</p>"
+        f"<p><strong>OAuth:</strong> {escape(configured)}</p>"
+        f"<p><strong>Linked accounts:</strong> {int(status['linked_accounts'])}</p>"
+        "<p class='muted'>No tokens, account identifiers, camera identifiers, or recordings are displayed here.</p>"
+    )
+    return _ring_page("Atlas Control Ring", body)
 
 
 @mcp.custom_route("/api/google_home/state", methods=["GET"])
@@ -647,6 +771,7 @@ async def integrations(request: Request) -> Response:
     return JSONResponse(
         {
             **STATE.integration_status(),
+            "ring_oauth": RING_OAUTH.status(),
             "approval_channel": "authenticated owner WhatsApp; not exposed as an MCP tool",
             "aws_strands": aws_strands.status(),
         }

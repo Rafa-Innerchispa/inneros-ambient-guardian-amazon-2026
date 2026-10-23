@@ -32,14 +32,29 @@ InnerOS Ambient Guardian provides an official Ring Appstore & Developer Webhook 
    - When official credentials are not yet linked, `RingSimulatorAdapter` serves as transparent local fallback so all automated tests and demos function safely.
 
 ## Provider Readiness Status
+- **Ring Developer app:** CREATED as the private app `InnerOS Atlas Control`.
+  - Scope: Cameras and Doorbells.
+  - Automatic scope: Account and Lifecycle.
+  - The one-time client credentials are stored outside Git and are not printed by
+    the application or its tests.
+- **One-way account linking backend:** IMPLEMENTED.
+  - Token exchange: `/api/ring/oauth/token`.
+  - Owner-authenticated nonce claim: `/ring/link`.
+  - App management/status page: `/ring/config`.
+  - Official signed webhook: `/api/ring/webhook`.
+  - OAuth tokens are retained only in a Fernet-encrypted, mode-`0600` store. A
+    successful link requires Ring's 10-minute HMAC nonce, the Atlas owner
+    credential, Ring's POST verification, and the mandatory PATCH to `completed`.
 - **Implementation Status (`CODE_READY`):** COMPLETE.
   - Official endpoint: `https://api.amazonvision.com/v1/devices`
   - Ingress HMAC-SHA256 signature verification supporting `X-Signature` and `X-Ring-Signature` (fail-closed)
   - Full JSON:API normalization (`data`, `attributes`, `meta`, timestamps, sub_types, component_ids, lifecycle events)
   - Truth labels (`REAL` for authenticated/signed, `UNVERIFIED` for unsigned)
   - Unit and integration tests 100% passing.
-- **Live Provider Status (`PROVIDER_LIVE_VERIFIED`):** PENDING LIVE CREDENTIALS.
-  - Upstream Amazon Vision / Ring API requires live developer token (`RING_TOKEN`) and webhook secret (`RING_WEBHOOK_SECRET`).
+- **Live Provider Status (`PROVIDER_LIVE_VERIFIED`):** PENDING ACCOUNT LINK.
+  - App credentials exist, but no Ring staging account/device has completed the
+    official authorization flow yet. Do not mark Ring as REAL until that provider
+    exchange, device discovery, and signed webhook evidence are captured.
 - **Local Fallback:** `CODE_READY` and verified via `RingSimulatorAdapter`.
 
 ## Preflight Verification
