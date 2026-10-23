@@ -659,6 +659,30 @@ def test_english_unifi_restart_intent_maps_to_prepare_only_query(monkeypatch):
     assert calls == ["prepare to restart UniFi study"]
 
 
+def test_alexa_normalized_unifi_zero_three_slot_maps_to_real_allowlist_alias(
+    monkeypatch,
+):
+    calls = []
+    monkeypatch.setattr(
+        gateway,
+        "_backend_turn",
+        lambda query, speaker_context=None: calls.append(query) or "answer",
+    )
+
+    gateway._dispatch(
+        request_payload(
+            intent_request(
+                None,
+                intent_name="UnifiRestartIntent",
+                locale="en-US",
+                target="uni Fi 03",
+            )
+        )
+    )
+
+    assert calls == ["prepare to restart unifi 03"]
+
+
 def test_spanish_target_overrides_english_echo_locale(monkeypatch):
     calls = []
     monkeypatch.setattr(
