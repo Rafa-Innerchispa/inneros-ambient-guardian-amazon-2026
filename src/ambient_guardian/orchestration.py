@@ -13,7 +13,7 @@ from zoneinfo import ZoneInfo
 from . import aws_strands
 from .core import GuardianReasoner, GuardianState
 from .energy_resilience import estimate_energy_resilience, spoken_duration
-from .solar_history import current_outage_summary
+from .solar_history import current_outage_summary, latest_outage_interval
 
 
 _DOOR = r"(?:front\s+)?door"
@@ -61,7 +61,7 @@ _VOICEOPS_STATUS_QUERY = re.compile(
     r"|\b(?:status|health|check|how\s+is|revisa)\b[^.]*"
     r"\b(?:voice\s*ops|pbx|grandstream|phone\s+system|telephony|telefon[ií]a|central)\b"
     r"|\b(?:tell\s+me\s+about|what\s+about|is\s+there\s+(?:any|a)\s+problem\s+with|"
-    r"cu[eé]ntame\s+(?:sobre|de)|qu[eé]\s+hay\s+de|hay\s+alg[uú]n\s+problema\s+con)\b[^.]*"
+    r"cu[eé]ntame\s+(?:sobre|de)|h[aá]blame\s+(?:sobre|de)|qu[eé]\s+hay\s+de|hay\s+alg[uú]n\s+problema\s+con)\b[^.]*"
     r"\b(?:voice\s*ops|pbx|grandstream|phone\s+system|telephony|telefon[ií]a|central)\b",
     re.I,
 )
@@ -91,7 +91,7 @@ _ENERGY_RESILIENCE_QUERY = re.compile(
     r"(?:informaci[oó]n|estado|reporte|resumen)\s+(?:de|sobre)\s+(?:la\s+)?"
     r"(?:energ[ií]a|electricidad|panel(?:es)?\s+solares?|inversor)|"
     r"c[oó]mo\s+est[aá]\s+(?:la\s+)?(?:energ[ií]a|electricidad)|"
-    r"(?:cu[eé]ntame\s+(?:sobre|de)|qu[eé]\s+hay\s+de|hay\s+alg[uú]n\s+problema\s+con)\s+"
+    r"(?:cu[eé]ntame\s+(?:sobre|de)|h[aá]blame\s+(?:sobre|de)|qu[eé]\s+hay\s+de|hay\s+alg[uú]n\s+problema\s+con)\s+"
     r"(?:la\s+)?(?:energ[ií]a|electricidad)|"
     r"modo\s+de\s+ahorro\s+energ[eé]tico|desconexi[oó]n\s+de\s+cargas|"
     r"circuitos?\s+cr[ií]ticos?|cu[aá]nto\s+tiempo\s+durar[aá]\s+la\s+bater[ií]a|"
@@ -122,7 +122,7 @@ _UNIFI_STATUS_QUERY = re.compile(
     r"|\b(?:status|health|how\s+is|check|estado|salud|c[oó]mo\s+est[aá]|revisa)\b[^.]*"
     r"\b(?:uni\s*fi|ubiquiti|wi[ -]?fi|wifi|network|red|bellini)\b"
     r"|\b(?:tell\s+me\s+about|what\s+about|is\s+there\s+(?:any|a)\s+problem\s+with|"
-    r"cu[eé]ntame\s+(?:sobre|del?)|qu[eé]\s+hay\s+del?|hay\s+alg[uú]n\s+problema\s+con)\b[^.]*"
+    r"cu[eé]ntame\s+(?:sobre|del?)|h[aá]blame\s+(?:sobre|del?)|qu[eé]\s+hay\s+del?|hay\s+alg[uú]n\s+problema\s+con)\b[^.]*"
     r"\b(?:uni\s*fi|ubiquiti|wi[ -]?fi|wifi|network|red|bellini)\b",
     re.I,
 )
@@ -132,7 +132,7 @@ _CAMERA_STATUS_QUERY = re.compile(
     r"|\b(?:status|health|how\s+are|check|estado|salud|c[oó]mo\s+est[aá]n?|revisa)\b[^.]*"
     r"\b(?:cameras?|c[aá]maras?|nvr|dahua|ezviz|imou)\b"
     r"|\b(?:tell\s+me\s+about|what\s+about|is\s+there\s+(?:any|a)\s+problem\s+with|"
-    r"are\s+there\s+any\s+alerts?\s+(?:from|on)|cu[eé]ntame\s+(?:sobre|de)|"
+    r"are\s+there\s+any\s+alerts?\s+(?:from|on)|cu[eé]ntame\s+(?:sobre|de)|h[aá]blame\s+(?:sobre|de)|"
     r"qu[eé]\s+hay\s+de|hay\s+alg[uú]n\s+problema\s+con)\b[^.]*"
     r"\b(?:cameras?|c[aá]maras?|nvr|dahua|ezviz|imou)\b",
     re.I,
@@ -145,7 +145,7 @@ _SERVER_STATUS_QUERY = re.compile(
     r"\b(?:servers?|servidores?|fleet|flota|intel|amd|node|nodo|raspberry\s*pi(?:s)?|punto\s+(?:cuatro|cinco)|\.4|\.5)\b"
     r"|\b(?:tell\s+me\s+about|what\s+about|is\s+there\s+(?:any|a)\s+problem\s+(?:in|with)|"
     r"which\s+services\s+are\s+available\s+(?:in|on)|what\s+services\s+are\s+running\s+(?:in|on)|"
-    r"cu[eé]ntame\s+(?:sobre|de)|qu[eé]\s+hay\s+de|hay\s+alg[uú]n\s+problema\s+en|"
+    r"cu[eé]ntame\s+(?:sobre|de)|h[aá]blame\s+(?:sobre|de)|qu[eé]\s+hay\s+de|hay\s+alg[uú]n\s+problema\s+en|"
     r"qu[eé]\s+servicios\s+(?:hay|est[aá]n\s+disponibles)\s+en)\b[^.]*"
     r"\b(?:servers?|servidores?|fleet|flota|intel|amd|node|nodo|raspberry\s*pi(?:s)?|punto\s+(?:cuatro|cinco)|\.4|\.5)\b",
     re.I,
@@ -1006,17 +1006,32 @@ def _energy_resilience_response(state: GuardianState) -> dict[str, Any]:
             ),
             None,
         )
+    try:
+        solar_interval = latest_outage_interval(start, end)
+    except (OSError, sqlite3.Error, ValueError):
+        solar_interval = None
+    latest_loss_at = (
+        str(solar_interval.get("outage_started_at") or "")
+        if solar_interval
+        else str((latest_loss or {}).get("timestamp") or "")
+    )
+    latest_restore_at = (
+        str(solar_interval.get("outage_restored_at") or "")
+        if solar_interval
+        else str((latest_restore or {}).get("timestamp") or "")
+    )
     today_news = ""
-    if latest_loss and latest_restore:
-        lost_at = _format_local_time(str(latest_loss.get("timestamp") or ""))
-        restored_at = _format_local_time(
-            str(latest_restore.get("timestamp") or "")
-        )
+    if latest_loss_at and latest_restore_at:
+        lost_at = _format_local_time(latest_loss_at)
+        restored_at = _format_local_time(latest_restore_at)
         today_news = (
             f"Hoy hubo un corte desde las {lost_at} hasta las {restored_at}. "
         )
-    elif not latest_loss:
-        today_news = "Home Assistant no registró cortes de electricidad hoy. "
+    elif latest_loss_at:
+        lost_at = _format_local_time(latest_loss_at)
+        today_news = f"El corte de hoy comenzó a las {lost_at} y sigue activo. "
+    else:
+        today_news = "Los registros eléctricos no muestran cortes hoy. "
 
     runtime_text = spoken_duration(estimate.get("remaining_hours"), english=False)
     outage_time = (
@@ -1099,12 +1114,8 @@ def _energy_resilience_response(state: GuardianState) -> dict[str, Any]:
             "truth": str(timeline.get("truth") or "REAL"),
             "mode": mode,
             **estimate,
-            "latest_outage_started_at": (
-                latest_loss.get("timestamp") if latest_loss else None
-            ),
-            "latest_outage_restored_at": (
-                latest_restore.get("timestamp") if latest_restore else None
-            ),
+            "latest_outage_started_at": latest_loss_at or None,
+            "latest_outage_restored_at": latest_restore_at or None,
             "battery_capacity": battery_capacity,
             "output_power": output_power,
             "execution": "ARMED_ON_OUTAGE" if automatic_load_shed else "PREVIEW_ONLY",

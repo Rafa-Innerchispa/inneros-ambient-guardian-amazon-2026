@@ -382,6 +382,42 @@ def test_energy_status_reports_todays_real_outage_and_restore_times():
     assert "Today utility power was out from 08:10 until 08:42" in localized["response"]["answer"]
 
 
+def test_energy_status_uses_solar_flight_recorder_when_ha_has_no_grid_events(
+    monkeypatch,
+):
+    monkeypatch.setattr(
+        "ambient_guardian.orchestration.latest_outage_interval",
+        lambda *args, **kwargs: {
+            "source": "solar_xmart_history_sqlite_read_only",
+            "outage_started_at": "2026-10-22T18:24:29+00:00",
+            "outage_restored_at": "2026-10-22T23:23:38+00:00",
+            "outage_active": False,
+        },
+    )
+    state = _state()
+    state.home_assistant.history_timeline = lambda *args, **kwargs: {
+        "truth": "REAL",
+        "events": [],
+        "current_states": {
+            "binary_sensor.inneros_pi01_solar_grid_present": "on",
+            "binary_sensor.inneros_pi01_solar_battery_mode": "off",
+            "sensor.inneros_pi01_solar_mode": "utility_present_backup_float",
+            "sensor.inneros_pi01_solar_battery_capacity": "95",
+            "sensor.inneros_pi01_solar_output_power": "622",
+        },
+    }
+
+    result = simulated_alexa_turn(
+        "háblame de la energía",
+        state,
+        FailIfReasonerRuns(),
+    )
+
+    assert "Hoy hubo un corte desde las 13:24 hasta las 18:23" in result["response"]["answer"]
+    assert result["energy_resilience"]["latest_outage_started_at"] == "2026-10-22T18:24:29+00:00"
+    assert result["energy_resilience"]["latest_outage_restored_at"] == "2026-10-22T23:23:38+00:00"
+
+
 def test_energy_resilience_can_be_rendered_in_english():
     result = simulated_alexa_turn(
         "show me the energy resilience status and energy saving plan",
