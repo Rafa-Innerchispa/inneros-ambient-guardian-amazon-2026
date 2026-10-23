@@ -803,6 +803,27 @@ def test_ring_demo_answers_english_queries_in_english():
     assert "fuente" not in answer.lower()
 
 
+def test_ring_demo_localizes_event_summary_for_spanish_queries():
+    state = _state()
+    state.add_ring_demo_event(
+        "motion",
+        device_name="Front Door",
+        summary="Ring demo detected motion at the front door",
+    )
+
+    result = simulated_alexa_turn(
+        "dime qué detectó Ring en el demo",
+        state,
+        FailIfReasonerRuns(),
+        speaker_context={"response_locale": "es-US"},
+    )
+
+    answer = result["response"]["answer"]
+    assert "Se detectó movimiento en la puerta principal" in answer
+    assert "Hay 1 evento Ring" in answer
+    assert "detected motion" not in answer.lower()
+
+
 def test_ring_demo_announcement_is_opt_in_and_truth_labeled(monkeypatch):
     monkeypatch.setenv("AMBIENT_GUARDIAN_RING_ALERTS_ENABLED", "1")
     monkeypatch.setenv("AMBIENT_GUARDIAN_RING_DEMO_ALERTS_ENABLED", "1")
