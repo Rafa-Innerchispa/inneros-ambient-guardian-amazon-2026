@@ -566,8 +566,16 @@ def _guardian_query(
         return f"reproduce {query}{f' en {player}' if player else ''} usando YouTube Music"
     if intent_name == "UnifiRestartIntent":
         target = _slot_value(request_payload, "target")
+        # Alexa's en-US NLU canonicalizes "UniFi zero three" to the slot value
+        # ``uni Fi 03``.  Collapse that brand spelling before it reaches the
+        # strict owner allowlist so the real ``unifi 03`` alias resolves.
+        target = re.sub(r"\buni\s+fi\b", "unifi", target, flags=re.I).strip()
         if english:
+            if target.lower().startswith("unifi "):
+                return f"prepare to restart {target}"
             return f"prepare to restart UniFi {target}" if target else "restart a UniFi device"
+        if target.lower().startswith("unifi "):
+            return f"prepara reiniciar el {target}"
         return f"prepara reiniciar el UniFi {target}" if target else "reinicia un equipo UniFi"
     if intent_name == "PBXPrivateDestinationIntent":
         return (
