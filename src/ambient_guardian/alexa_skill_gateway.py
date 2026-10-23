@@ -459,7 +459,7 @@ def _response_locale(payload: dict[str, Any], request_payload: dict[str, Any]) -
     if re.search(
         r"[áéíóúñ¿¡]|\b(?:prepara|reinicia|reiniciar|estado|revisa|cuarto|"
         r"estudio|red|cámaras?|servidores?|energía|llama|celular|qué|cómo|"
-        r"ayer|madrugada)\b",
+        r"ayer|madrugada|h[aá]blame|cu[eé]ntame|dime)\b",
         spoken,
         re.I,
     ):
@@ -591,7 +591,9 @@ def _guardian_query(
             return f"prepare for {provider}: {task}" if task else ""
         return f"prepara una tarea para {provider}: {task}" if task else ""
 
-    query = _slot_value(request_payload, "query")
+    query = _slot_value(request_payload, "query") or _slot_value(
+        request_payload, "spanishTopic"
+    )
     # ``AskGuardianIntent`` deliberately accepts an AMAZON.SearchQuery so owners
     # can speak naturally.  Alexa sometimes gives that broad intent precedence
     # over the dedicated status intents and strips the leading verb, leaving a

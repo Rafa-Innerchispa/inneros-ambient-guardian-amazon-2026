@@ -531,6 +531,31 @@ def test_spanish_intents_override_an_english_echo_locale(
     assert calls[0][1]["response_locale"] == "es-US"
 
 
+def test_spanish_status_topic_slot_is_a_language_anchor_on_en_us_echo(monkeypatch):
+    calls = []
+    monkeypatch.setattr(
+        gateway,
+        "_backend_turn",
+        lambda backend_query, speaker_context=None: calls.append(
+            (backend_query, speaker_context)
+        )
+        or "respuesta",
+    )
+    payload = intent_request(
+        None,
+        intent_name="SpanishStatusIntent",
+        locale="en-US",
+    )
+    payload["intent"]["slots"]["spanishTopic"] = {
+        "name": "spanishTopic",
+        "value": "Grandstream",
+    }
+    gateway._dispatch(request_payload(payload))
+
+    assert calls[0][0] == "revisa el estado en vivo de VoiceOps y la central Grandstream"
+    assert calls[0][1]["response_locale"] == "es-US"
+
+
 def test_unifi_restart_intent_preserves_only_target_alias(monkeypatch):
     calls = []
     monkeypatch.setattr(
