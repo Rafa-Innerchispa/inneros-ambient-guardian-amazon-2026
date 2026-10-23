@@ -89,3 +89,34 @@ def test_latest_outage_interval_reports_completed_transition(tmp_path):
         "outage_restored_at": "2026-10-22T23:23:00+00:00",
         "outage_active": False,
     }
+
+
+def test_latest_outage_interval_normalizes_local_window_to_utc(tmp_path):
+    path = tmp_path / "solar.sqlite3"
+    conn = _database(path)
+    conn.executemany(
+        """
+        INSERT INTO solar_samples (
+            ts_utc, grid_present, battery_mode, output_active_w,
+            battery_voltage_v, battery_capacity_percent,
+            battery_discharge_current_a
+        ) VALUES (?, ?, ?, ?, ?, ?, ?)
+        """,
+        [
+            ("2026-10-22T18:23:00+00:00", 1, 0, 538, 27.0, 100, 0),
+            ("2026-10-22T18:24:00+00:00", 0, 1, 544, 26.7, 98, 15),
+            ("2026-10-22T23:23:00+00:00", 1, 0, 529, 27.1, 54, 0),
+        ],
+    )
+    conn.commit()
+    conn.close()
+
+    interval = latest_outage_interval(
+        datetime.fromisoformat("2026-10-22T00:00:00-05:00"),
+        datetime.fromisoformat("2026-10-22T19:50:00-05:00"),
+        path,
+    )
+
+    assert interval["outage_started_at"] == "2026-10-22T18:24:00+00:00"
+    assert interval["outage_restored_at"] == "2026-10-22T23:23:00+00:00"
+    assert interval["outage_active"] is False

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import os
 import sqlite3
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
@@ -120,6 +120,12 @@ def latest_outage_interval(
     if not db_path.is_file():
         return None
 
+    start_utc = (
+        start.astimezone(timezone.utc) if start.tzinfo is not None else start
+    ).isoformat()
+    end_utc = (
+        end.astimezone(timezone.utc) if end.tzinfo is not None else end
+    ).isoformat()
     uri = f"file:{db_path.as_posix()}?mode=ro"
     with sqlite3.connect(uri, uri=True, timeout=1.0) as conn:
         conn.row_factory = sqlite3.Row
@@ -131,7 +137,7 @@ def latest_outage_interval(
             ORDER BY ts_utc DESC
             LIMIT 1
             """,
-            (start.isoformat(),),
+            (start_utc,),
         ).fetchone()
         rows = list(
             conn.execute(
@@ -141,7 +147,7 @@ def latest_outage_interval(
                 WHERE ts_utc >= ? AND ts_utc <= ?
                 ORDER BY ts_utc
                 """,
-                (start.isoformat(), end.isoformat()),
+                (start_utc, end_utc),
             )
         )
 
@@ -151,7 +157,7 @@ def latest_outage_interval(
             and (row["grid_present"] == 0 or row["battery_mode"] == 1)
         )
 
-    active_start = start.isoformat() if is_outage(previous) else None
+    active_start = start_utc if is_outage(previous) else None
     was_outage = is_outage(previous)
     latest_start = None
     latest_end = None
