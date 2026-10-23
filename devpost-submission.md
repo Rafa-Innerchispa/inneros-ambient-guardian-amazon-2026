@@ -53,7 +53,7 @@ There is no `approve_action`, execution, or speaker tool in MCP. A public `/api/
 - `SIMULATED`: browser voice, Ring-compatible demo events, and simulator adapters.
 - `CODE_READY`: implemented integration without live provider/device evidence.
 - Direct Alexa+ MCP entitlement is `NOT_PROVEN`; we do not call it live.
-- Ring stays `CODE_READY` until official provider-live evidence exists.
+- Ring Playground/API is `OFFICIAL_SANDBOX_VERIFIED`; physical-device/provider-live evidence remains unclaimed.
 - Google Home private resources remain OAuth-gated.
 
 ## Challenges
@@ -69,7 +69,7 @@ We also encountered a shared host with an older MCP package. We treated that as 
 - Receipt-pinned PBX callback preparation and sanitized verification evidence.
 - Existing three Judge Mode scenarios preserved.
 - Live Evidence Console added to the existing frontend.
-- **112 automated tests passed**.
+- **287 automated tests passed** on the current Ring sandbox evidence candidate.
 - `compileall` passed.
 - Official MCP client connected over real Streamable HTTP.
 - Tool discovery proved MCP cannot approve or execute physical actions.
@@ -82,7 +82,7 @@ Ambient systems need an evidence model, not just an intent model. A useful answe
 
 - Complete and record the physical Echo consent/enablement step.
 - Record one separately approved real PBX callback when VoiceOps is reachable.
-- Obtain official Ring provider evidence before claiming Ring live.
+- Record the official Ring Playground/API evidence in the demo; do not present the local fixture as a physical device.
 - Keep direct Alexa+ MCP as `NOT_PROVEN` until entitlement is available.
 
 ## Reproduction

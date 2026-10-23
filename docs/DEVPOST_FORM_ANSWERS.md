@@ -2,26 +2,26 @@
 
 Canonical handoff for **Build, Ship, Shape: Amazon Developer Hackathon**.
 
-Current canonical `main`: `068fe0a64c2663d38d28e58fd8d195af3b121ba3`.
+Current canonical `main` before this evidence update: `8ffe96520ee0e018f427aa6b603546b8e64f48b9`.
 
 Current evidence state:
 
-- 27/27 automated tests PASS
+- 287 automated tests PASS on the Ring sandbox evidence and announcement candidate
 - GitHub Actions PASS
 - runtime HTTP + official MCP client smoke PASS
 - Judge Mode browser QA PASS
 - AWS Strands -> local Qwen/vLLM live calls PASS
 - repository is public and GitHub detects the MIT License
-- physical Echo/Ring hardware is optional and not claimed as integrated
+- physical Ring hardware is optional and is not claimed; the official Ring Playground/API path is verified
 - final Devpost submission has NOT been sent
 
 ## Project strategy
 
-- **Project:** InnerOS Ambient Guardian
-- **Primary track:** Alexa+ only
+- **Project:** Atlas Control (repository/runtime lineage: InnerOS Ambient Guardian)
+- **Primary tracks:** Alexa+ and Ring
 - **AWS Builder Mini Challenge:** Yes
 - **Open Source Mini Challenge:** Yes
-- **Ring track:** No, unless an official Ring API/SDK/simulator/device integration is later demonstrated in both code and video
+- **Ring track:** Yes — private Ring app plus official Amazon Vision Playground/API evidence; no physical-device claim
 - **Repository:** https://github.com/Rafa-Innerchispa/inneros-ambient-guardian-amazon-2026
 - **Open Source contribution:** https://github.com/Rafa-Innerchispa/inneros-ambient-guardian-amazon-2026/pull/8
 - **GitHub username:** `Rafa-Innerchispa`
@@ -51,11 +51,11 @@ Do not infer this from the repository owner or company affiliation.
 
 ### 28289 — Primary Track(s)
 
-`Alexa+`
+`Alexa+` and `Ring`
 
 Reason: the project satisfies the track with a self-hosted MCP server using Streamable HTTP and a clearly labeled simulated Alexa+ experience whose source is in the public repository.
 
-Do **not** select Ring based only on the current Ring-compatible simulator boundary. The Ring track requires actual use of Ring APIs, SDKs, simulators, or devices.
+Select Ring because the private Ring app is configured with official account-link and webhook URLs and the official Ring Playground returned a sandbox device, online status, AVC/1080p capabilities, and a successful WHEP session. The local fixture remains explicitly `SIMULATED`; do not describe it as a physical Ring device or signed live webhook.
 
 ### 28290 — Public code repository
 
@@ -113,7 +113,7 @@ https://github.com/Rafa-Innerchispa/inneros-ambient-guardian-amazon-2026
 
 ### 28299 — Open Source description
 
-InnerOS Ambient Guardian is a new MIT-licensed open-source project created during the hackathon window. It implements a self-hosted official MCP Python SDK v2 server over Streamable HTTP, a simulated Alexa+ Judge Mode, local Qwen/vLLM reasoning, AWS Strands orchestration, a Ring-compatible event boundary, fail-closed natural-language action parsing, one-time expiring proposals, a separate human approval boundary, post-action verification and evidence.
+Atlas Control is a new MIT-licensed open-source project created during the hackathon window. It implements a self-hosted official MCP Python SDK v2 server over Streamable HTTP, a physical Alexa Custom Skill plus Judge Mode, local Qwen/vLLM reasoning, AWS Strands orchestration, an official Ring Amazon Vision adapter and Playground-verified sandbox path, fail-closed natural-language action parsing, one-time expiring proposals, a separate human approval boundary, post-action verification and evidence.
 
 The public repository includes application source, tests, a real HTTP MCP smoke client, Strands/local-Qwen integration smokes, Docker packaging, GitHub Actions CI, architecture/security/deployment documentation, a Judge Mode runbook and a detailed friction log.
 
@@ -140,7 +140,7 @@ If a secure public Judge Mode hostname is later created, replace or supplement t
 
 We used the **official MCP Python SDK v2** to implement the Alexa+ primary-track self-hosted Streamable HTTP server and official MCP client tests. We used the **AWS Strands Agents SDK** for read-only orchestration and synthesis, with `strands.models.openai.OpenAIModel` connected to our local Qwen/vLLM OpenAI-compatible endpoint. We used Qwen/vLLM for local-first reasoning, Starlette/Uvicorn for the shared MCP + Judge Mode ASGI runtime, Docker for reproducible packaging and GitHub Actions for clean-environment tests and runtime validation.
 
-For the Alexa+ simulated-experience path, the web Judge Mode talks to the same Ambient Guardian runtime and safety policy used by the MCP server. The project also contains a Ring-compatible normalization boundary for future official Ring integration, but we do not claim Ring track eligibility from that compatibility layer alone.
+For the Alexa+ simulated-experience path, the web Judge Mode talks to the same Atlas runtime and safety policy used by the MCP server. For Ring, we used the Ring Developer Portal, Amazon Vision API contract, official Playground device/status/capabilities controls, and WHEP video-session handshake. A separate local Ring-compatible fixture makes the incident reproducible and is always labelled `SIMULATED`.
 
 ### 28304 — Feedback 2: What worked well?
 
@@ -201,7 +201,7 @@ We would also use the OpenAI-compatible local-provider path again because it let
 ## Demo video checklist — under 3 minutes, public, English
 
 1. **0:00–0:20 — Problem:** fragmented smart-home alerts vs one coherent local-first guardian.
-2. **0:20–0:35 — Truth labels:** REAL MCP/backend/Strands/Qwen; SIMULATED Alexa+ and Ring-compatible event edge.
+2. **0:20–0:35 — Truth labels:** REAL MCP/backend/Strands/Qwen; physical Custom Skill; OFFICIAL_SANDBOX_VERIFIED Ring Playground; SIMULATED local Ring event fixture.
 3. **0:35–1:00 — Scenario 1:** `Is everything okay at home?` Show the live Strands/Qwen answer.
 4. **1:00–1:25 — Scenario 2:** front-door event -> normalized event -> Guardian context and recommendation.
 5. **1:25–2:05 — Scenario 3:** `Prepare to lock the front door.` Show `executed=false`, separate human approval, then verified evidence.

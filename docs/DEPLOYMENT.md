@@ -64,7 +64,10 @@ For a physical Alexa/Echo proof, deploy the same ASGI service behind an HTTPS ho
 
 The Alexa+ MCP Toolkit path should be used only if the owner account/device is eligible. If the owner account is not eligible, use an Alexa Skill/Agent Skill wrapper that calls this service through the same HTTPS origin and keeps approval outside Alexa's model/tool surface.
 
-For Ring, keep the simulator enabled until the owner has a Ring Developer app, OAuth/account linking, webhook signing configuration, and either an official test account or a real device. Do not label the Ring track complete before that binding is demonstrated.
+For Ring, the private developer app, account-link/webhook URLs, and official Playground
+device/status/capabilities/WHEP path are verified. Keep the local simulator enabled for
+reproducible judging and label its events `SIMULATED`. Do not claim a physical device or
+`PROVIDER_LIVE_VERIFIED` until an owner account and signed live webhook are captured.
 
 ## Real-home notification services
 

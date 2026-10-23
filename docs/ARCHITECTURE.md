@@ -53,7 +53,10 @@ It never controls a real door. A future real adapter must preserve the exact sam
 
 ## Ring boundary
 
-The current project normalizes Ring-like event concepts but does not claim an official Ring integration. The repository and submission should remain Alexa+-primary until an official Ring API/SDK/simulator/device path is demonstrated.
+The project has an official Ring developer app and Amazon Vision adapter. The official
+Ring Playground verified device listing, status, capabilities, and WHEP session setup;
+that evidence is labelled `OFFICIAL_SANDBOX_VERIFIED`. Reproducible local events remain
+`SIMULATED`, while a physical device and signed live webhook remain unclaimed.
 
 ## Persistence
 

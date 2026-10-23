@@ -1,9 +1,9 @@
 # ChatGPT coordination handoff — Atlas Control / Ambient Guardian
 
-Last verified: 2026-10-22 America/Guayaquil
+Last verified: 2026-10-23 America/Guayaquil
 Repository: `Rafa-Innerchispa/inneros-ambient-guardian-amazon-2026`
 Authoritative branch: `main`
-Authoritative commit at handoff creation: `7e1ff4984cf28fa5aee31ca41d301dc58e35f6fc`
+Authoritative deployed commit before this evidence update: `8ffe96520ee0e018f427aa6b603546b8e64f48b9`
 
 This file is the current source of truth for ChatGPT, Codex, Cursor, and the owner.
 Read it before changing the Alexa, PBX, Ring, UniFi, energy, or submission flows. Do
@@ -139,31 +139,47 @@ Ring has two deliberately separate paths.
 - UI/API routes include `/api/simulate/ring` and `/api/demo/reset`.
 - Alexa has `RingDemoStatusIntent` in en-US, es-US, es-MX, and es-ES models.
 
-### Official Ring provider — CODE_READY, not provider-live
+### Official Ring provider — official sandbox verified; owner account not linked
 
 - `RingOfficialAdapter` exists and implements token/session preflight, JSON:API event
   normalization, fail-closed signed-webhook verification, status/history concepts,
   and the Amazon Vision/Ring provider boundary.
-- The live server reports `configured=false`, mode `official_ring_pending`, and
-  `device_verification=pending_real_or_official_test_account`.
-- No Ring developer token, official test account, signed provider session, or
-  physical Ring device has been verified.
-- An authenticated Ring Developer Portal flow has been prepared for a private app
-  named `InnerOS Atlas Control`, with `Cameras and Doorbells` plus the automatic
-  `Account and Lifecycle` scope. The owner accepted the Ring Appstore Schedule and
-  the private app was created on 2026-10-23. Its one-time credentials were stored
-  outside Git and must never be copied into chat, documentation, commits, or logs.
+- The private `InnerOS Atlas Control` Ring app exists with `Cameras and Doorbells`
+  plus the automatic `Account and Lifecycle` scope.
+- Amazon's one-time app credentials are mounted outside Git. Token storage uses a
+  separate mode-`0600` Fernet key and encrypted token file.
+- The owner accepted the Ring Appstore Schedule on 2026-10-23. The one-time app
+  credentials must never be copied into chat, documentation, commits, or logs.
 - Atlas now provides the official one-way account-linking boundaries required by
   Ring: encrypted token exchange, time-bounded HMAC nonce matching, explicit owner
   sign-in, POST+PATCH integration completion, app management, and the existing
-  signed webhook receiver. Provider-live status still requires a successful Ring
-  account link and official device/sandbox evidence.
-- Targeted server tests completed `14 passed` for official-adapter security,
-  physical-integration boundaries, and the simulated incident flow.
+  signed webhook receiver. Provider-live status still requires a successful owner
+  account link plus signed-webhook evidence; official sandbox evidence is complete.
+- The four public Ring URLs are saved in Amazon Developer Console through the
+  allowlisted Atlas gateway. All three Configure cards are green.
+- Official Ring Playground evidence captured on 2026-10-23:
+  - one sandbox device returned by `Device List`;
+  - device status `online=true`;
+  - AVC video, 1080p, 16:9, and motion-detection capabilities;
+  - successful `Motion` WHEP session with SDP answer;
+  - empty Event History, therefore no physical event claim.
+- A matching event sent through Atlas `/api/simulate/ring` produced event
+  `evt-0b3249c93e` with `ring_edge=SIMULATED` and
+  `guardian_pipeline=REAL`. Alexa/Atlas accurately described it as a sandbox test,
+  not a real camera.
+- The real-home profile now has a separate opt-in Ring announcement path. A local
+  fixture announces `Ring demo alert` and explicitly says it is simulated; only a
+  verified signed provider event may announce `Ring alert`. Both target only the
+  allowlisted Cuarto Echo and speech failure never drops the stored event.
+- PR #77 merged as `8ffe96520ee0e018f427aa6b603546b8e64f48b9`;
+  all 285 tests passed before deployment.
+- The Ring sandbox evidence/announcement candidate passed 287 tests on the deployment
+  host before PR creation.
 
-Therefore the submission may show the Ring-compatible scenario only with a visible
-`SIMULATED` label. Do not select or claim the Ring track as provider-live until an
-official API/SDK/simulator/test-account session is captured in evidence.
+Therefore the submission may truthfully show an official Ring Playground/API
+integration and enter the Ring track, while the local event remains visibly
+`SIMULATED`. Do not claim a physical device, owner-account link, or signed live
+webhook until those separate steps are captured.
 
 ## Bellini / external-site boundary
 

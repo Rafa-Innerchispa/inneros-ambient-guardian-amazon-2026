@@ -65,6 +65,22 @@ allowlisted response headers.
     commands: `RING_CREDENTIALS_CSV` points to Amazon's original two-column export,
     while `RING_TOKEN_STORE_KEY_FILE` points to a separate mode-`0600` Fernet key.
     `RING_TOKEN_STORE_PATH` selects the encrypted OAuth-token file.
+- **Amazon Developer account-link settings:** SAVED AND VERIFIED on 2026-10-23.
+  - All three Configure cards are green in the Ring Developer Console.
+  - The four public URLs use the allowlisted `/alexa/skill/ring/*` gateway routes
+    documented above.
+- **Official Ring Playground:** `OFFICIAL_SANDBOX_VERIFIED` on 2026-10-23.
+  - A temporary 30-minute OAuth token was generated only inside Amazon's
+    Playground. Its value was not copied into Git, documentation, logs, or the
+    permanent Atlas runtime.
+  - `Device List` returned one official sandbox device.
+  - `Status` returned `online=true`.
+  - `Capabilities` returned AVC video, 1080p maximum/supported resolution,
+    16:9 ratio, and motion-detection capability.
+  - The Playground `Motion` scenario created a WHEP session and returned an SDP
+    answer, proving the official Ring media sandbox path.
+  - `Event History` remained empty. No physical Ring event or signed webhook was
+    claimed.
 - **Implementation Status (`CODE_READY`):** COMPLETE.
   - Official endpoint: `https://api.amazonvision.com/v1/devices`
   - Ingress HMAC-SHA256 signature verification supporting `X-Signature` and `X-Ring-Signature` (fail-closed)
@@ -72,10 +88,15 @@ allowlisted response headers.
   - Truth labels (`REAL` for authenticated/signed, `UNVERIFIED` for unsigned)
   - Unit and integration tests 100% passing.
 - **Live Provider Status (`PROVIDER_LIVE_VERIFIED`):** PENDING ACCOUNT LINK.
-  - App credentials exist, but no Ring staging account/device has completed the
-    official authorization flow yet. Do not mark Ring as REAL until that provider
-    exchange, device discovery, and signed webhook evidence are captured.
+  - Official sandbox access is verified, but no owner Ring account or physical
+    device has completed the app's one-way authorization flow yet.
+  - Do not mark the home device edge as `REAL` until the provider exchange,
+    device discovery, and a signed webhook are captured by Atlas.
 - **Local Fallback:** `CODE_READY` and verified via `RingSimulatorAdapter`.
+  - After the official Playground test, Atlas received one matching local motion
+    fixture through `/api/simulate/ring`. It was explicitly stored as
+    `source=ring-compatible-simulator`, `truth=SIMULATED`; the downstream Guardian
+    pipeline remained `REAL`.
 
 ## Preflight Verification
 To run the diagnostic preflight audit:

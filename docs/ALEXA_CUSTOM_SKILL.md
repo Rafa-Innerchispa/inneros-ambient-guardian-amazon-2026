@@ -231,6 +231,12 @@ This channel does not change an Echo device's language or voice locale. Amazon o
 that per-device setting, which must be changed in the Alexa app. Announcements should
 be authored in the same language as the target Echo for predictable pronunciation.
 
+Ring event announcements are independently opt-in. A verified signed Ring webhook is
+announced as `Ring alert`; the hackathon fixture is announced as `Ring demo alert` and
+ends by stating that it is simulated. Both paths enter the same real Atlas evidence
+pipeline, but the speech and stored metadata preserve their different truth labels.
+The real-home profile targets the Cuarto Echo in `en-US` for the recorded demo.
+
 
 ## Allowlisted ambient lighting
 
