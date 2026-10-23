@@ -1,4 +1,6 @@
 import time
+from datetime import datetime
+from zoneinfo import ZoneInfo
 
 import pytest
 
@@ -341,8 +343,13 @@ def test_plain_english_energy_status_uses_deterministic_real_home_report():
     assert result["energy_resilience"]["truth"] == "REAL"
 
 
-def test_energy_status_reports_todays_real_outage_and_restore_times():
+def test_energy_status_reports_todays_real_outage_and_restore_times(monkeypatch):
+    monkeypatch.setattr(
+        "ambient_guardian.orchestration.latest_outage_interval",
+        lambda *args, **kwargs: None,
+    )
     state = _state()
+    today_local = datetime.now(ZoneInfo("America/Guayaquil")).date().isoformat()
     state.home_assistant.history_timeline = lambda *args, **kwargs: {
         "truth": "REAL",
         "events": [
@@ -351,7 +358,7 @@ def test_energy_status_reports_todays_real_outage_and_restore_times():
                 "label": "Red eléctrica",
                 "category": "energy",
                 "state": "off",
-                "timestamp": "2026-10-22T13:10:00+00:00",
+                "timestamp": f"{today_local}T13:10:00+00:00",
                 "summary": "Se perdió la red eléctrica",
             },
             {
@@ -359,7 +366,7 @@ def test_energy_status_reports_todays_real_outage_and_restore_times():
                 "label": "Red eléctrica",
                 "category": "energy",
                 "state": "on",
-                "timestamp": "2026-10-22T13:42:00+00:00",
+                "timestamp": f"{today_local}T13:42:00+00:00",
                 "summary": "Se restableció la red eléctrica",
             },
         ],

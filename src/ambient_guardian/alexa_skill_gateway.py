@@ -23,6 +23,20 @@ from starlette.responses import JSONResponse, Response
 from starlette.routing import Route
 
 DEFAULT_BACKEND = "http://127.0.0.1:8794/api/alexa"
+RING_BACKEND_ORIGIN = "http://127.0.0.1:8794"
+MAX_RING_EDGE_BODY_BYTES = 1_048_576
+RING_EDGE_ROUTES: dict[str, tuple[str, frozenset[str]]] = {
+    "/alexa/skill/ring/oauth/token": (
+        "/api/ring/oauth/token",
+        frozenset({"POST"}),
+    ),
+    "/alexa/skill/ring/link": ("/ring/link", frozenset({"GET", "POST"})),
+    "/alexa/skill/ring/config": ("/ring/config", frozenset({"GET"})),
+    "/alexa/skill/ring/webhook": (
+        "/api/ring/webhook",
+        frozenset({"POST"}),
+    ),
+}
 MAX_QUERY_CHARS = 600
 MAX_SPEECH_CHARS = 900
 TIMESTAMP_TOLERANCE_SECONDS = 150
@@ -875,6 +889,57 @@ async def skill_endpoint(request: Request) -> Response:
     return JSONResponse(response)
 
 
+async def ring_edge_endpoint(request: Request) -> Response:
+    """Forward only the four allowlisted Ring endpoints to the local backend.
+
+    The public tunnel already owns ``/alexa/skill*``. Keeping this narrow bridge
+    here lets Ring reach Atlas Control without exposing port 8794 or creating a
+    generic reverse proxy. Ring webhook signatures are forwarded unchanged and
+    remain verified by the backend.
+    """
+    route = RING_EDGE_ROUTES.get(request.url.path)
+    if route is None or request.method not in route[1]:
+        return JSONResponse({"detail": "not found"}, status_code=404)
+    body = await request.body()
+    if len(body) > MAX_RING_EDGE_BODY_BYTES:
+        return JSONResponse({"detail": "request body too large"}, status_code=413)
+
+    request_headers = {"x-forwarded-prefix": "/alexa/skill"}
+    for name in ("content-type", "x-signature", "x-ring-signature"):
+        value = request.headers.get(name)
+        if value:
+            request_headers[name] = value
+    try:
+        async with httpx.AsyncClient(timeout=12.0, follow_redirects=False) as client:
+            upstream = await client.request(
+                request.method,
+                f"{RING_BACKEND_ORIGIN}{route[0]}",
+                params=list(request.query_params.multi_items()),
+                content=body,
+                headers=request_headers,
+            )
+    except httpx.HTTPError as exc:
+        _record_gateway_error(exc)
+        return JSONResponse({"detail": "Ring backend unavailable"}, status_code=502)
+
+    response_headers: dict[str, str] = {}
+    for name in (
+        "cache-control",
+        "content-security-policy",
+        "content-type",
+        "referrer-policy",
+        "x-content-type-options",
+    ):
+        value = upstream.headers.get(name)
+        if value:
+            response_headers[name] = value
+    return Response(
+        upstream.content,
+        status_code=upstream.status_code,
+        headers=response_headers,
+    )
+
+
 async def health(request: Request) -> Response:
     del request
     return JSONResponse(
@@ -893,6 +958,26 @@ app = Starlette(
     routes=[
         Route("/health", health, methods=["GET"]),
         Route("/alexa/skill", skill_endpoint, methods=["POST"]),
+        Route(
+            "/alexa/skill/ring/oauth/token",
+            ring_edge_endpoint,
+            methods=["POST"],
+        ),
+        Route(
+            "/alexa/skill/ring/link",
+            ring_edge_endpoint,
+            methods=["GET", "POST"],
+        ),
+        Route(
+            "/alexa/skill/ring/config",
+            ring_edge_endpoint,
+            methods=["GET"],
+        ),
+        Route(
+            "/alexa/skill/ring/webhook",
+            ring_edge_endpoint,
+            methods=["POST"],
+        ),
     ]
 )
 

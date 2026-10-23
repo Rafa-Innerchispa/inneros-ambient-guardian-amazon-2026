@@ -190,6 +190,12 @@ def test_ring_http_routes_keep_tokens_private_and_require_owner_auth(monkeypatch
     assert page.status_code == 200
     assert "type='password'" in page.text
 
+    proxied_page = client.get(
+        "/ring/link?nonce=valid-nonce&time=123",
+        headers={"x-forwarded-prefix": "/alexa/skill"},
+    )
+    assert "action='/alexa/skill/ring/link'" in proxied_page.text
+
     rejected = client.post(
         "/ring/link",
         content="nonce=valid-nonce&time=123&owner_token=wrong",
