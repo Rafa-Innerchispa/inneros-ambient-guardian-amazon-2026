@@ -835,6 +835,10 @@ def test_ring_demo_answers_english_queries_in_english():
     assert "source is simulated" in answer
     assert "fuente" not in answer.lower()
 
+    localized = localize_alexa_result(result, "en-US")
+    assert localized["response"]["answer"].startswith("Simulated Ring demo:")
+    assert "Motion was detected at the front door" in localized["response"]["answer"]
+
 
 def test_ring_demo_localizes_event_summary_for_spanish_queries():
     state = _state()

@@ -1392,12 +1392,6 @@ def localize_alexa_result(result: dict[str, Any], locale: str) -> dict[str, Any]
             f"I sent {playback.get('query', 'the requested music')} to "
             f"{playback.get('player_alias', 'the approved speaker')} through YouTube Music."
         )
-    elif mode == "deterministic-ring-demo":
-        response["answer"] = (
-            "The Ring adapter is available as a clearly labeled simulation. InnerOS can "
-            "correlate simulated Ring motion, person, doorbell, or package events with real "
-            "home sensors. Ring data is never presented as real."
-        )
     elif mode == "deterministic-dmx-status":
         response["answer"] = (
             "The professional DMX engine is online over Art-Net. I can control approved scenes, "

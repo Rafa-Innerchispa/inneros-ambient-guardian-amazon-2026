@@ -251,7 +251,7 @@
           "slots": [
             {
               "name": "target",
-              "type": "AMAZON.SearchQuery"
+              "type": "UNIFI_RESTART_TARGET"
             }
           ],
           "samples": [
@@ -403,7 +403,43 @@
           "samples": []
         }
       ],
-      "types": []
+      "types": [
+        {
+          "name": "UNIFI_RESTART_TARGET",
+          "values": [
+            {
+              "name": {
+                "value": "unifi 03",
+                "synonyms": ["UniFi cero tres", "UniFi zero three", "cuarto", "bedroom"]
+              }
+            },
+            {
+              "name": {
+                "value": "living",
+                "synonyms": ["U7 Living", "punto de acceso living"]
+              }
+            },
+            {
+              "name": {
+                "value": "estudio",
+                "synonyms": ["study", "studio", "punto de acceso estudio"]
+              }
+            },
+            {
+              "name": {
+                "value": "u6 plus",
+                "synonyms": ["punto de acceso U6 Plus"]
+              }
+            },
+            {
+              "name": {
+                "value": "gateway",
+                "synonyms": ["Cloud Gateway", "Cloud Gateway Ultra", "router"]
+              }
+            }
+          ]
+        }
+      ]
     }
   }
 }
