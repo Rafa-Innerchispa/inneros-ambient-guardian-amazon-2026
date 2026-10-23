@@ -179,7 +179,8 @@ def test_live_camera_status_is_read_only_and_deterministic():
 
 
 def test_hablame_de_las_camaras_routes_to_deterministic_camera_status():
-    state = GuardianState(home_assistant=LiveHomeInventory())
+    state = GuardianState()
+    state.home_assistant = LiveHomeInventory()
 
     result = simulated_alexa_turn("háblame de las cámaras", state, GuardianReasoner())
 
