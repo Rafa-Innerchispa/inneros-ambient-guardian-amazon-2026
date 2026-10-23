@@ -444,6 +444,12 @@ def _response_locale(payload: dict[str, Any], request_payload: dict[str, Any]) -
     questions in English on a bilingual household device.
     """
     intent = request_payload.get("intent") or {}
+    intent_name = str(intent.get("name") or "")
+    # On an en-US Echo, Alexa can recognize Spanish samples but does not send
+    # the raw utterance. Language-tagged intents preserve what the owner said
+    # even when the intent has no slot text from which to infer the language.
+    if "Spanish" in intent_name:
+        return "es-US"
     slots = intent.get("slots") or {}
     spoken = " ".join(
         str(slot.get("value") or "")
@@ -480,6 +486,13 @@ def _guardian_query(
 ) -> str:
     """Translate stable Alexa intents into the bounded InnerOS voice vocabulary."""
     intent_name = str(((request_payload.get("intent") or {}).get("name") or ""))
+    intent_name = {
+        "SpanishStatusIntent": "AskGuardianIntent",
+        "CapabilitiesSpanishIntent": "CapabilitiesIntent",
+        "PBXPrivateDestinationSpanishIntent": "PBXPrivateDestinationIntent",
+        "PBXCallbackSpanishIntent": "PBXCallbackIntent",
+        "UnifiRestartSpanishIntent": "UnifiRestartIntent",
+    }.get(intent_name, intent_name)
     english = str(
         response_locale or _request_locale(request_payload)
     ).lower().startswith("en")
@@ -716,7 +729,9 @@ def _dispatch(payload: dict[str, Any]) -> dict[str, Any]:
     if intent_name in {
         "AskGuardianIntent",
         "SystemStatusQueryIntent",
+        "SpanishStatusIntent",
         "CapabilitiesIntent",
+        "CapabilitiesSpanishIntent",
         "HomeHistoryIntent",
         "EnergyResilienceIntent",
         "UnifiStatusIntent",
@@ -727,9 +742,12 @@ def _dispatch(payload: dict[str, Any]) -> dict[str, Any]:
         "MusicStatusIntent",
         "PlayMusicIntent",
         "UnifiRestartIntent",
+        "UnifiRestartSpanishIntent",
         "PBXPrivateDestinationIntent",
+        "PBXPrivateDestinationSpanishIntent",
         "VoiceOpsStatusIntent",
         "PBXCallbackIntent",
+        "PBXCallbackSpanishIntent",
         "AMDDemoProgramIntent",
         "CursorProgramIntent",
         "CodexProgramIntent",

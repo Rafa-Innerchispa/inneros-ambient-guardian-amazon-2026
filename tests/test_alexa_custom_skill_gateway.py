@@ -483,6 +483,54 @@ def test_english_stable_intents_use_english_backend_queries(
     assert calls[0][1]["response_locale"] == "en-US"
 
 
+@pytest.mark.parametrize(
+    ("intent_name", "query", "expected"),
+    [
+        (
+            "SpanishStatusIntent",
+            "Grandstream",
+            "revisa el estado en vivo de VoiceOps y la central Grandstream",
+        ),
+        (
+            "SpanishStatusIntent",
+            "el wifi",
+            "revisa el estado en vivo de UniFi",
+        ),
+        (
+            "PBXPrivateDestinationSpanishIntent",
+            None,
+            "llama a mi celular usando la central Grandstream",
+        ),
+        (
+            "PBXCallbackSpanishIntent",
+            None,
+            "prepárame una llamada por la central con el reporte del último incidente",
+        ),
+    ],
+)
+def test_spanish_intents_override_an_english_echo_locale(
+    monkeypatch, intent_name, query, expected
+):
+    calls = []
+    monkeypatch.setattr(
+        gateway,
+        "_backend_turn",
+        lambda backend_query, speaker_context=None: calls.append(
+            (backend_query, speaker_context)
+        )
+        or "respuesta",
+    )
+
+    gateway._dispatch(
+        request_payload(
+            intent_request(query, intent_name=intent_name, locale="en-US")
+        )
+    )
+
+    assert calls[0][0] == expected
+    assert calls[0][1]["response_locale"] == "es-US"
+
+
 def test_unifi_restart_intent_preserves_only_target_alias(monkeypatch):
     calls = []
     monkeypatch.setattr(

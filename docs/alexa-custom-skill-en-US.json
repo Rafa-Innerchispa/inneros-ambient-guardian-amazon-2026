@@ -64,6 +64,42 @@
           ]
         },
         {
+          "name": "SpanishStatusIntent",
+          "slots": [
+            {
+              "name": "query",
+              "type": "AMAZON.SearchQuery"
+            }
+          ],
+          "samples": [
+            "estado de {query}",
+            "cuál es el estado de {query}",
+            "cómo está {query}",
+            "cómo están {query}",
+            "háblame de {query}",
+            "cuéntame de {query}",
+            "qué hay de {query}",
+            "dame información de {query}",
+            "hay algún problema con {query}",
+            "hay problemas con {query}",
+            "qué servicios hay en {query}",
+            "qué está pasando con {query}",
+            "qué pasó con {query}",
+            "novedades de {query}",
+            "revisa {query}",
+            "verifica {query}"
+          ]
+        },
+        {
+          "name": "CapabilitiesSpanishIntent",
+          "slots": [],
+          "samples": [
+            "qué puedes hacer",
+            "cómo puedes ayudarme",
+            "qué controla inner os"
+          ]
+        },
+        {
           "name": "HomeHistoryIntent",
           "slots": [],
           "samples": [
@@ -239,6 +275,30 @@
           ]
         },
         {
+          "name": "UnifiRestartSpanishIntent",
+          "slots": [
+            {
+              "name": "target",
+              "type": "AMAZON.SearchQuery"
+            }
+          ],
+          "samples": [
+            "prepara reiniciar unifi {target}",
+            "reinicia el equipo unifi {target}",
+            "reinicia el punto de acceso {target}",
+            "prepara reiniciar el punto de acceso {target}"
+          ]
+        },
+        {
+          "name": "PBXPrivateDestinationSpanishIntent",
+          "slots": [],
+          "samples": [
+            "llama a mi celular usando grandstream",
+            "llama a mi teléfono por la central",
+            "llama a mi celular permitido por la central"
+          ]
+        },
+        {
           "name": "VoiceOpsStatusIntent",
           "slots": [],
           "samples": [
@@ -271,6 +331,16 @@
             "build the AMD hackathon dashboard",
             "run the Cursor programming demo",
             "start the Cursor demo"
+          ]
+        },
+        {
+          "name": "PBXCallbackSpanishIntent",
+          "slots": [],
+          "samples": [
+            "prepara una llamada por la central con el último incidente",
+            "llámame por grandstream con el informe del incidente",
+            "llama a mi aplicación grandstream con el último incidente",
+            "llama a mi softphone con el último incidente"
           ]
         },
         {
