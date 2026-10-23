@@ -1,5 +1,10 @@
 # CURRENT HANDOFF — InnerOS VoiceOps / FieldOps / Amazon Ambient Guardian
 
+> **Actualización 2026-10-22:** para el estado vigente de Atlas Control, Alexa
+> bilingüe, Grandstream móvil, Ring y las etiquetas REAL/SIMULATED/CODE_READY,
+> leer primero `docs/CHATGPT_COORDINATION_HANDOFF_2026-10-22.md`. Este documento
+> conserva el historial previo y no sustituye las verificaciones más recientes.
+
 **Fecha:** 2026-09-17  
 **Objetivo:** permitir que otro chat continúe sin repetir trabajo ya cerrado, sin romper telefonía funcional y sin gastar Codex salvo autorización explícita del owner.
 
