@@ -326,6 +326,8 @@ def test_live_unifi_status_treats_current_firmware_as_healthy():
         FailIfReasonerRuns(),
     )
     assert result["response"]["status"] == "all_clear"
+    assert "up to date" in result["response"]["answer"]
+    assert "Firmware: off" not in result["response"]["answer"]
     assert "1 of 1 monitored signals are available" in result["response"]["answer"]
 
 

@@ -558,6 +558,12 @@ def _guardian_query(
         )
     if intent_name == "UnifiStatusIntent":
         return "check the live UniFi network status" if english else "revisa el estado en vivo de UniFi"
+    if intent_name == "BelliniStatusIntent":
+        return (
+            "check the live status of the Bellini network"
+            if english
+            else "revisa el estado en vivo de la red Bellini"
+        )
     if intent_name == "CameraStatusIntent":
         return "check the live camera and recorder status" if english else "revisa el estado en vivo de las cámaras y grabadores"
     if intent_name == "ServerStatusIntent":
@@ -819,6 +825,7 @@ def _dispatch(payload: dict[str, Any]) -> dict[str, Any]:
         "EnergyResilienceSpanishIntent",
         "UnifiStatusIntent",
         "UnifiStatusSpanishIntent",
+        "BelliniStatusIntent",
         "CameraStatusIntent",
         "ServerStatusIntent",
         "RingDemoStatusIntent",

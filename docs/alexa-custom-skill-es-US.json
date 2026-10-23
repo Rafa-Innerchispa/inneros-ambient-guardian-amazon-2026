@@ -133,8 +133,6 @@
             "cómo está la red wifi",
             "háblame del wifi",
             "qué hay del wifi",
-            "háblame de Bellini",
-            "qué hay de la red Bellini",
             "cómo está el wifi de la casa",
             "hay algún problema con el wifi",
             "están conectados los puntos de acceso UniFi",
@@ -145,6 +143,18 @@
             "dame un reporte de la red de la casa",
             "háblame de la red de la casa",
             "háblame de todos los sitios UniFi"
+          ]
+        },
+        {
+          "name": "BelliniStatusIntent",
+          "slots": [],
+          "samples": [
+            "háblame de Bellini",
+            "qué hay de Bellini",
+            "qué hay de la red Bellini",
+            "cómo está Bellini",
+            "hay algún problema con Bellini",
+            "dame el reporte de la red Bellini"
           ]
         },
         {
