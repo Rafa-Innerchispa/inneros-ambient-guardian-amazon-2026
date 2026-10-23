@@ -20,6 +20,7 @@ def _model(path: Path) -> dict:
 def test_all_locales_have_general_status_and_live_infrastructure_intents():
     required = {
         "SystemStatusQueryIntent",
+        "BelliniStatusIntent",
         "UnifiStatusIntent",
         "CameraStatusIntent",
         "ServerStatusIntent",

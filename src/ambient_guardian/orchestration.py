@@ -1690,6 +1690,18 @@ def _unifi_status_response(
     for item in spoken_entities[:8]:
         label = str(item.get("label") or item.get("entity_id") or "device")
         value = str(item.get("state") or "unknown")
+        entity_id = str(item.get("entity_id") or "").lower()
+        normalized_value = value.strip().lower()
+        if entity_id.startswith("update.") and normalized_value in {
+            "off", "idle", "up_to_date"
+        }:
+            value = "up to date" if english else "actualizado"
+        elif entity_id.startswith("binary_sensor.") and normalized_value in {"on", "off"}:
+            value = (
+                ("online" if normalized_value == "on" else "offline")
+                if english
+                else ("en línea" if normalized_value == "on" else "fuera de línea")
+            )
         unit = str(item.get("unit") or "")
         details.append(f"{label}: {value}{(' ' + unit) if unit else ''}")
     scope_intro = {
