@@ -678,9 +678,12 @@ def test_bedroom_approval_restarts_once_announces_completion_and_cancels_duplica
     outcomes = state.process_whatsapp_approvals()
 
     assert state.home_assistant.restart_calls == ["bedroom"]
-    assert len(state.home_assistant.speak_calls) == 1
-    notify_entity, message = state.home_assistant.speak_calls[0]
+    assert len(state.home_assistant.speak_calls) == 2
+    notify_entity, started_message = state.home_assistant.speak_calls[0]
     assert notify_entity == "notify.echo_cuarto_speak"
+    assert "I am restarting" in started_message
+    assert "may briefly lose Wi-Fi" in started_message
+    _, message = state.home_assistant.speak_calls[1]
     assert "Authorization confirmed" in message
     assert "back online" in message
     assert outcomes[0]["completion_announced"] is True
@@ -712,8 +715,10 @@ def test_verified_restart_does_not_claim_online_while_reconnecting():
 
     assert outcomes[0]["status"] == "completed"
     assert state.home_assistant.restart_calls == ["living"]
-    assert len(state.home_assistant.speak_calls) == 1
-    _, message = state.home_assistant.speak_calls[0]
+    assert len(state.home_assistant.speak_calls) == 2
+    _, started_message = state.home_assistant.speak_calls[0]
+    assert "Voy a reiniciar" in started_message
+    _, message = state.home_assistant.speak_calls[1]
     assert "se está reconectando" in message
     assert "nuevamente en línea" not in message
 

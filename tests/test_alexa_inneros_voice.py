@@ -1,3 +1,5 @@
+from datetime import datetime, timezone
+
 import pytest
 
 from ambient_guardian.core import GuardianState
@@ -93,6 +95,46 @@ def test_live_unifi_status_is_read_only_and_deterministic():
     assert "home UniFi network" in result["response"]["answer"]
     assert result["unifi_status"]["scope"] == "home"
     assert result["prepared_action"] is None
+
+
+def test_live_unifi_status_reports_recent_restart_and_current_connection():
+    state = GuardianState()
+    state.home_assistant = LiveHomeInventory()
+    restarted_at = datetime.now(timezone.utc).isoformat()
+    state.home_assistant.unifi_status = lambda: {
+        "configured": True,
+        "entities": [
+            {
+                "entity_id": "sensor.cuarto_state",
+                "label": "Cuarto State",
+                "state": "connected",
+                "unit": "",
+            },
+            {
+                "entity_id": "sensor.cuarto_uptime",
+                "label": "Cuarto Uptime",
+                "state": restarted_at,
+                "unit": "",
+            },
+        ],
+        "targets": [
+            {
+                "label": "Punto de acceso UniFi 03",
+                "status_entity": "sensor.cuarto_state",
+                "uptime_entity": "sensor.cuarto_uptime",
+            }
+        ],
+    }
+
+    result = simulated_alexa_turn(
+        "tell me about the home UniFi network",
+        state,
+        FailIfReasonerRuns(),
+        speaker_context={"response_locale": "en-US"},
+    )
+
+    assert "The most recent restart was UniFi 03 access point" in result["response"]["answer"]
+    assert "It is connected now" in result["response"]["answer"]
 
 
 def test_generic_home_wifi_excludes_external_bellini_entities():
