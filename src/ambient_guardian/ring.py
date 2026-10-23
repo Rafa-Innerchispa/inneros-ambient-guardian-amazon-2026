@@ -10,6 +10,8 @@ from typing import Any, Protocol
 
 import httpx
 
+from .ring_oauth import load_ring_app_credentials
+
 
 @dataclass(frozen=True, slots=True)
 class RingAdapterStatus:
@@ -133,6 +135,9 @@ class RingOfficialAdapter:
         shared = self._selected_shared_env(
             os.getenv("AMBIENT_GUARDIAN_SHARED_ENV_FILE", "")
         )
+        app_credentials = load_ring_app_credentials(
+            os.getenv("RING_CREDENTIALS_CSV", "")
+        )
         self.token = (
             token
             or os.getenv("RING_TOKEN")
@@ -145,6 +150,7 @@ class RingOfficialAdapter:
             webhook_secret
             or os.getenv("RING_WEBHOOK_SECRET")
             or shared.get("RING_WEBHOOK_SECRET")
+            or app_credentials.get("HMAC Signature Key")
             or ""
         ).strip()
         self.api_base = (

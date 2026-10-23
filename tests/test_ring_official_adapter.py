@@ -36,6 +36,24 @@ def test_ring_official_adapter_status_and_device_verification_states():
     assert "https://api.amazonvision.com/v1" in status_secret.official_path
 
 
+def test_ring_official_adapter_loads_hmac_from_amazon_csv(tmp_path, monkeypatch):
+    credential_file = tmp_path / "app-credentials.csv"
+    credential_file.write_text(
+        "Client ID,csv-client-id\n"
+        "Client Secret,csv-client-secret\n"
+        "HMAC Signature Key,csv-hmac-key\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("RING_CREDENTIALS_CSV", str(credential_file))
+    monkeypatch.delenv("RING_WEBHOOK_SECRET", raising=False)
+    monkeypatch.delenv("AMBIENT_GUARDIAN_SHARED_ENV_FILE", raising=False)
+
+    adapter = RingOfficialAdapter()
+
+    assert adapter.webhook_secret == "csv-hmac-key"
+    assert adapter.status().mode == "official_ring_edge"
+
+
 def test_ring_official_adapter_session_verification_live_mock(monkeypatch):
     adapter = RingOfficialAdapter(
         token="valid-vision-token-777",

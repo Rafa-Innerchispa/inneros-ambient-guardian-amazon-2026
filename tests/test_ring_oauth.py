@@ -44,6 +44,30 @@ def test_ring_token_store_is_encrypted_and_tracks_claim_state(tmp_path):
     assert store.counts() == {"unclaimed": 0, "linked": 1}
 
 
+def test_ring_runtime_loads_amazon_csv_and_separate_store_key(tmp_path, monkeypatch):
+    credential_file = tmp_path / "app-credentials.csv"
+    credential_file.write_text(
+        "Client ID,csv-client-id\n"
+        "Client Secret,csv-client-secret\n"
+        "HMAC Signature Key,csv-hmac-key\n",
+        encoding="utf-8",
+    )
+    key_file = tmp_path / "token-store.key"
+    key_file.write_bytes(Fernet.generate_key())
+    monkeypatch.setenv("RING_CREDENTIALS_CSV", str(credential_file))
+    monkeypatch.setenv("RING_TOKEN_STORE_KEY_FILE", str(key_file))
+    monkeypatch.setenv("RING_TOKEN_STORE_PATH", str(tmp_path / "tokens.enc"))
+    for key in ("RING_CLIENT_ID", "RING_CLIENT_SECRET", "RING_WEBHOOK_SECRET", "RING_TOKEN_STORE_KEY"):
+        monkeypatch.delenv(key, raising=False)
+
+    service = RingOAuthService.from_env()
+
+    assert service.configured is True
+    assert service.client_id == "csv-client-id"
+    assert service.client_secret == "csv-client-secret"
+    assert service.hmac_key == "csv-hmac-key"
+
+
 def test_ring_code_exchange_stores_tokens_without_returning_them(tmp_path, monkeypatch):
     service = RingOAuthService(
         client_id="client-id",

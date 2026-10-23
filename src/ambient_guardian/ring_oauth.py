@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import base64
+import csv
 import hashlib
 import hmac
 import json
@@ -13,6 +14,35 @@ from typing import Any
 
 import httpx
 from cryptography.fernet import Fernet, InvalidToken
+
+
+def load_ring_app_credentials(path_value: str) -> dict[str, str]:
+    """Read Amazon's two-column credential export without logging secret values."""
+    path_value = path_value.strip()
+    if not path_value:
+        return {}
+    path = Path(path_value).expanduser()
+    allowed = {"Client ID", "Client Secret", "HMAC Signature Key"}
+    found: dict[str, str] = {}
+    try:
+        with path.open("r", encoding="utf-8", newline="") as handle:
+            for row in csv.reader(handle):
+                if len(row) < 2 or row[0].strip() not in allowed:
+                    continue
+                found[row[0].strip()] = row[1].strip()
+    except OSError:
+        return {}
+    return found
+
+
+def read_secret_file(path_value: str) -> str:
+    path_value = path_value.strip()
+    if not path_value:
+        return ""
+    try:
+        return Path(path_value).expanduser().read_text(encoding="utf-8").strip()
+    except OSError:
+        return ""
 
 
 @dataclass(slots=True)
@@ -137,13 +167,19 @@ class RingOAuthService:
 
     @classmethod
     def from_env(cls) -> "RingOAuthService":
+        credentials = load_ring_app_credentials(os.getenv("RING_CREDENTIALS_CSV", ""))
+        token_store_key = os.getenv("RING_TOKEN_STORE_KEY", "") or read_secret_file(
+            os.getenv("RING_TOKEN_STORE_KEY_FILE", "")
+        )
         return cls(
-            client_id=os.getenv("RING_CLIENT_ID", ""),
-            client_secret=os.getenv("RING_CLIENT_SECRET", ""),
-            hmac_key=os.getenv("RING_WEBHOOK_SECRET", ""),
+            client_id=os.getenv("RING_CLIENT_ID", "") or credentials.get("Client ID", ""),
+            client_secret=os.getenv("RING_CLIENT_SECRET", "")
+            or credentials.get("Client Secret", ""),
+            hmac_key=os.getenv("RING_WEBHOOK_SECRET", "")
+            or credentials.get("HMAC Signature Key", ""),
             token_store=RingTokenStore(
                 os.getenv("RING_TOKEN_STORE_PATH", "var/ring_oauth_tokens.enc"),
-                os.getenv("RING_TOKEN_STORE_KEY", ""),
+                token_store_key,
             ),
             api_base=os.getenv("AMAZON_VISION_API_URL", cls.DEFAULT_API_BASE),
         )
