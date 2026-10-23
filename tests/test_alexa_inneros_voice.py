@@ -1,7 +1,7 @@
 import pytest
 
 from ambient_guardian.core import GuardianState
-from ambient_guardian.orchestration import simulated_alexa_turn
+from ambient_guardian.orchestration import localize_alexa_result, simulated_alexa_turn
 
 
 class FailIfReasonerRuns:
@@ -415,3 +415,36 @@ def test_voiceops_status_distinguishes_validated_but_temporarily_blocked():
 
     assert "validada de extremo a extremo" in result["response"]["answer"]
     assert result["response"]["status"] == "attention_required"
+
+
+def test_voiceops_status_reports_mobile_route_separately_from_softphones():
+    state = GuardianState()
+    state.voiceops = VoiceOpsStatus(
+        {
+            "state": "BLOCKED",
+            "truth_label": "CODE_READY",
+            "callback_ready": False,
+            "owner_confirmed_e2e_calling": True,
+            "owner_mobile_callback_ready": True,
+            "owner_mobile_last_four": "9000",
+        }
+    )
+
+    result = simulated_alexa_turn(
+        "háblame de Grandstream",
+        state,
+        FailIfReasonerRuns(),
+    )
+
+    answer = result["response"]["answer"]
+    assert "celular privado terminado en 9000" in answer
+    assert "llama a mi celular usando Grandstream" in answer
+    assert "softphones internos" in answer
+    assert result["response"]["status"] == "all_clear"
+    assert result["prepared_action"] is None
+
+    localized = localize_alexa_result(result, "en-US")
+    english = localized["response"]["answer"]
+    assert "private mobile ending in 9000" in english
+    assert "call my cell phone using Grandstream" in english
+    assert "internal softphone callback" in english

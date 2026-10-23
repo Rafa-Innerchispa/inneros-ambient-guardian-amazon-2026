@@ -1397,12 +1397,32 @@ def localize_alexa_result(result: dict[str, Any], locale: str) -> dict[str, Any]
             else "The DMX and Art-Net integration is configured, but the local engine is not responding right now."
         )
     elif mode == "deterministic-voiceops-status":
-        response["answer"] = (
-            "VoiceOps and the Grandstream PBX are ready to prepare a call to the owner's private "
-            "contact. I did not place a call."
-            if response.get("status") == "all_clear"
-            else "VoiceOps or the Grandstream PBX is not available right now. I did not place a call."
-        )
+        voiceops = dict(result.get("voiceops") or {})
+        mobile_ready = bool(voiceops.get("owner_mobile_callback_ready"))
+        confirmed = bool(voiceops.get("owner_confirmed_e2e_calling"))
+        callback_ready = bool(voiceops.get("callback_ready"))
+        mobile_last_four = str(voiceops.get("owner_mobile_last_four") or "").strip()
+        if mobile_ready and confirmed:
+            destination = f" ending in {mobile_last_four}" if mobile_last_four else ""
+            response["answer"] = (
+                "The Grandstream PBX route to the owner's private mobile"
+                f"{destination} is ready and has been validated end to end. To use it, say: "
+                "call my cell phone using Grandstream. I will send authorization to WhatsApp "
+                "and will not dial until it is approved there. I did not place a call with "
+                "this status request."
+            )
+            if not callback_ready:
+                response["answer"] += (
+                    " The internal softphone callback is currently unavailable, but that does "
+                    "not block the authorized mobile route."
+                )
+        else:
+            response["answer"] = (
+                "VoiceOps and the Grandstream PBX are ready to prepare a call to the owner's "
+                "private contact. I did not place a call."
+                if response.get("status") == "all_clear"
+                else "VoiceOps or the Grandstream PBX is not available right now. I did not place a call."
+            )
     elif mode == "deterministic-private-voiceops-destination":
         prepared = result.get("prepared_action")
         if isinstance(prepared, dict) and prepared.get("approval_delivery") == "sent":
@@ -1945,7 +1965,23 @@ def _voiceops_status_response(state: GuardianState) -> dict[str, Any]:
     real = str(voiceops.get("truth_label") or "CODE_READY") == "REAL"
     confirmed = bool(voiceops.get("owner_confirmed_e2e_calling"))
     mobile_ready = bool(voiceops.get("owner_mobile_callback_ready"))
-    if ready and real:
+    mobile_last_four = str(voiceops.get("owner_mobile_last_four") or "").strip()
+    if mobile_ready and confirmed:
+        destination = f" terminado en {mobile_last_four}" if mobile_last_four else ""
+        answer = (
+            "La ruta de la central Grandstream al celular privado"
+            f"{destination} está lista y ya fue validada de extremo a extremo. "
+            "Para usarla, di: llama a mi celular usando Grandstream. Te enviaré la "
+            "autorización por WhatsApp y no marcaré hasta que la confirmes. "
+            "No inicié ninguna llamada con esta consulta."
+        )
+        if not ready:
+            answer += (
+                " El callback a los softphones internos no está disponible ahora, "
+                "pero eso no bloquea la ruta autorizada al celular."
+            )
+        status = "all_clear"
+    elif ready and real:
         answer = (
             "VoiceOps y la central Grandstream están listos para preparar una llamada "
             "al propietario. No inicié ninguna llamada."
@@ -1969,10 +2005,6 @@ def _voiceops_status_response(state: GuardianState) -> dict[str, Any]:
             "Grandstream. No inicié ninguna llamada."
         )
         status = "attention_required"
-    if mobile_ready:
-        answer += (
-            " La ruta permitida al celular privado también está lista, siempre con autorización por WhatsApp."
-        )
     return {
         "answer": answer,
         "status": status,
