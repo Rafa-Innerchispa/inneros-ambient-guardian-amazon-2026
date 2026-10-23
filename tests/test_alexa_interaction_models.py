@@ -52,3 +52,23 @@ def test_en_us_has_language_anchored_spanish_infrastructure_intents():
         "UnifiStatusSpanishIntent",
         "VoiceOpsStatusSpanishIntent",
     } <= names
+
+
+def test_primary_locales_use_bounded_unifi_restart_targets():
+    for path in MODEL_PATHS[:2]:
+        model = _model(path)
+        restart_intents = [
+            intent for intent in model["intents"] if "UnifiRestart" in intent["name"]
+        ]
+        assert restart_intents
+        for intent in restart_intents:
+            assert intent["slots"] == [
+                {"name": "target", "type": "UNIFI_RESTART_TARGET"}
+            ]
+        target_type = next(
+            slot_type
+            for slot_type in model["types"]
+            if slot_type["name"] == "UNIFI_RESTART_TARGET"
+        )
+        target_names = {value["name"]["value"] for value in target_type["values"]}
+        assert {"unifi 03", "living", "estudio", "u6 plus", "gateway"} <= target_names

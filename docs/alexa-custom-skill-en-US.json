@@ -313,7 +313,7 @@
           "slots": [
             {
               "name": "target",
-              "type": "AMAZON.SearchQuery"
+              "type": "UNIFI_RESTART_TARGET"
             }
           ],
           "samples": [
@@ -344,7 +344,7 @@
           "slots": [
             {
               "name": "target",
-              "type": "AMAZON.SearchQuery"
+              "type": "UNIFI_RESTART_TARGET"
             }
           ],
           "samples": [
@@ -568,6 +568,41 @@
               "name": {
                 "value": "Bellini",
                 "synonyms": ["red Bellini"]
+              }
+            }
+          ]
+        },
+        {
+          "name": "UNIFI_RESTART_TARGET",
+          "values": [
+            {
+              "name": {
+                "value": "unifi 03",
+                "synonyms": ["UniFi zero three", "UniFi cero tres", "bedroom", "cuarto"]
+              }
+            },
+            {
+              "name": {
+                "value": "living",
+                "synonyms": ["U7 Living", "living access point"]
+              }
+            },
+            {
+              "name": {
+                "value": "estudio",
+                "synonyms": ["study", "studio", "study access point"]
+              }
+            },
+            {
+              "name": {
+                "value": "u6 plus",
+                "synonyms": ["U6 plus access point"]
+              }
+            },
+            {
+              "name": {
+                "value": "gateway",
+                "synonyms": ["Cloud Gateway", "Cloud Gateway Ultra", "router"]
               }
             }
           ]
