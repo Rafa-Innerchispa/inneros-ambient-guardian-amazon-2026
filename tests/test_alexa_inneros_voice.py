@@ -178,6 +178,15 @@ def test_live_camera_status_is_read_only_and_deterministic():
     assert result["prepared_action"] is None
 
 
+def test_hablame_de_las_camaras_routes_to_deterministic_camera_status():
+    state = GuardianState(home_assistant=FakeHomeAssistant())
+
+    result = simulated_alexa_turn("háblame de las cámaras", state, GuardianReasoner())
+
+    assert result["response"]["reasoning_mode"] == "deterministic-camera-status"
+    assert result["prepared_action"] is None
+
+
 @pytest.mark.parametrize(
     "utterance,reasoning_mode",
     [

@@ -100,3 +100,79 @@ def current_outage_summary(path: str | Path | None = None) -> dict[str, Any] | N
             "load_max_w": round(max(values), 1) if values else None,
             "estimated_ac_energy_wh": round(energy_wh, 1),
         }
+
+
+def latest_outage_interval(
+    start: datetime,
+    end: datetime,
+    path: str | Path | None = None,
+) -> dict[str, Any] | None:
+    """Return the latest recorded outage transition inside a time window.
+
+    This reads the existing solar flight recorder in read-only mode. It is used
+    for historical voice reports when Home Assistant does not expose a
+    dedicated ``grid_present`` entity in Recorder.
+    """
+    db_path = Path(
+        path
+        or os.getenv("AMBIENT_GUARDIAN_SOLAR_HISTORY_DB", DEFAULT_SOLAR_HISTORY_DB)
+    ).expanduser()
+    if not db_path.is_file():
+        return None
+
+    uri = f"file:{db_path.as_posix()}?mode=ro"
+    with sqlite3.connect(uri, uri=True, timeout=1.0) as conn:
+        conn.row_factory = sqlite3.Row
+        previous = conn.execute(
+            """
+            SELECT ts_utc, grid_present, battery_mode
+            FROM solar_samples
+            WHERE ts_utc < ?
+            ORDER BY ts_utc DESC
+            LIMIT 1
+            """,
+            (start.isoformat(),),
+        ).fetchone()
+        rows = list(
+            conn.execute(
+                """
+                SELECT ts_utc, grid_present, battery_mode
+                FROM solar_samples
+                WHERE ts_utc >= ? AND ts_utc <= ?
+                ORDER BY ts_utc
+                """,
+                (start.isoformat(), end.isoformat()),
+            )
+        )
+
+    def is_outage(row: sqlite3.Row | None) -> bool:
+        return bool(
+            row is not None
+            and (row["grid_present"] == 0 or row["battery_mode"] == 1)
+        )
+
+    active_start = start.isoformat() if is_outage(previous) else None
+    was_outage = is_outage(previous)
+    latest_start = None
+    latest_end = None
+    for row in rows:
+        outage = is_outage(row)
+        if outage and not was_outage:
+            active_start = str(row["ts_utc"])
+        elif was_outage and not outage and active_start:
+            latest_start = active_start
+            latest_end = str(row["ts_utc"])
+            active_start = None
+        was_outage = outage
+
+    if active_start:
+        latest_start = active_start
+        latest_end = None
+    if not latest_start:
+        return None
+    return {
+        "source": "solar_xmart_history_sqlite_read_only",
+        "outage_started_at": latest_start,
+        "outage_restored_at": latest_end,
+        "outage_active": latest_end is None,
+    }
