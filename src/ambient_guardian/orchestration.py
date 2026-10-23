@@ -83,6 +83,9 @@ _ENERGY_RESILIENCE_QUERY = re.compile(
     r"(?:energy|power)\s+(?:information|status|report|summary)|"
     r"resilience\s+plan|load\s+shedding|critical\s+circuits?|"
     r"how\s+(?:long\s+will\s+the\s+battery\s+last|much\s+backup\s+time\s+remains)|"
+    r"(?:are\s+we|is\s+(?:the\s+)?(?:house|home|system))\s+(?:currently\s+)?(?:running\s+)?on\s+"
+    r"(?:battery(?:\s+(?:power|backup))?|backup\s+power)|"
+    r"are\s+we\s+(?:currently\s+)?using\s+(?:the\s+)?battery(?:\s+(?:power|backup))?|"
     r"when\s+did\s+the\s+(?:power\s+)?outage\s+start|current\s+power\s+load|"
     r"should\s+i\s+turn\s+off\s+the\s+fan|enter\s+energy\s+saving\s+mode|"
     r"(?:tell\s+me\s+about|what\s+about|is\s+there\s+(?:any|a)\s+problem\s+with)\s+"
@@ -95,6 +98,8 @@ _ENERGY_RESILIENCE_QUERY = re.compile(
     r"(?:la\s+)?(?:energ[ií]a|electricidad)|"
     r"modo\s+de\s+ahorro\s+energ[eé]tico|desconexi[oó]n\s+de\s+cargas|"
     r"circuitos?\s+cr[ií]ticos?|cu[aá]nto\s+tiempo\s+durar[aá]\s+la\s+bater[ií]a|"
+    r"(?:estamos|la\s+casa\s+est[aá]|el\s+sistema\s+est[aá])\s+(?:ahora\s+)?(?:funcionando\s+)?"
+    r"(?:en\s+modo\s+|con\s+|usando\s+)?bater[ií]a|"
     r"cu[aá]nta\s+autonom[ií]a\s+queda|a\s+qu[eé]\s+hora\s+comenz[oó]\s+el\s+apag[oó]n|"
     r"cu[aá]nto\s+consume\s+la\s+casa|debo\s+apagar\s+el\s+ventilador|"
     r"activa\s+el\s+modo\s+de\s+ahorro\s+energ[eé]tico)\b",
@@ -113,7 +118,8 @@ _DMX_STATUS_QUERY = re.compile(
 )
 _UNIFI_RESTART_QUERY = re.compile(
     r"\b(?:reinicia|reiniciar|reinicio|reboot|restart)\b[^.]*\b(?:unifi|u7|gateway|wifi|"
-    r"router|access\s+point|punto\s+de\s+acceso|study|bedroom|estudio|cuarto|living)\b",
+    r"router|access\s+point|punto\s+de\s+acceso|study|bedroom|estudio|cuarto|living|"
+    r"zero\s+three|cero\s+tres|03)\b",
     re.I,
 )
 _UNIFI_STATUS_QUERY = re.compile(
@@ -123,7 +129,9 @@ _UNIFI_STATUS_QUERY = re.compile(
     r"\b(?:uni\s*fi|ubiquiti|wi[ -]?fi|wifi|network|red|bellini)\b"
     r"|\b(?:tell\s+me\s+about|what\s+about|is\s+there\s+(?:any|a)\s+problem\s+with|"
     r"cu[eé]ntame\s+(?:sobre|del?)|h[aá]blame\s+(?:sobre|del?)|qu[eé]\s+hay\s+del?|hay\s+alg[uú]n\s+problema\s+con)\b[^.]*"
-    r"\b(?:uni\s*fi|ubiquiti|wi[ -]?fi|wifi|network|red|bellini)\b",
+    r"\b(?:uni\s*fi|ubiquiti|wi[ -]?fi|wifi|network|red|bellini)\b"
+    r"|\b(?:is|are)\b[^.]*\b(?:uni\s*fi|wi[ -]?fi|wifi|network|red)\b[^.]*"
+    r"\b(?:working|available|up|down|funcionando|disponible|ca[ií]d[oa])\b",
     re.I,
 )
 _CAMERA_STATUS_QUERY = re.compile(

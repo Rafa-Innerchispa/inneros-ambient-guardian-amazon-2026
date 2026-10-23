@@ -192,7 +192,10 @@ def test_hablame_de_las_camaras_routes_to_deterministic_camera_status():
     "utterance,reasoning_mode",
     [
         ("tell me about the WiFi", "deterministic-unifi-status"),
+        ("is my WiFi working", "deterministic-unifi-status"),
         ("what about the energy", "deterministic-energy-resilience"),
+        ("are we currently running on battery power", "deterministic-energy-resilience"),
+        ("estamos en modo batería", "deterministic-energy-resilience"),
         ("what about my servers", "deterministic-server-status"),
         ("is there any problem with my cameras", "deterministic-camera-status"),
         ("tell me about Grandstream", "deterministic-voiceops-status"),

@@ -42,3 +42,12 @@ def test_general_status_intent_uses_search_query_in_every_locale():
         )
         assert intent["slots"] == [{"name": "query", "type": "AMAZON.SearchQuery"}]
         assert len(intent["samples"]) >= 10
+
+
+def test_en_us_has_language_anchored_spanish_infrastructure_intents():
+    names = {intent["name"] for intent in _model(MODEL_PATHS[0])["intents"]}
+    assert {
+        "EnergyResilienceSpanishIntent",
+        "UnifiStatusSpanishIntent",
+        "VoiceOpsStatusSpanishIntent",
+    } <= names

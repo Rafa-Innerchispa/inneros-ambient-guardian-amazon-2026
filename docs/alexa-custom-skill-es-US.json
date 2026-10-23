@@ -105,6 +105,10 @@
             "muéstrame la vista previa de desconexión de cargas",
             "cuánto tiempo durará la batería",
             "cuánta autonomía queda",
+            "estamos funcionando con batería ahora",
+            "estamos en modo batería",
+            "la casa está en batería",
+            "estamos usando la batería",
             "a qué hora comenzó el apagón",
             "cuánto consume la casa",
             "debo apagar el ventilador",
@@ -127,7 +131,13 @@
             "cómo está el wifi de la casa",
             "hay algún problema con el wifi",
             "están conectados los puntos de acceso UniFi",
-            "revisa la red Ubiquiti"
+            "revisa la red Ubiquiti",
+            "cómo está UniFi",
+            "está UniFi conectado",
+            "está funcionando mi wifi",
+            "dame un reporte de la red de la casa",
+            "háblame de la red de la casa",
+            "háblame de todos los sitios UniFi"
           ]
         },
         {
@@ -231,7 +241,10 @@
             "prepara reiniciar unifi {target}",
             "reinicia el equipo unifi {target}",
             "reinicia el router {target}",
-            "prepara el reinicio del punto de acceso {target}"
+            "prepara el reinicio del punto de acceso {target}",
+            "reinicia el punto de acceso {target}",
+            "reinicia el wifi {target}",
+            "prepara un reinicio para {target}"
           ]
         },
         {
@@ -240,7 +253,10 @@
           "samples": [
             "llama a mi celular usando grandstream",
             "marca mi teléfono por la central",
-            "llama a mi celular permitido por la central"
+            "llama a mi celular permitido por la central",
+            "llama a mi móvil usando Grandstream",
+            "usa Grandstream para llamar a mi celular",
+            "haz que la central llame a mi celular"
           ]
         },
         {
@@ -256,7 +272,9 @@
             "cómo está mi central grandstream",
             "hay algún problema con la telefonía",
             "puede llamarme voice ops",
-            "cómo está la central grandstream"
+            "cómo está la central grandstream",
+            "háblame de mi central",
+            "qué hay de la central"
           ]
         },
         {
