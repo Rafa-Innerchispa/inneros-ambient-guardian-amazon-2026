@@ -182,7 +182,7 @@ def test_hablame_de_las_camaras_routes_to_deterministic_camera_status():
     state = GuardianState()
     state.home_assistant = LiveHomeInventory()
 
-    result = simulated_alexa_turn("háblame de las cámaras", state, GuardianReasoner())
+    result = simulated_alexa_turn("háblame de las cámaras", state, FailIfReasonerRuns())
 
     assert result["response"]["reasoning_mode"] == "deterministic-camera-status"
     assert result["prepared_action"] is None
