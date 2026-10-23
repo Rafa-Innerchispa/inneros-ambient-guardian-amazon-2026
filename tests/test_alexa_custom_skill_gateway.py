@@ -4,9 +4,11 @@ import os
 import stat
 from datetime import datetime, timedelta, timezone
 
+import httpx
 import pytest
 from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.asymmetric import padding, rsa
+from starlette.testclient import TestClient
 
 from ambient_guardian import alexa_skill_gateway as gateway
 
@@ -185,6 +187,52 @@ def test_missing_signature_headers_fail_closed(monkeypatch):
     body = json.dumps(request_payload(launch_request())).encode()
     with pytest.raises(ValueError, match="signature headers"):
         gateway._verify_request({}, body)
+
+
+def test_ring_edge_exposes_only_allowlisted_routes(monkeypatch):
+    captured = []
+
+    async def fake_request(self, method, url, **kwargs):
+        captured.append((method, url, kwargs))
+        return httpx.Response(
+            200,
+            content=b"Ring edge ready",
+            headers={
+                "content-type": "text/plain",
+                "cache-control": "no-store",
+                "server": "private-backend",
+            },
+        )
+
+    monkeypatch.setattr(httpx.AsyncClient, "request", fake_request)
+    client = TestClient(gateway.app)
+
+    response = client.post(
+        "/alexa/skill/ring/webhook?source=ring",
+        content=b'{"event":"motion"}',
+        headers={
+            "content-type": "application/json",
+            "x-ring-signature": "signed",
+            "authorization": "must-not-forward",
+        },
+    )
+
+    assert response.status_code == 200
+    assert response.text == "Ring edge ready"
+    assert response.headers["cache-control"] == "no-store"
+    assert "server" not in response.headers
+    method, url, kwargs = captured[0]
+    assert method == "POST"
+    assert url == "http://127.0.0.1:8794/api/ring/webhook"
+    assert kwargs["params"] == [("source", "ring")]
+    assert kwargs["headers"] == {
+        "x-forwarded-prefix": "/alexa/skill",
+        "content-type": "application/json",
+        "x-ring-signature": "signed",
+    }
+
+    assert client.get("/alexa/skill/ring/oauth/token").status_code == 405
+    assert client.get("/alexa/skill/ring/unknown").status_code == 404
 
 
 def test_guardian_intent_calls_local_backend(monkeypatch):

@@ -332,10 +332,18 @@ async def ring_account_link(request: Request) -> Response:
                 "<p>This Ring link is invalid, expired, or not ready.</p>",
                 status_code=400,
             )
+        forwarded_prefix = request.headers.get("x-forwarded-prefix", "").rstrip("/")
+        if (
+            not forwarded_prefix.startswith("/")
+            or ".." in forwarded_prefix
+            or len(forwarded_prefix) > 80
+        ):
+            forwarded_prefix = ""
+        form_action = f"{forwarded_prefix}/ring/link"
         return _ring_page(
             "Link Ring to Atlas Control",
             "<p>Sign in as the Atlas Control owner to claim this Ring connection.</p>"
-            "<form method='post' action='/ring/link'>"
+            f"<form method='post' action='{escape(form_action, quote=True)}'>"
             f"<input type='hidden' name='nonce' value='{escape(nonce, quote=True)}'>"
             f"<input type='hidden' name='time' value='{escape(timestamp_ms, quote=True)}'>"
             "<label for='owner_token'>Owner authorization</label>"

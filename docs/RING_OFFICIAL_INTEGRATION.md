@@ -32,6 +32,22 @@ InnerOS Ambient Guardian provides an official Ring Appstore & Developer Webhook 
    - When official credentials are not yet linked, `RingSimulatorAdapter` serves as transparent local fallback so all automated tests and demos function safely.
 
 ## Provider Readiness Status
+
+### Public Ring edge
+
+The public Ring URLs are deliberately published through the existing Atlas
+gateway. The tunnel continues to expose only `/alexa/skill*`; port 8794 remains
+loopback-only:
+
+- Account Link URL: `https://voz.pcdoctor.ai/alexa/skill/ring/link`
+- App Homepage URL: `https://voz.pcdoctor.ai/alexa/skill/ring/config`
+- Token Exchange URL: `https://voz.pcdoctor.ai/alexa/skill/ring/oauth/token`
+- Webhook URL: `https://voz.pcdoctor.ai/alexa/skill/ring/webhook`
+
+The gateway has no catch-all proxy. It forwards only those four exact paths,
+preserves Ring's HMAC signature header, limits request bodies, and returns only
+allowlisted response headers.
+
 - **Ring Developer app:** CREATED as the private app `InnerOS Atlas Control`.
   - Scope: Cameras and Doorbells.
   - Automatic scope: Account and Lifecycle.
