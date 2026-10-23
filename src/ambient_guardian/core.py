@@ -1127,6 +1127,18 @@ class GuardianState:
                 "device_verification": ring_official_status.device_verification,
                 "configured": self.ring_official.is_configured(),
             },
+            "ring_official_sandbox": {
+                "truth_label": (
+                    "OFFICIAL_SANDBOX_VERIFIED"
+                    if os.getenv(
+                        "AMBIENT_GUARDIAN_RING_OFFICIAL_SANDBOX_VERIFIED", "0"
+                    )
+                    == "1"
+                    else "NOT_PROVEN"
+                ),
+                "physical_device_verified": False,
+                "signed_live_webhook_verified": False,
+            },
             "google_home": google_home_status,
             "incident_receipts": {
                 "storage": "sqlite",

@@ -200,6 +200,7 @@ See [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md) for production host/origin settin
 | `AMBIENT_GUARDIAN_RING_DEMO_ALERTS_ENABLED` | `0` | Separately enables truth-labelled simulated Ring alerts |
 | `AMBIENT_GUARDIAN_RING_ALERT_TARGET` | `notify.echo_cuarto_speak` | Allowlisted Echo endpoint for Ring alerts |
 | `AMBIENT_GUARDIAN_RING_ALERT_LOCALE` | `en-US` | Fixed language for deterministic Ring announcements |
+| `AMBIENT_GUARDIAN_RING_OFFICIAL_SANDBOX_VERIFIED` | `0` | Displays official Playground evidence separately from physical/provider-live proof |
 | `AMBIENT_GUARDIAN_OWNER_TOKEN` | unset | Required owner token for owner-only Home Assistant routes |
 | `AMBIENT_GUARDIAN_SKILL_BRIDGE_TOKEN` | unset | Shared runtime secret authenticating the loopback Custom Skill gateway to `/api/alexa` |
 | `AMBIENT_GUARDIAN_ACCOUNT_LINKING_REQUIRED` | `0` | Fail closed with an Alexa `LinkAccount` card until the owner OAuth token validates |

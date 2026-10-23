@@ -36,7 +36,10 @@ class RingSimulatorAdapter:
 
     def status(self) -> RingAdapterStatus:
         return RingAdapterStatus(
-            summary="Ring-compatible demo simulator integrated; official Ring API/SDK/simulator binding still pending",
+            summary=(
+                "Ring-compatible demo simulator integrated; official Ring Playground/API "
+                "path is verified separately, while physical-device binding remains pending"
+            ),
             official_path=(
                 "Ring Developer / Amazon Vision API: OAuth/account authorization, signed webhooks for events, "
                 "device status/history APIs, and optional WebRTC/WHEP video sessions"
