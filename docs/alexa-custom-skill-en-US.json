@@ -67,27 +67,35 @@
           "name": "SpanishStatusIntent",
           "slots": [
             {
-              "name": "query",
-              "type": "AMAZON.SearchQuery"
+              "name": "spanishTopic",
+              "type": "SPANISH_STATUS_TOPIC"
             }
           ],
           "samples": [
-            "estado de {query}",
-            "cuál es el estado de {query}",
-            "cómo está {query}",
-            "cómo están {query}",
-            "háblame de {query}",
-            "cuéntame de {query}",
-            "qué hay de {query}",
-            "dame información de {query}",
-            "hay algún problema con {query}",
-            "hay problemas con {query}",
-            "qué servicios hay en {query}",
-            "qué está pasando con {query}",
-            "qué pasó con {query}",
-            "novedades de {query}",
-            "revisa {query}",
-            "verifica {query}"
+            "estado de {spanishTopic}",
+            "cuál es el estado de {spanishTopic}",
+            "cómo está {spanishTopic}",
+            "cómo están {spanishTopic}",
+            "háblame de {spanishTopic}",
+            "háblame del {spanishTopic}",
+            "háblame de la {spanishTopic}",
+            "háblame de los {spanishTopic}",
+            "háblame de las {spanishTopic}",
+            "cuéntame de {spanishTopic}",
+            "cuéntame del {spanishTopic}",
+            "cuéntame de la {spanishTopic}",
+            "qué hay de {spanishTopic}",
+            "qué hay del {spanishTopic}",
+            "dame información de {spanishTopic}",
+            "dame información del {spanishTopic}",
+            "hay algún problema con {spanishTopic}",
+            "hay problemas con {spanishTopic}",
+            "qué servicios hay en {spanishTopic}",
+            "qué está pasando con {spanishTopic}",
+            "qué pasó con {spanishTopic}",
+            "novedades de {spanishTopic}",
+            "revisa {spanishTopic}",
+            "verifica {spanishTopic}"
           ]
         },
         {
@@ -429,7 +437,73 @@
           "samples": []
         }
       ],
-      "types": []
+      "types": [
+        {
+          "name": "SPANISH_STATUS_TOPIC",
+          "values": [
+            {
+              "name": {
+                "value": "Grandstream",
+                "synonyms": ["central Grandstream", "la central", "telefonía", "VoiceOps"]
+              }
+            },
+            {
+              "name": {
+                "value": "wifi",
+                "synonyms": ["red wifi", "wifi de la casa", "UniFi", "red UniFi"]
+              }
+            },
+            {
+              "name": {
+                "value": "cámaras",
+                "synonyms": ["camaras", "grabadores", "NVR"]
+              }
+            },
+            {
+              "name": {
+                "value": "servidores",
+                "synonyms": ["servidores de InnerOS", "flota de servidores", "Intel", "AMD"]
+              }
+            },
+            {
+              "name": {
+                "value": "energía",
+                "synonyms": ["energia", "electricidad", "panel solar", "inversor", "batería"]
+              }
+            },
+            {
+              "name": {
+                "value": "Raspberry Pi",
+                "synonyms": ["Raspberry", "las Raspberry Pi"]
+              }
+            },
+            {
+              "name": {
+                "value": "alarma",
+                "synonyms": ["alarma Intebras", "seguridad"]
+              }
+            },
+            {
+              "name": {
+                "value": "DMX",
+                "synonyms": ["luces DMX", "Art Net"]
+              }
+            },
+            {
+              "name": {
+                "value": "Ring",
+                "synonyms": ["demo de Ring"]
+              }
+            },
+            {
+              "name": {
+                "value": "Bellini",
+                "synonyms": ["red Bellini"]
+              }
+            }
+          ]
+        }
+      ]
     }
   }
 }
