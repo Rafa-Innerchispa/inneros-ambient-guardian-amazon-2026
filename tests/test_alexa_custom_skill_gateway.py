@@ -550,6 +550,21 @@ def test_english_stable_intents_use_english_backend_queries(
             "llama a mi celular usando la central Grandstream",
         ),
         (
+            "EnergyResilienceSpanishIntent",
+            None,
+            "dame el estado de resiliencia energética y el plan de ahorro",
+        ),
+        (
+            "UnifiStatusSpanishIntent",
+            None,
+            "revisa el estado en vivo de UniFi",
+        ),
+        (
+            "VoiceOpsStatusSpanishIntent",
+            None,
+            "cómo está el sistema de llamadas VoiceOps y la central Grandstream",
+        ),
+        (
             "PBXCallbackSpanishIntent",
             None,
             "prepárame una llamada por la central con el reporte del último incidente",

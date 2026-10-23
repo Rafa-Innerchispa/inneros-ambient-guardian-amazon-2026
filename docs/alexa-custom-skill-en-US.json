@@ -145,10 +145,25 @@
             "show me the load shedding preview",
             "how long will the battery last",
             "how much backup time remains",
+            "are we running on battery power",
+            "are we currently on battery power",
+            "is the house on battery",
+            "are we using battery backup",
             "when did the outage start",
             "what is the current power load",
             "should I turn off the fan",
             "enter energy saving mode"
+          ]
+        },
+        {
+          "name": "EnergyResilienceSpanishIntent",
+          "slots": [],
+          "samples": [
+            "estamos funcionando con batería ahora",
+            "estamos en modo batería",
+            "la casa está en batería",
+            "estamos usando la batería",
+            "dame el estado actual de energía"
           ]
         },
         {
@@ -167,7 +182,25 @@
             "how is my home WiFi",
             "is there any problem with the WiFi",
             "are the UniFi access points connected",
-            "check the Ubiquiti network"
+            "check the Ubiquiti network",
+            "how is UniFi",
+            "is UniFi online",
+            "is my WiFi working",
+            "give me a home network report",
+            "tell me about my home network",
+            "tell me about all connected UniFi sites"
+          ]
+        },
+        {
+          "name": "UnifiStatusSpanishIntent",
+          "slots": [],
+          "samples": [
+            "cómo está UniFi",
+            "está UniFi conectado",
+            "está funcionando mi wifi",
+            "dame un reporte de la red de la casa",
+            "háblame de la red de la casa",
+            "qué pasa con el wifi"
           ]
         },
         {
@@ -270,7 +303,11 @@
             "prepare to restart unifi {target}",
             "restart the unifi device {target}",
             "restart the {target} router",
-            "prepare to restart access point {target}"
+            "prepare to restart access point {target}",
+            "restart access point {target}",
+            "restart the {target} access point",
+            "restart WiFi {target}",
+            "prepare a restart for {target}"
           ]
         },
         {
@@ -279,7 +316,10 @@
           "samples": [
             "call my cell phone using grandstream",
             "call my phone through the PBX",
-            "call my allowed mobile through the PBX"
+            "call my allowed mobile through the PBX",
+            "call my mobile using Grandstream",
+            "use Grandstream to call my cell phone",
+            "have the PBX call my cell phone"
           ]
         },
         {
@@ -318,7 +358,19 @@
             "what about grandstream",
             "how is my grandstream PBX",
             "is there any problem with the phone system",
-            "is grandstream ready"
+            "is grandstream ready",
+            "tell me about my PBX",
+            "what about the PBX"
+          ]
+        },
+        {
+          "name": "VoiceOpsStatusSpanishIntent",
+          "slots": [],
+          "samples": [
+            "cómo está la central Grandstream",
+            "háblame de mi central",
+            "qué hay de la central",
+            "funciona el sistema de llamadas"
           ]
         },
         {

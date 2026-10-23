@@ -70,6 +70,20 @@ class StubHomeAssistant:
             "uptime": "sensor.cuarto_uptime",
             "notify": "notify.echo_cuarto_speak",
         },
+        "unifi zero three": {
+            "label": "Punto de acceso UniFi 03",
+            "button": "button.cuarto_restart",
+            "status": "sensor.cuarto_state",
+            "uptime": "sensor.cuarto_uptime",
+            "notify": "notify.echo_cuarto_speak",
+        },
+        "unifi cero tres": {
+            "label": "Punto de acceso UniFi 03",
+            "button": "button.cuarto_restart",
+            "status": "sensor.cuarto_state",
+            "uptime": "sensor.cuarto_uptime",
+            "notify": "notify.echo_cuarto_speak",
+        },
     }
 
     def __init__(self):
@@ -611,6 +625,25 @@ def test_bedroom_alias_names_cuarto_and_requests_whatsapp_authorization_in_engli
     assert "the Cuarto access point" in answer
     assert "I need your authorization through WhatsApp before I restart it" in answer
     assert "No device has restarted yet" in answer
+    assert state.home_assistant.restart_calls == []
+
+
+def test_unifi_zero_three_name_prepares_whatsapp_without_restarting():
+    approval = StubWhatsAppApproval()
+    state = _state(approval)
+
+    result = simulated_alexa_turn(
+        "restart access point UniFi zero three",
+        state,
+        FailIfReasonerRuns(),
+        speaker_context={"response_locale": "en-US"},
+    )
+    localized = localize_alexa_result(result, "en-US")
+
+    assert result["prepared_action"]["action"] == "unifi_restart:unifi zero three"
+    assert result["prepared_action"]["target_label"] == "Punto de acceso UniFi 03"
+    assert result["prepared_action"]["approval_delivery"] == "sent"
+    assert "authorization through WhatsApp" in localized["response"]["answer"]
     assert state.home_assistant.restart_calls == []
 
 
