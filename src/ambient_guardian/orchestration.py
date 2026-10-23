@@ -1474,7 +1474,7 @@ def localize_alexa_result(result: dict[str, Any], locale: str) -> dict[str, Any]
     return result
 
 
-def _ring_demo_response(state: GuardianState) -> dict[str, Any]:
+def _ring_demo_response(state: GuardianState, *, english: bool = False) -> dict[str, Any]:
     ring_events = [
         event
         for event in state.recent_events(50)
@@ -1483,14 +1483,22 @@ def _ring_demo_response(state: GuardianState) -> dict[str, Any]:
     ]
     if not ring_events:
         answer = (
-            "El adaptador Ring está listo en modo demo, pero no hay un evento simulado "
+            "The Ring adapter is ready in demo mode, but there is no active simulated "
+            "event. I can inject motion, a person, a doorbell press, or a package and "
+            "correlate it with the home's real sensors. Ring will remain labelled simulated."
+            if english
+            else "El adaptador Ring está listo en modo demo, pero no hay un evento simulado "
             "activo. Puedo inyectar movimiento, persona, timbre o paquete y correlacionarlo "
             "con los sensores reales de la casa. Ring seguirá rotulado como simulado."
         )
     else:
         latest = ring_events[-1]
         answer = (
-            f"Demo Ring simulado: {latest.get('summary')} Hay {len(ring_events)} eventos "
+            f"Simulated Ring demo: {latest.get('summary')} There are {len(ring_events)} "
+            "Ring demo events in this session. The InnerOS analysis is real, but the Ring "
+            "source is simulated."
+            if english
+            else f"Demo Ring simulado: {latest.get('summary')} Hay {len(ring_events)} eventos "
             "Ring de demostración en la sesión. El análisis de InnerOS es real, pero la "
             "fuente Ring es simulada."
         )
@@ -2165,7 +2173,10 @@ def simulated_alexa_turn(
     if _RING_DEMO_QUERY.search(normalized_utterance):
         return {
             "utterance": utterance,
-            "response": _ring_demo_response(state),
+            "response": _ring_demo_response(
+                state,
+                english=_english_answer(normalized_utterance, speaker_context),
+            ),
             "prepared_action": None,
             "ring_truth": "SIMULATED",
             "evidence_count": len(state.evidence_snapshot()),

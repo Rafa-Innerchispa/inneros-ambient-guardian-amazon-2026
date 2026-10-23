@@ -786,6 +786,23 @@ def test_ring_demo_is_never_presented_as_real():
     assert "simulado" in result["response"]["answer"].lower()
 
 
+def test_ring_demo_answers_english_queries_in_english():
+    state = _state()
+    state.add_ring_demo_event("motion", summary="Motion at the front door")
+
+    result = simulated_alexa_turn(
+        "tell me what Ring detected in the demo",
+        state,
+        FailIfReasonerRuns(),
+        speaker_context={"response_locale": "en-US"},
+    )
+
+    answer = result["response"]["answer"]
+    assert answer.startswith("Simulated Ring demo:")
+    assert "source is simulated" in answer
+    assert "fuente" not in answer.lower()
+
+
 def test_ring_demo_announcement_is_opt_in_and_truth_labeled(monkeypatch):
     monkeypatch.setenv("AMBIENT_GUARDIAN_RING_ALERTS_ENABLED", "1")
     monkeypatch.setenv("AMBIENT_GUARDIAN_RING_DEMO_ALERTS_ENABLED", "1")

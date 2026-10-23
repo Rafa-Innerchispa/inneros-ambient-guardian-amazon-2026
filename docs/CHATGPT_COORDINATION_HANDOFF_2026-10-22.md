@@ -173,7 +173,7 @@ Ring has two deliberately separate paths.
   allowlisted Cuarto Echo and speech failure never drops the stored event.
 - PR #77 merged as `8ffe96520ee0e018f427aa6b603546b8e64f48b9`;
   all 285 tests passed before deployment.
-- The Ring sandbox evidence/announcement candidate passed 288 tests on the deployment
+- The Ring sandbox evidence/announcement candidate passed 289 tests on the deployment
   host before PR creation.
 
 Therefore the submission may truthfully show an official Ring Playground/API
