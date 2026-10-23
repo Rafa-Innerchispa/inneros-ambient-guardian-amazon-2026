@@ -8,7 +8,7 @@ Built for **Build, Ship, Shape: Amazon Developer Hackathon 2026**.
 
 - **Primary track:** Alexa+
 - **Mini challenges:** AWS Builder, Open Source
-- **Ring:** official provider adapter is CODE_READY and the simulator remains the demo fallback. We do **not** claim live Ring track eligibility until an official developer token/test account/session is verified.
+- **Ring track:** the private Ring app and its official Amazon Vision Playground flow are `OFFICIAL_SANDBOX_VERIFIED`; the official sandbox returned a device, status, capabilities, and a WHEP session. Physical-device/provider-live evidence remains unclaimed, and local demo events stay visibly `SIMULATED`.
 
 ## Why this exists
 
@@ -166,7 +166,7 @@ The project reports each integration separately so a code-complete path is never
 - **Physical Echo via Custom Skill:** code-complete signed gateway at `/alexa/skill`, with owner Account Linking and authenticated gateway-to-backend identity forwarding. It remains `CODE_READY` until a physical request/response is captured.
 - **Direct Alexa+ MCP Toolkit:** entitlement is `NOT_PROVEN`; it is not claimed as LIVE.
 - **VoiceOps/PBX:** the app sends only a stable server-side alias, never a number, extension, or SIP credential. After WhatsApp owner approval it calls the private VoiceOps contract and verifies the dispatch receipt. `voiceops.owner.mobile` is limited to one preconfigured route-verified number; arbitrary and autonomous PSTN stay disabled. Simulator mode is explicitly `SIMULATED`.
-- **Ring:** the official adapter targets `https://api.amazonvision.com/v1`, verifies signed webhook ingress fail-closed, and normalizes JSON:API events. Ring track eligibility remains unclaimed until a live developer token/test account/session is verified.
+- **Ring:** the official adapter targets `https://api.amazonvision.com/v1`, verifies signed webhook ingress fail-closed, and normalizes JSON:API events. The official Ring Playground device/status/capabilities/WHEP path is verified. A physical device and signed live webhook remain unclaimed; local demo ingress is always labelled `SIMULATED`.
 
 Alexa speech from Ambient Guardian is intentionally not an MCP tool. It requires a separate owner-authorized HTTP route, an explicit enable flag, and an allowlisted Home Assistant notify entity.
 
@@ -196,6 +196,10 @@ See [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md) for production host/origin settin
 | `AMBIENT_GUARDIAN_HOME_ALARM_ENTITY` | unset | Selected read-only alarm entity for Guardian context |
 | `AMBIENT_GUARDIAN_ALEXA_SPEAK_ENABLED` | `0` | Enables the owner-only physical Alexa speech route |
 | `AMBIENT_GUARDIAN_ALEXA_NOTIFY_ALLOWLIST` | unset | Comma-separated allowlist of HA `notify.*` Alexa endpoints |
+| `AMBIENT_GUARDIAN_RING_ALERTS_ENABLED` | `0` | Enables Ring event speech through the allowlisted Echo target |
+| `AMBIENT_GUARDIAN_RING_DEMO_ALERTS_ENABLED` | `0` | Separately enables truth-labelled simulated Ring alerts |
+| `AMBIENT_GUARDIAN_RING_ALERT_TARGET` | `notify.echo_cuarto_speak` | Allowlisted Echo endpoint for Ring alerts |
+| `AMBIENT_GUARDIAN_RING_ALERT_LOCALE` | `en-US` | Fixed language for deterministic Ring announcements |
 | `AMBIENT_GUARDIAN_OWNER_TOKEN` | unset | Required owner token for owner-only Home Assistant routes |
 | `AMBIENT_GUARDIAN_SKILL_BRIDGE_TOKEN` | unset | Shared runtime secret authenticating the loopback Custom Skill gateway to `/api/alexa` |
 | `AMBIENT_GUARDIAN_ACCOUNT_LINKING_REQUIRED` | `0` | Fail closed with an Alexa `LinkAccount` card until the owner OAuth token validates |
@@ -284,7 +288,10 @@ Truth boundary shown in the UI:
 - REAL: MCP Streamable HTTP runtime and Guardian policy/state.
 - CODE_READY: signed Alexa Custom Skill gateway, until physical proof is captured.
 - CODE_READY / NOT_PROVEN: direct Alexa+ MCP entitlement.
-- SIMULATED: Ring-compatible demo edge. The official Ring adapter is CODE_READY but live provider verification is still pending.
+- OFFICIAL_SANDBOX_VERIFIED: the Amazon Ring Playground returned a sandbox device,
+  online status, AVC 1080p capabilities, and a successful WHEP motion session.
+- SIMULATED: the event injected into Atlas remains a truth-labelled Ring-compatible
+  fixture. A real owner account, physical device, and signed webhook are still pending.
 - SAFE: MCP/model cannot approve or execute its own physical action.
 
 See `docs/JUDGE_DEMO.md` and `docs/DEMO_SCRIPT.md` for the reproducible judge flow and recording script.

@@ -352,6 +352,7 @@ class GuardianState:
             event["summary"] = summary
         if severity:
             event["severity"] = severity
+        event["announcement"] = self._announce_ring_event(event, simulated=True)
         return event
 
     def add_ring_official_event(
@@ -385,7 +386,66 @@ class GuardianState:
             event["summary"] = normalized["summary"]
         if normalized.get("severity"):
             event["severity"] = normalized["severity"]
+        event["announcement"] = self._announce_ring_event(event, simulated=False)
         return event
+
+    def _announce_ring_event(
+        self, event: dict[str, Any], *, simulated: bool
+    ) -> dict[str, Any]:
+        """Optionally announce a Ring event through an allowlisted Echo endpoint.
+
+        Demo announcements are separately gated and identify themselves as a demo,
+        so a fixture can never be mistaken for a physical Ring observation. Speech
+        failure never drops the event from the evidence pipeline.
+        """
+        if os.getenv("AMBIENT_GUARDIAN_RING_ALERTS_ENABLED", "0") != "1":
+            return {"status": "disabled"}
+        if simulated and os.getenv(
+            "AMBIENT_GUARDIAN_RING_DEMO_ALERTS_ENABLED", "0"
+        ) != "1":
+            return {"status": "disabled", "reason": "demo alerts disabled"}
+
+        target = os.getenv(
+            "AMBIENT_GUARDIAN_RING_ALERT_TARGET", "notify.echo_cuarto_speak"
+        ).strip()
+        if target not in self.home_assistant.alexa_notify_allowlist:
+            return {"status": "blocked", "reason": "target is not allowlisted"}
+
+        locale = os.getenv("AMBIENT_GUARDIAN_RING_ALERT_LOCALE", "en-US").lower()
+        kind = str(event.get("type") or "motion")
+        device = str((event.get("metadata") or {}).get("device_name") or "front door")
+        if locale.startswith("en"):
+            descriptions = {
+                "motion": f"Motion was detected at {device}.",
+                "person_detected": f"A person was detected at {device}.",
+                "package_detected": f"A package was detected at {device}.",
+                "doorbell_pressed": f"The doorbell was pressed at {device}.",
+                "camera_offline": f"The Ring camera at {device} is offline.",
+            }
+            prefix = "Ring demo alert." if simulated else "Ring alert."
+            suffix = " This is a simulated event." if simulated else ""
+        else:
+            descriptions = {
+                "motion": f"Se detectó movimiento en {device}.",
+                "person_detected": f"Se detectó una persona en {device}.",
+                "package_detected": f"Se detectó un paquete en {device}.",
+                "doorbell_pressed": f"Tocaron el timbre en {device}.",
+                "camera_offline": f"La cámara Ring de {device} está desconectada.",
+            }
+            prefix = "Alerta de demostración de Ring." if simulated else "Alerta de Ring."
+            suffix = " Este es un evento simulado." if simulated else ""
+        fallback = str(event.get("summary") or "Event detected.")
+        message = f"{prefix} {descriptions.get(kind, fallback)}{suffix}"
+        try:
+            result = self.home_assistant.speak(target, message)
+        except Exception as exc:
+            return {"status": "failed", "reason": type(exc).__name__}
+        return {
+            "status": "sent",
+            "target": target,
+            "truth": "SIMULATED" if simulated else "REAL",
+            "transport": result.get("status", "sent"),
+        }
 
     def add_google_home_event(
         self,

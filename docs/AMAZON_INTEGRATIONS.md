@@ -46,7 +46,10 @@ GitHub username: `Rafa-Innerchispa`.
 
 ## Ring status
 
-The current build has a Ring-compatible event normalization/simulation boundary only. A physical Ring device is not necessary under the hackathon rules, but an official Ring API/SDK/simulator/device integration is still required before entering the Ring track. Until that evidence exists, the project remains Alexa+-primary and does not imply official Ring API usage.
+The current build has both a truth-labelled Ring-compatible event boundary and an
+official Amazon Ring Developer integration. A physical Ring device is not required:
+on 2026-10-23 the official Ring Playground returned a sandbox device, online status,
+AVC 1080p capabilities, and a successful WHEP motion session with SDP answer.
 
 The current Ring Developer path is now concrete enough to preserve in code:
 
@@ -56,7 +59,10 @@ The current Ring Developer path is now concrete enough to preserve in code:
 4. Use device status/history APIs for context.
 5. Optionally open WebRTC/WHEP video sessions for video-only inspection when the product and account permit it.
 
-The repository therefore keeps `RingSimulatorAdapter` as the local test fixture and a `RingEventAdapter` boundary for the future official adapter. Device verification remains `pending_real_or_official_test_account` until credentials and a Ring test account/device are bound.
+The repository keeps `RingSimulatorAdapter` as the local fixture and a separate
+official adapter/account-link boundary. The official sandbox is verified, while
+home-device verification remains pending until an owner Ring account and a signed
+webhook are bound. Never relabel the local fixture as a physical-device event.
 
 
 ## Hackathon device strategy — 2026-09-15
@@ -66,7 +72,9 @@ The current hackathon path no longer treats physical Echo or Ring hardware as a 
 For Ambient Guardian this means:
 
 - **Primary demo:** real self-hosted MCP runtime plus a truthfully labeled **SIMULATED ALEXA+ EXPERIENCE**.
-- **Ring demo:** `RingSimulatorAdapter` / Ring-compatible event fixture, labeled **SIMULATED** until an official developer account/test simulator or real device is bound.
+- **Ring demo:** official Ring Playground evidence is
+  **OFFICIAL_SANDBOX_VERIFIED**; the Atlas event fixture remains visibly
+  **SIMULATED** until a signed provider webhook or physical device is bound.
 - **Physical Echo:** optional product validation, not required for `READY_FOR_SUBMISSION_DEMO`.
 - **Alexa+ MCP Toolkit:** optional upgrade path and still entitlement-gated until the owner account proves access.
 - **Custom Alexa Skill:** optional physical-device fallback using the same backend.

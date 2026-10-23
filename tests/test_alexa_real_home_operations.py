@@ -784,3 +784,40 @@ def test_ring_demo_is_never_presented_as_real():
     )
     assert result["ring_truth"] == "SIMULATED"
     assert "simulado" in result["response"]["answer"].lower()
+
+
+def test_ring_demo_announcement_is_opt_in_and_truth_labeled(monkeypatch):
+    monkeypatch.setenv("AMBIENT_GUARDIAN_RING_ALERTS_ENABLED", "1")
+    monkeypatch.setenv("AMBIENT_GUARDIAN_RING_DEMO_ALERTS_ENABLED", "1")
+    monkeypatch.setenv("AMBIENT_GUARDIAN_RING_ALERT_LOCALE", "en-US")
+    state = _state()
+
+    event = state.add_ring_demo_event("motion", device_name="Front Door")
+
+    assert event["announcement"]["status"] == "sent"
+    assert event["announcement"]["truth"] == "SIMULATED"
+    assert len(state.home_assistant.speak_calls) == 1
+    notify_entity, message = state.home_assistant.speak_calls[0]
+    assert notify_entity == "notify.echo_cuarto_speak"
+    assert "Ring demo alert" in message
+    assert "simulated event" in message
+
+
+def test_ring_official_announcement_never_uses_demo_wording(monkeypatch):
+    monkeypatch.setenv("AMBIENT_GUARDIAN_RING_ALERTS_ENABLED", "1")
+    state = _state()
+    state.ring_official.normalize_event = lambda payload, verified: {
+        "type": "doorbell_pressed",
+        "source": "ring-official-edge",
+        "truth": "REAL",
+        "device_name": "Front Door",
+        "summary": "Ring Doorbell was pressed.",
+        "severity": "info",
+    }
+
+    event = state.add_ring_official_event({"data": {}}, verified=True)
+
+    assert event["announcement"]["truth"] == "REAL"
+    _notify_entity, message = state.home_assistant.speak_calls[0]
+    assert message.startswith("Ring alert.")
+    assert "demo" not in message.lower()

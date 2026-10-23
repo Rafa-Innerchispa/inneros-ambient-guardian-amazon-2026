@@ -27,7 +27,7 @@ Video requirements: public YouTube or Vimeo, English, under 3 minutes. Use only 
 
 **Narration:**
 
-“The MCP server, safety policy, AWS Strands orchestration and local Qwen reasoning are real. The Alexa Plus browser interaction and Ring-compatible event source are clearly simulated for this hackathon demo.”
+“The MCP server, safety policy, AWS Strands orchestration and local Qwen reasoning are real. Ring's official Playground and API path are sandbox verified. The reproducible local Ring event is clearly labelled simulated.”
 
 **Overlay to emphasize:**
 
