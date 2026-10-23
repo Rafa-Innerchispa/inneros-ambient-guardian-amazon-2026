@@ -45,6 +45,10 @@ InnerOS Ambient Guardian provides an official Ring Appstore & Developer Webhook 
   - OAuth tokens are retained only in a Fernet-encrypted, mode-`0600` store. A
     successful link requires Ring's 10-minute HMAC nonce, the Atlas owner
     credential, Ring's POST verification, and the mandatory PATCH to `completed`.
+  - Runtime secrets can be mounted without copying values into systemd or shell
+    commands: `RING_CREDENTIALS_CSV` points to Amazon's original two-column export,
+    while `RING_TOKEN_STORE_KEY_FILE` points to a separate mode-`0600` Fernet key.
+    `RING_TOKEN_STORE_PATH` selects the encrypted OAuth-token file.
 - **Implementation Status (`CODE_READY`):** COMPLETE.
   - Official endpoint: `https://api.amazonvision.com/v1/devices`
   - Ingress HMAC-SHA256 signature verification supporting `X-Signature` and `X-Ring-Signature` (fail-closed)
