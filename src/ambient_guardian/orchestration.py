@@ -1674,6 +1674,34 @@ def _unifi_status_response(
 
     available = [item for item in entities if healthy(item)]
     problem = [item for item in entities if not healthy(item)]
+    recent_restart: tuple[datetime, str, bool] | None = None
+    if scope in {"home", "all"}:
+        entities_by_id = {
+            str(item.get("entity_id") or ""): item for item in all_entities
+        }
+        targets = list(raw_snapshot.get("targets") or [])
+        now = datetime.now(timezone.utc)
+        for target in targets:
+            uptime_entity = str(target.get("uptime_entity") or "")
+            status_entity = str(target.get("status_entity") or "")
+            uptime = entities_by_id.get(uptime_entity) or {}
+            raw_started_at = str(uptime.get("state") or "")
+            try:
+                started_at = datetime.fromisoformat(raw_started_at.replace("Z", "+00:00"))
+                if started_at.tzinfo is None:
+                    started_at = started_at.replace(tzinfo=timezone.utc)
+            except ValueError:
+                continue
+            if not timedelta(0) <= now - started_at <= timedelta(hours=6):
+                continue
+            status_item = entities_by_id.get(status_entity) or {}
+            candidate = (
+                started_at,
+                str(target.get("label") or uptime.get("label") or uptime_entity),
+                bool(status_item and healthy(status_item)),
+            )
+            if recent_restart is None or candidate[0] > recent_restart[0]:
+                recent_restart = candidate
     details = []
     spoken_entities = [
         item
@@ -1719,6 +1747,16 @@ def _unifi_status_response(
         if problem:
             answer += f". {len(problem)} signal or device needs attention."
             answer += " Check power, uplink, and PoE before preparing an allowlisted restart through WhatsApp."
+        if recent_restart:
+            started_at, target_label, connected = recent_restart
+            spoken_label = target_label
+            if target_label.lower().startswith("punto de acceso "):
+                spoken_label = f"{target_label[16:]} access point"
+            answer += (
+                f". The most recent restart was {spoken_label} at "
+                f"{_format_local_time(started_at.isoformat())}. It is "
+                f"{'connected now' if connected else 'still reconnecting'}"
+            )
     else:
         answer = (
             f"InnerOS leyó la telemetría en vivo de {scope_intro}. "
@@ -1728,6 +1766,13 @@ def _unifi_status_response(
         if problem:
             answer += f". {len(problem)} señal o equipo requiere atención."
             answer += " Revisa alimentación, enlace y PoE antes de preparar un reinicio permitido por WhatsApp."
+        if recent_restart:
+            started_at, target_label, connected = recent_restart
+            answer += (
+                f". El reinicio más reciente fue {target_label} a las "
+                f"{_format_local_time(started_at.isoformat())}. "
+                f"{'Ahora está conectado' if connected else 'Todavía se está reconectando'}"
+            )
     return {"answer": answer, "status": "attention_required" if problem else "all_clear", "reasoning_mode": "deterministic-unifi-status"}, snapshot
 
 

@@ -240,15 +240,18 @@ class GuardianState:
         english = stored_locale.startswith("en") or (
             not stored_locale and alias in {"bedroom", "study"}
         )
+        spoken_label = target_label
+        if english and target_label.lower().startswith("punto de acceso "):
+            spoken_label = f"{target_label[16:]} access point"
         if english:
             message = (
-                f"Authorization confirmed. {target_label} restarted successfully "
+                f"Authorization confirmed. {spoken_label} restarted successfully "
                 "and is back online."
                 if executed and verified and online_verified
-                else f"Authorization confirmed. The restart of {target_label} was detected, "
+                else f"Authorization confirmed. The restart of {spoken_label} was detected, "
                 "and the access point is reconnecting."
                 if executed and verified
-                else f"Authorization confirmed. The restart of {target_label} was attempted, "
+                else f"Authorization confirmed. The restart of {spoken_label} was attempted, "
                 "but I could not verify it. I will not retry automatically."
             )
         else:
@@ -262,6 +265,36 @@ class GuardianState:
                 else f"Autorización confirmada. Se intentó reiniciar {target_label}, pero no pude verificarlo. "
                 "No lo intentaré otra vez automáticamente."
             )
+        try:
+            self.home_assistant.speak(notify_entity, message)
+        except Exception:
+            return False
+        return True
+
+    def _announce_unifi_started(self, item: PendingAction) -> bool:
+        """Acknowledge approval before the target AP can disconnect its own Echo."""
+        if not item.action.startswith("unifi_restart:"):
+            return False
+        alias = item.action.split(":", 1)[1]
+        target = self.home_assistant.unifi_restart_targets.get(alias) or {}
+        notify_entity = str(target.get("notify") or "notify.echo_cuarto_speak")
+        if notify_entity not in self.home_assistant.alexa_notify_allowlist:
+            return False
+        target_label = str(target.get("label") or alias)
+        stored_locale = str(item.response_locale or "").lower()
+        english = stored_locale.startswith("en") or (
+            not stored_locale and alias in {"bedroom", "study"}
+        )
+        spoken_label = target_label
+        if english and target_label.lower().startswith("punto de acceso "):
+            spoken_label = f"{target_label[16:]} access point"
+        message = (
+            f"Authorization confirmed. I am restarting {spoken_label} now. "
+            "This Echo may briefly lose Wi-Fi. I will announce the verified result when it reconnects."
+            if english
+            else f"Autorización confirmada. Voy a reiniciar {target_label} ahora. "
+            "Este Echo podría perder Wi-Fi por un momento. Anunciaré el resultado verificado cuando se reconecte."
+        )
         try:
             self.home_assistant.speak(notify_entity, message)
         except Exception:
@@ -969,6 +1002,7 @@ class GuardianState:
                 continue
             if not decision.get("approved"):
                 continue
+            start_announced = self._announce_unifi_started(item)
             try:
                 evidence = self.approve_action_id(
                     item.action_id,
@@ -1000,6 +1034,7 @@ class GuardianState:
                         "status": "failed",
                         "error": str(exc),
                         "completion_notified": bool(failure_notice.get("ok")),
+                        "start_announced": start_announced,
                         "completion_announced": completion_announced,
                     }
                 )
@@ -1026,6 +1061,7 @@ class GuardianState:
                         evidence.get("verification_truth_label") or "CODE_READY"
                     ),
                     "completion_notified": bool(completion.get("ok")),
+                    "start_announced": start_announced,
                     "completion_announced": completion_announced,
                 }
             )
