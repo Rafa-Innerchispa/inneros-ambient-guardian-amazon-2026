@@ -519,6 +519,26 @@ def _guardian_query(
         query = _slot_value(request_payload, "query")
         if not query:
             return ""
+        normalized_query = " ".join(query.lower().split())
+        if re.fullmatch(
+            r"(?:the |my |el |la |mi )?(?:system|inner\s*os|sistema|sistema inner\s*os)",
+            normalized_query,
+        ):
+            return (
+                "what can you do inside InnerOS"
+                if english
+                else "qué puedes hacer dentro de InnerOS"
+            )
+        if re.fullmatch(
+            r"(?:the |my |el |la |mi )?(?:solar system|solar power|solar panels?|"
+            r"energy system|sistema solar|panel(?:es)? solares?|sistema de energ[ií]a)",
+            normalized_query,
+        ):
+            return (
+                "show me the energy resilience status and energy saving plan"
+                if english
+                else "dame el estado de resiliencia energética y el plan de ahorro"
+            )
         return (
             f"check the live status of {query}"
             if english
@@ -627,6 +647,25 @@ def _guardian_query(
     # paths instead of falling through to the slower general LLM response.
     normalized_query = " ".join(query.lower().split())
     if re.fullmatch(
+        r"(?:the |my |el |la |mi )?(?:system|inner\s*os|sistema|sistema inner\s*os)",
+        normalized_query,
+    ):
+        return (
+            "what can you do inside InnerOS"
+            if english
+            else "qué puedes hacer dentro de InnerOS"
+        )
+    if re.fullmatch(
+        r"(?:the |my |el |la |mi )?(?:solar system|solar power|solar panels?|"
+        r"energy system|sistema solar|panel(?:es)? solares?|sistema de energ[ií]a)",
+        normalized_query,
+    ):
+        return (
+            "show me the energy resilience status and energy saving plan"
+            if english
+            else "dame el estado de resiliencia energética y el plan de ahorro"
+        )
+    if re.fullmatch(
         r"(?:the |my |el |la |mi )?bellini(?: network| red)?",
         normalized_query,
     ):
@@ -725,10 +764,26 @@ def _dispatch(payload: dict[str, Any]) -> dict[str, Any]:
         # while still reporting en-US. Keep the launch acknowledgement language-
         # neutral; the first intent carries slot text that lets us infer the user's
         # actual language for the substantive response.
+        if _request_locale(request_payload).lower().startswith("es"):
+            speech = (
+                "Atlas Control está en línea. Puedo informar energía e historial de apagones, "
+                "UniFi y Bellini, cámaras, servidores, llamadas Grandstream, luces DMX y el "
+                "demo Ring claramente simulado. Las acciones sensibles esperan tu aprobación "
+                "por WhatsApp. Puedes preguntar: qué hay de mi sistema."
+            )
+            reprompt = "¿Qué quieres revisar?"
+        else:
+            speech = (
+                "Atlas Control is online. I can report energy and outage history, UniFi and "
+                "Bellini, cameras, servers, Grandstream calls, DMX lighting, and the clearly "
+                "simulated Ring demo. Sensitive actions wait for your WhatsApp approval. "
+                "You can ask: what about my system."
+            )
+            reprompt = "What would you like to check?"
         return _plain_response(
-            f"{_voice_name()}.",
-            reprompt=f"{_voice_name()}.",
-            session_attributes={"fallback_count": 0},
+            speech,
+            reprompt=reprompt,
+            session_attributes={"fallback_count": 0, "response_locale": _request_locale(request_payload)},
         )
     if request_type == "SessionEndedRequest":
         return _plain_response("", end_session=True)

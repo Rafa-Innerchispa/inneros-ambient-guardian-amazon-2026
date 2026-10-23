@@ -61,7 +61,10 @@
           "samples": [
             "qué puedes hacer",
             "cómo me puedes ayudar",
-            "qué controla inner os"
+            "qué controla inner os",
+            "qué hay de mi sistema",
+            "háblame de mi sistema",
+            "qué hay de inner os"
           ]
         },
         {
@@ -96,6 +99,10 @@
             "información de energía",
             "háblame de la energía",
             "qué hay de la energía",
+            "qué hay de mi energía",
+            "qué hay de mi sistema solar",
+            "háblame de mi sistema solar",
+            "cómo está mi sistema solar",
             "hay algún problema con la electricidad",
             "dame el estado de energía",
             "cómo está la energía de la casa",
