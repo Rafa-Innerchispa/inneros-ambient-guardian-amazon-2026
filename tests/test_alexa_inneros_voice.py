@@ -1,3 +1,5 @@
+import pytest
+
 from ambient_guardian.core import GuardianState
 from ambient_guardian.orchestration import simulated_alexa_turn
 
@@ -44,6 +46,24 @@ class LiveHomeInventory:
             ],
         }
 
+    def history_timeline(self, start, end, max_events=60, categories=None):
+        del start, end, max_events
+        if categories != {"camera"}:
+            return {
+                "truth": "REAL",
+                "events": [],
+                "current_states": {
+                    "binary_sensor.inneros_pi01_solar_grid_present": "on",
+                    "binary_sensor.inneros_pi01_solar_battery_mode": "off",
+                    "sensor.inneros_pi01_solar_mode": "utility_present_backup_float",
+                },
+            }
+        return {
+            "truth": "REAL",
+            "events": [],
+            "current_states": {},
+        }
+
 
 class LiveFleetInventory:
     def fleet_status(self):
@@ -70,7 +90,74 @@ def test_live_unifi_status_is_read_only_and_deterministic():
     state.home_assistant = LiveHomeInventory()
     result = simulated_alexa_turn("give me the UniFi status", state, FailIfReasonerRuns(), speaker_context={"response_locale": "en-US"})
     assert "Cloud Gateway: connected" in result["response"]["answer"]
+    assert "home UniFi network" in result["response"]["answer"]
+    assert result["unifi_status"]["scope"] == "home"
     assert result["prepared_action"] is None
+
+
+def test_generic_home_wifi_excludes_external_bellini_entities():
+    state = GuardianState()
+    state.home_assistant = LiveHomeInventory()
+    state.home_assistant.unifi_status = lambda: {
+        "configured": True,
+        "entities": [
+            {
+                "entity_id": "sensor.cuarto_state",
+                "label": "UniFi 03",
+                "state": "connected",
+                "unit": "",
+            },
+            {
+                "entity_id": "sensor.bellini_gateway_latency",
+                "label": "Bellini Gateway Latency",
+                "state": "42",
+                "unit": "ms",
+            },
+        ],
+        "targets": [],
+    }
+    result = simulated_alexa_turn(
+        "revisa el WiFi de la casa",
+        state,
+        FailIfReasonerRuns(),
+    )
+    assert "red UniFi de la casa" in result["response"]["answer"]
+    assert "UniFi 03: connected" in result["response"]["answer"]
+    assert "Bellini" not in result["response"]["answer"]
+    assert result["unifi_status"]["scope"] == "home"
+    assert len(result["unifi_status"]["entities"]) == 1
+
+
+def test_explicit_bellini_query_uses_only_external_connector_entities():
+    state = GuardianState()
+    state.home_assistant = LiveHomeInventory()
+    state.home_assistant.unifi_status = lambda: {
+        "configured": True,
+        "entities": [
+            {
+                "entity_id": "sensor.cuarto_state",
+                "label": "UniFi 03",
+                "state": "connected",
+                "unit": "",
+            },
+            {
+                "entity_id": "sensor.bellini_gateway_latency",
+                "label": "Bellini Gateway Latency",
+                "state": "42",
+                "unit": "ms",
+            },
+        ],
+        "targets": [],
+    }
+    result = simulated_alexa_turn(
+        "revisa el estado de la red Bellini",
+        state,
+        FailIfReasonerRuns(),
+    )
+    assert "conector externo Bellini" in result["response"]["answer"]
+    assert "Bellini Gateway Latency: 42 ms" in result["response"]["answer"]
+    assert "UniFi 03" not in result["response"]["answer"]
+    assert result["unifi_status"]["scope"] == "bellini"
 
 
 def test_split_unifi_transcription_uses_live_status_not_generic_model():
@@ -85,8 +172,75 @@ def test_live_camera_status_is_read_only_and_deterministic():
     state = GuardianState()
     state.home_assistant = LiveHomeInventory()
     result = simulated_alexa_turn("are the cameras recording", state, FailIfReasonerRuns(), speaker_context={"response_locale": "en-US"})
-    assert "Entrance camera: recording" in result["response"]["answer"]
+    assert "1 of 1 monitored camera and recorder signals are available" in result["response"]["answer"]
+    assert "no current recording or connectivity alerts" in result["response"]["answer"]
+    assert "no camera outages today" in result["response"]["answer"]
     assert result["prepared_action"] is None
+
+
+@pytest.mark.parametrize(
+    "utterance,reasoning_mode",
+    [
+        ("tell me about the WiFi", "deterministic-unifi-status"),
+        ("what about the energy", "deterministic-energy-resilience"),
+        ("what about my servers", "deterministic-server-status"),
+        ("is there any problem with my cameras", "deterministic-camera-status"),
+        ("tell me about Grandstream", "deterministic-voiceops-status"),
+    ],
+)
+def test_natural_status_questions_use_deterministic_live_connectors(
+    utterance, reasoning_mode
+):
+    state = GuardianState()
+    state.home_assistant = LiveHomeInventory()
+    state.infrastructure = LiveFleetInventory()
+    state.voiceops = VoiceOpsStatus(
+        {
+            "state": "READY",
+            "truth_label": "REAL",
+            "callback_ready": True,
+            "owner_confirmed_e2e_calling": True,
+        }
+    )
+    result = simulated_alexa_turn(
+        utterance,
+        state,
+        FailIfReasonerRuns(),
+        speaker_context={"response_locale": "en-US"},
+    )
+    assert result["response"]["reasoning_mode"] == reasoning_mode
+
+
+def test_camera_status_reports_latest_real_outage_and_recovery_today():
+    state = GuardianState()
+    state.home_assistant = LiveHomeInventory()
+    state.home_assistant.history_timeline = lambda *args, **kwargs: {
+        "truth": "REAL",
+        "events": [
+            {
+                "entity_id": "camera.entrada",
+                "label": "Entrance camera",
+                "category": "camera",
+                "state": "unavailable",
+                "timestamp": "2026-10-22T14:00:00+00:00",
+            },
+            {
+                "entity_id": "camera.entrada",
+                "label": "Entrance camera",
+                "category": "camera",
+                "state": "recording",
+                "timestamp": "2026-10-22T14:03:00+00:00",
+            },
+        ],
+        "current_states": {"camera.entrada": "recording"},
+    }
+    result = simulated_alexa_turn(
+        "tell me about the cameras",
+        state,
+        FailIfReasonerRuns(),
+        speaker_context={"response_locale": "en-US"},
+    )
+    assert "went offline at 09:00 and recovered at 09:03" in result["response"]["answer"]
 
 
 def test_live_server_inventory_can_focus_node_point_four():
@@ -126,7 +280,7 @@ def test_live_unifi_status_flags_real_active_incident_and_recommends_safe_checks
         "targets": [],
     }
     result = simulated_alexa_turn(
-        "revisa el estado de Ubiquiti",
+        "revisa el estado de Bellini",
         state,
         FailIfReasonerRuns(),
     )

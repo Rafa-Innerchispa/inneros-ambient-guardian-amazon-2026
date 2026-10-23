@@ -198,16 +198,15 @@ def test_guardian_intent_calls_local_backend(monkeypatch):
     assert response["response"]["shouldEndSession"] is False
 
 
-def test_spanish_launch_is_short_and_prompts_for_a_domain(monkeypatch):
+def test_launch_is_language_neutral_because_alexa_omits_spoken_invocation(monkeypatch):
     monkeypatch.setenv("AMBIENT_GUARDIAN_VOICE_NAME", "InnerOS")
     response = gateway._dispatch(
         request_payload(launch_request(locale="es-US"))
     )
     speech = response["response"]["outputSpeech"]["text"]
-    assert "InnerOS" in speech
-    assert "energía, WiFi, cámaras, servidores o telefonía" in speech
+    assert speech == "InnerOS."
     assert response["response"]["shouldEndSession"] is False
-    assert "Sigo aquí" in response["response"]["reprompt"]["outputSpeech"]["text"]
+    assert response["response"]["reprompt"]["outputSpeech"]["text"] == "InnerOS."
 
 
 def test_spanish_fallback_allows_one_retry_inside_same_session():
@@ -269,6 +268,17 @@ def test_general_status_intent_preserves_the_requested_subsystem(
         ("en-US", "servers", "check the live InnerOS server fleet status"),
         ("en-US", "Raspberry Pi", "check the live Raspberry Pi status"),
         ("en-US", "cameras", "check the live camera and recorder status"),
+        ("en-US", "my servers", "check the live InnerOS server fleet status"),
+        (
+            "en-US",
+            "Grandstream",
+            "check the live status of VoiceOps and the Grandstream PBX",
+        ),
+        (
+            "en-US",
+            "energy",
+            "show me the energy resilience status and energy saving plan",
+        ),
         ("es-US", "wifi", "revisa el estado en vivo de UniFi"),
         (
             "es-US",
@@ -280,6 +290,11 @@ def test_general_status_intent_preserves_the_requested_subsystem(
             "es-US",
             "cámaras",
             "revisa el estado en vivo de las cámaras y grabadores",
+        ),
+        (
+            "es-US",
+            "mi central Grandstream",
+            "revisa el estado en vivo de VoiceOps y la central Grandstream",
         ),
     ],
 )

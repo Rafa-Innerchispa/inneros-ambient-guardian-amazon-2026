@@ -587,7 +587,7 @@ def _guardian_query(
     # paths instead of falling through to the slower general LLM response.
     normalized_query = " ".join(query.lower().split())
     if re.fullmatch(
-        r"(?:the |el |la )?(?:uni\s*fi|ubiquiti|wi[ -]?fi)(?: network| red)?",
+        r"(?:the |my |el |la |mi )?(?:uni\s*fi|ubiquiti|wi[ -]?fi)(?: network| red)?",
         normalized_query,
     ):
         return (
@@ -595,14 +595,14 @@ def _guardian_query(
             if english
             else "revisa el estado en vivo de UniFi"
         )
-    if re.fullmatch(r"(?:the |el |la )?(?:network|red)", normalized_query):
+    if re.fullmatch(r"(?:the |my |el |la |mi )?(?:network|red)", normalized_query):
         return (
             "check the live UniFi network status"
             if english
             else "revisa el estado en vivo de UniFi"
         )
     if re.fullmatch(
-        r"(?:the |los? |las? )?"
+        r"(?:the |my |los? |las? |mis? )?"
         r"(?:servers?|servidores?|server fleet|flota de servidores)",
         normalized_query,
     ):
@@ -621,7 +621,7 @@ def _guardian_query(
             else "revisa el estado en vivo del Raspberry Pi"
         )
     if re.fullmatch(
-        r"(?:the |los? |las? )?"
+        r"(?:the |my |los? |las? |mis? )?"
         r"(?:cameras?|c[aá]maras?|recorders?|grabadores?|nvr)",
         normalized_query,
     ):
@@ -629,6 +629,26 @@ def _guardian_query(
             "check the live camera and recorder status"
             if english
             else "revisa el estado en vivo de las cámaras y grabadores"
+        )
+    if re.fullmatch(
+        r"(?:the |my |el |la |mi )?(?:voice\s*ops|pbx|grandstream|"
+        r"phone\s+system|telephony|telefon[ií]a|central)",
+        normalized_query,
+    ):
+        return (
+            "check the live status of VoiceOps and the Grandstream PBX"
+            if english
+            else "revisa el estado en vivo de VoiceOps y la central Grandstream"
+        )
+    if re.fullmatch(
+        r"(?:the |my |el |la |mi )?(?:energy|power|electricity|"
+        r"energ[ií]a|electricidad)",
+        normalized_query,
+    ):
+        return (
+            "show me the energy resilience status and energy saving plan"
+            if english
+            else "dame el estado de resiliencia energética y el plan de ahorro"
         )
     when = _slot_value(request_payload, "when")
     if when:
@@ -651,17 +671,14 @@ def _dispatch(payload: dict[str, Any]) -> dict[str, Any]:
     if account_linking_required and not linked:
         return _link_account_response()
     if request_type == "LaunchRequest":
-        if _request_locale(request_payload).lower().startswith("es"):
-            return _plain_response(
-                f"{_voice_name()} listo. Puedes preguntar por energía, WiFi, cámaras, "
-                "servidores o telefonía.",
-                reprompt="Sigo aquí. Puedes decir: estado del WiFi.",
-                session_attributes={"fallback_count": 0},
-            )
+        # Alexa does not include the spoken invocation phrase in a LaunchRequest.
+        # A device configured for en-US can therefore receive a Spanish invocation
+        # while still reporting en-US. Keep the launch acknowledgement language-
+        # neutral; the first intent carries slot text that lets us infer the user's
+        # actual language for the substantive response.
         return _plain_response(
-            f"{_voice_name()} is ready. Ask about energy, WiFi, cameras, servers, "
-            "or telephony.",
-            reprompt="I am still here. You can say: status of the WiFi.",
+            f"{_voice_name()}.",
+            reprompt=f"{_voice_name()}.",
             session_attributes={"fallback_count": 0},
         )
     if request_type == "SessionEndedRequest":

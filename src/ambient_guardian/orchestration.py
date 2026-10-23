@@ -59,6 +59,9 @@ _VOICEOPS_STATUS_QUERY = re.compile(
     r"|\b(?:voice\s*ops|pbx|grandstream|phone\s+system|telephony)\b[^.]*"
     r"\b(?:status|ready|working|health)\b"
     r"|\b(?:status|health|check|how\s+is|revisa)\b[^.]*"
+    r"\b(?:voice\s*ops|pbx|grandstream|phone\s+system|telephony|telefon[ií]a|central)\b"
+    r"|\b(?:tell\s+me\s+about|what\s+about|is\s+there\s+(?:any|a)\s+problem\s+with|"
+    r"cu[eé]ntame\s+(?:sobre|de)|qu[eé]\s+hay\s+de|hay\s+alg[uú]n\s+problema\s+con)\b[^.]*"
     r"\b(?:voice\s*ops|pbx|grandstream|phone\s+system|telephony|telefon[ií]a|central)\b",
     re.I,
 )
@@ -82,10 +85,14 @@ _ENERGY_RESILIENCE_QUERY = re.compile(
     r"how\s+(?:long\s+will\s+the\s+battery\s+last|much\s+backup\s+time\s+remains)|"
     r"when\s+did\s+the\s+(?:power\s+)?outage\s+start|current\s+power\s+load|"
     r"should\s+i\s+turn\s+off\s+the\s+fan|enter\s+energy\s+saving\s+mode|"
+    r"(?:tell\s+me\s+about|what\s+about|is\s+there\s+(?:any|a)\s+problem\s+with)\s+"
+    r"(?:the\s+)?(?:energy|power|electricity)|"
     r"(?:estado|plan)\s+de\s+resiliencia\s+energ[eé]tica|"
     r"(?:informaci[oó]n|estado|reporte|resumen)\s+(?:de|sobre)\s+(?:la\s+)?"
     r"(?:energ[ií]a|electricidad|panel(?:es)?\s+solares?|inversor)|"
     r"c[oó]mo\s+est[aá]\s+(?:la\s+)?(?:energ[ií]a|electricidad)|"
+    r"(?:cu[eé]ntame\s+(?:sobre|de)|qu[eé]\s+hay\s+de|hay\s+alg[uú]n\s+problema\s+con)\s+"
+    r"(?:la\s+)?(?:energ[ií]a|electricidad)|"
     r"modo\s+de\s+ahorro\s+energ[eé]tico|desconexi[oó]n\s+de\s+cargas|"
     r"circuitos?\s+cr[ií]ticos?|cu[aá]nto\s+tiempo\s+durar[aá]\s+la\s+bater[ií]a|"
     r"cu[aá]nta\s+autonom[ií]a\s+queda|a\s+qu[eé]\s+hora\s+comenz[oó]\s+el\s+apag[oó]n|"
@@ -113,14 +120,21 @@ _UNIFI_STATUS_QUERY = re.compile(
     r"\b(?:uni\s*fi|ubiquiti|wi[ -]?fi|wifi|network|red)\b[^.]*\b(?:status|health|online|connected|"
     r"estado|salud|conectad[oa]|funcionando)\b"
     r"|\b(?:status|health|how\s+is|check|estado|salud|c[oó]mo\s+est[aá]|revisa)\b[^.]*"
+    r"\b(?:uni\s*fi|ubiquiti|wi[ -]?fi|wifi|network|red)\b"
+    r"|\b(?:tell\s+me\s+about|what\s+about|is\s+there\s+(?:any|a)\s+problem\s+with|"
+    r"cu[eé]ntame\s+(?:sobre|del?)|qu[eé]\s+hay\s+del?|hay\s+alg[uú]n\s+problema\s+con)\b[^.]*"
     r"\b(?:uni\s*fi|ubiquiti|wi[ -]?fi|wifi|network|red)\b",
     re.I,
 )
 _CAMERA_STATUS_QUERY = re.compile(
-    r"\b(?:cameras?|c[aá]maras?|nvr|dahua|ezviz)\b[^.]*\b(?:status|health|online|recording|"
+    r"\b(?:cameras?|c[aá]maras?|nvr|dahua|ezviz|imou)\b[^.]*\b(?:status|health|online|recording|"
     r"estado|salud|conectad[oa]s?|grabando|funcionando)\b"
     r"|\b(?:status|health|how\s+are|check|estado|salud|c[oó]mo\s+est[aá]n?|revisa)\b[^.]*"
-    r"\b(?:cameras?|c[aá]maras?|nvr|dahua|ezviz)\b",
+    r"\b(?:cameras?|c[aá]maras?|nvr|dahua|ezviz|imou)\b"
+    r"|\b(?:tell\s+me\s+about|what\s+about|is\s+there\s+(?:any|a)\s+problem\s+with|"
+    r"are\s+there\s+any\s+alerts?\s+(?:from|on)|cu[eé]ntame\s+(?:sobre|de)|"
+    r"qu[eé]\s+hay\s+de|hay\s+alg[uú]n\s+problema\s+con)\b[^.]*"
+    r"\b(?:cameras?|c[aá]maras?|nvr|dahua|ezviz|imou)\b",
     re.I,
 )
 _SERVER_STATUS_QUERY = re.compile(
@@ -128,6 +142,11 @@ _SERVER_STATUS_QUERY = re.compile(
     r"punto\s+(?:cuatro|cinco)|\.4|\.5)\b[^.]*\b(?:status|health|services?|gpu|inventory|"
     r"estado|salud|servicios?|inventario|tiene|tenemos)\b"
     r"|\b(?:status|health|what|which|check|estado|salud|qu[eé]|cu[aá]les|revisa)\b[^.]*"
+    r"\b(?:servers?|servidores?|fleet|flota|intel|amd|node|nodo|raspberry\s*pi(?:s)?|punto\s+(?:cuatro|cinco)|\.4|\.5)\b"
+    r"|\b(?:tell\s+me\s+about|what\s+about|is\s+there\s+(?:any|a)\s+problem\s+(?:in|with)|"
+    r"which\s+services\s+are\s+available\s+(?:in|on)|what\s+services\s+are\s+running\s+(?:in|on)|"
+    r"cu[eé]ntame\s+(?:sobre|de)|qu[eé]\s+hay\s+de|hay\s+alg[uú]n\s+problema\s+en|"
+    r"qu[eé]\s+servicios\s+(?:hay|est[aá]n\s+disponibles)\s+en)\b[^.]*"
     r"\b(?:servers?|servidores?|fleet|flota|intel|amd|node|nodo|raspberry\s*pi(?:s)?|punto\s+(?:cuatro|cinco)|\.4|\.5)\b",
     re.I,
 )
@@ -894,8 +913,7 @@ def _home_history_response(utterance: str, state: GuardianState) -> dict[str, An
 
 def _energy_resilience_response(state: GuardianState) -> dict[str, Any]:
     """Report a real electrical snapshot and the configured resilience policy."""
-    end = datetime.now(timezone.utc)
-    start = end - timedelta(hours=12)
+    start, end, _ = _history_window("hoy")
     try:
         timeline = state.home_assistant.history_timeline(start, end, max_events=80)
     except Exception as exc:
@@ -963,6 +981,43 @@ def _energy_resilience_response(state: GuardianState) -> dict[str, Any]:
         readings.append(f"salida de {output_power} vatios")
     reading_text = ", ".join(readings)
 
+    grid_events = [
+        event
+        for event in events
+        if str(event.get("entity_id") or "").endswith("solar_grid_present")
+    ]
+    latest_loss = next(
+        (
+            event
+            for event in reversed(grid_events)
+            if str(event.get("state") or "").lower() == "off"
+        ),
+        None,
+    )
+    latest_restore = None
+    if latest_loss:
+        loss_at = str(latest_loss.get("timestamp") or "")
+        latest_restore = next(
+            (
+                event
+                for event in grid_events
+                if str(event.get("timestamp") or "") > loss_at
+                and str(event.get("state") or "").lower() == "on"
+            ),
+            None,
+        )
+    today_news = ""
+    if latest_loss and latest_restore:
+        lost_at = _format_local_time(str(latest_loss.get("timestamp") or ""))
+        restored_at = _format_local_time(
+            str(latest_restore.get("timestamp") or "")
+        )
+        today_news = (
+            f"Hoy hubo un corte desde las {lost_at} hasta las {restored_at}. "
+        )
+    elif not latest_loss:
+        today_news = "Home Assistant no registró cortes de electricidad hoy. "
+
     runtime_text = spoken_duration(estimate.get("remaining_hours"), english=False)
     outage_time = (
         _format_local_time(str(estimate["outage_started_at"]))
@@ -1028,6 +1083,7 @@ def _energy_resilience_response(state: GuardianState) -> dict[str, Any]:
         answer = (
             "La red eléctrica está presente y el modo batería no está activo. "
             + (f"La lectura actual muestra {reading_text}. " if reading_text else "")
+            + today_news
             + plan_text
         )
         mode = "GRID_NORMAL"
@@ -1043,6 +1099,12 @@ def _energy_resilience_response(state: GuardianState) -> dict[str, Any]:
             "truth": str(timeline.get("truth") or "REAL"),
             "mode": mode,
             **estimate,
+            "latest_outage_started_at": (
+                latest_loss.get("timestamp") if latest_loss else None
+            ),
+            "latest_outage_restored_at": (
+                latest_restore.get("timestamp") if latest_restore else None
+            ),
             "battery_capacity": battery_capacity,
             "output_power": output_power,
             "execution": "ARMED_ON_OUTAGE" if automatic_load_shed else "PREVIEW_ONLY",
@@ -1215,6 +1277,17 @@ def localize_alexa_result(result: dict[str, Any], locale: str) -> dict[str, Any]
                     f"{consumed_wh:.0f} watt-hours used at an average load of "
                     f"{average_w:.0f} watts. "
                 )
+            today_news = ""
+            latest_started = resilience.get("latest_outage_started_at")
+            latest_restored = resilience.get("latest_outage_restored_at")
+            if latest_started and latest_restored:
+                today_news = (
+                    "Today utility power was out from "
+                    f"{_format_local_time(str(latest_started))} until "
+                    f"{_format_local_time(str(latest_restored))}. "
+                )
+            elif not latest_started:
+                today_news = "Home Assistant recorded no power outages today. "
             if resilience.get("mode") == "OUTAGE_DETECTED":
                 outage_time = (
                     _format_local_time(str(resilience["outage_started_at"]))
@@ -1271,6 +1344,7 @@ def localize_alexa_result(result: dict[str, Any], locale: str) -> dict[str, Any]
                 response["answer"] = (
                     "Utility power is present and battery mode is not active. "
                     + (f"The current reading shows {reading_text}. " if reading_text else "")
+                    + today_news
                     + plan_text
                 )
     elif mode == "deterministic-inneros-capabilities":
@@ -1467,14 +1541,48 @@ def _english_answer(utterance: str, speaker_context: dict[str, Any] | None) -> b
 def _unifi_status_response(
     utterance: str, state: GuardianState, speaker_context: dict[str, Any] | None
 ) -> tuple[dict[str, Any], dict[str, Any]]:
-    snapshot = state.home_assistant.unifi_status()
+    raw_snapshot = state.home_assistant.unifi_status()
     english = _english_answer(utterance, speaker_context)
-    entities = snapshot.get("entities") or []
+    all_entities = list(raw_snapshot.get("entities") or [])
+
+    def is_bellini(item: dict[str, Any]) -> bool:
+        identity = " ".join(
+            [str(item.get("entity_id") or ""), str(item.get("label") or "")]
+        ).lower()
+        return "bellini" in identity
+
+    bellini_scope = bool(re.search(r"\bbellini\b", utterance, re.I))
+    all_sites_scope = bool(
+        re.search(
+            r"\b(?:all\s+sites|all\s+networks|todos?\s+los?\s+sitios|"
+            r"todas?\s+las?\s+redes)\b",
+            utterance,
+            re.I,
+        )
+    )
+    if all_sites_scope:
+        scope = "all"
+        entities = all_entities
+    elif bellini_scope:
+        scope = "bellini"
+        entities = [item for item in all_entities if is_bellini(item)]
+    else:
+        scope = "home"
+        entities = [item for item in all_entities if not is_bellini(item)]
+    snapshot = dict(raw_snapshot)
+    snapshot["scope"] = scope
+    snapshot["entities"] = entities
     if not snapshot.get("configured") or not entities:
+        if english:
+            scope_name = "Bellini" if scope == "bellini" else "the home network"
+        else:
+            scope_name = "Bellini" if scope == "bellini" else "la red de la casa"
         answer = (
-            "InnerOS cannot reach the allowlisted UniFi telemetry right now. I did not restart anything."
+            "InnerOS cannot reach the allowlisted UniFi telemetry for "
+            f"{scope_name} right now. I did not restart anything."
             if english
-            else "InnerOS no puede consultar ahora la telemetría permitida de UniFi. No reinicié nada."
+            else "InnerOS no puede consultar ahora la telemetría permitida de "
+            f"UniFi para {scope_name}. No reinicié nada."
         )
         return {"answer": answer, "status": "attention_required", "reasoning_mode": "deterministic-unifi-status"}, snapshot
     def healthy(item: dict[str, Any]) -> bool:
@@ -1509,13 +1617,33 @@ def _unifi_status_response(
         value = str(item.get("state") or "unknown")
         unit = str(item.get("unit") or "")
         details.append(f"{label}: {value}{(' ' + unit) if unit else ''}")
+    scope_intro = {
+        "home": "the home UniFi network" if english else "la red UniFi de la casa",
+        "bellini": (
+            "the external Bellini connector"
+            if english
+            else "el conector externo Bellini"
+        ),
+        "all": (
+            "all connected UniFi sites"
+            if english
+            else "todos los sitios UniFi conectados"
+        ),
+    }[scope]
     if english:
-        answer = f"InnerOS read live UniFi telemetry. {len(available)} of {len(entities)} monitored signals are available. " + "; ".join(details)
+        answer = (
+            f"InnerOS read live telemetry for {scope_intro}. {len(available)} of "
+            f"{len(entities)} monitored signals are available. " + "; ".join(details)
+        )
         if problem:
             answer += f". {len(problem)} signal or device needs attention."
             answer += " Check power, uplink, and PoE before preparing an allowlisted restart through WhatsApp."
     else:
-        answer = f"InnerOS leyó la telemetría en vivo de UniFi. {len(available)} de {len(entities)} señales monitoreadas están disponibles. " + "; ".join(details)
+        answer = (
+            f"InnerOS leyó la telemetría en vivo de {scope_intro}. "
+            f"{len(available)} de {len(entities)} señales monitoreadas están "
+            "disponibles. " + "; ".join(details)
+        )
         if problem:
             answer += f". {len(problem)} señal o equipo requiere atención."
             answer += " Revisa alimentación, enlace y PoE antes de preparar un reinicio permitido por WhatsApp."
@@ -1525,7 +1653,7 @@ def _unifi_status_response(
 def _camera_status_response(
     utterance: str, state: GuardianState, speaker_context: dict[str, Any] | None
 ) -> tuple[dict[str, Any], dict[str, Any]]:
-    snapshot = state.home_assistant.camera_status()
+    snapshot = dict(state.home_assistant.camera_status())
     english = _english_answer(utterance, speaker_context)
     entities = snapshot.get("entities") or []
     if not snapshot.get("configured") or not entities:
@@ -1536,13 +1664,109 @@ def _camera_status_response(
         )
         return {"answer": answer, "status": "attention_required", "reasoning_mode": "deterministic-camera-status"}, snapshot
     healthy_states = {"home", "on", "recording", "streaming", "connected"}
-    healthy = [item for item in entities if str(item.get("state") or "").lower() in healthy_states]
-    details = [f"{item.get('label')}: {item.get('state')}" for item in entities[:8]]
+    healthy = [
+        item
+        for item in entities
+        if str(item.get("state") or "").lower() in healthy_states
+    ]
+    problems = [item for item in entities if item not in healthy]
+    problem_details = [
+        f"{item.get('label')}: {item.get('state')}" for item in problems[:5]
+    ]
+    try:
+        start, end, _ = _history_window("hoy")
+        history = state.home_assistant.history_timeline(
+            start,
+            end,
+            max_events=40,
+            categories={"camera"},
+        )
+    except Exception as exc:
+        history = {
+            "truth": "UNAVAILABLE",
+            "events": [],
+            "error": type(exc).__name__,
+        }
+    snapshot["history"] = history
+    labels_by_entity = {
+        str(item.get("entity_id") or ""): str(item.get("label") or "camera")
+        for item in entities
+    }
+    history_events = list(history.get("events") or [])
+    offline_states = {"off", "not_home", "unknown", "unavailable", "offline", "disconnected"}
+    outages = [
+        event
+        for event in history_events
+        if str(event.get("state") or "").lower() in offline_states
+    ]
+    latest_outage = outages[-1] if outages else None
+    recovered = None
+    if latest_outage:
+        outage_entity = str(latest_outage.get("entity_id") or "")
+        outage_at = str(latest_outage.get("timestamp") or "")
+        recovered = next(
+            (
+                event
+                for event in history_events
+                if str(event.get("entity_id") or "") == outage_entity
+                and str(event.get("timestamp") or "") > outage_at
+                and str(event.get("state") or "").lower() in healthy_states
+            ),
+            None,
+        )
+
+    news = ""
+    if latest_outage:
+        entity_id = str(latest_outage.get("entity_id") or "")
+        label = labels_by_entity.get(entity_id) or str(
+            latest_outage.get("label") or "camera"
+        )
+        lost_at = _format_local_time(str(latest_outage.get("timestamp") or ""))
+        if recovered:
+            back_at = _format_local_time(str(recovered.get("timestamp") or ""))
+            news = (
+                f" Today {label} went offline at {lost_at} and recovered at {back_at}."
+                if english
+                else f" Hoy {label} se desconectó a las {lost_at} y se recuperó a las {back_at}."
+            )
+        else:
+            news = (
+                f" Today {label} went offline at {lost_at}; I found no later recovery event."
+                if english
+                else f" Hoy {label} se desconectó a las {lost_at}; no encontré una recuperación posterior."
+            )
+    elif history.get("truth") == "REAL":
+        news = (
+            " Home Assistant recorded no camera outages today."
+            if english
+            else " Home Assistant no registró caídas de cámaras hoy."
+        )
     if english:
-        answer = f"InnerOS read the live camera inventory. {len(healthy)} of {len(entities)} allowlisted camera or recorder signals are connected or recording. " + "; ".join(details)
+        answer = (
+            f"I checked the live camera system. {len(healthy)} of {len(entities)} "
+            "monitored camera and recorder signals are available."
+        )
+        if problems:
+            answer += " These signals need attention: " + "; ".join(problem_details)
+        else:
+            answer += " I found no current recording or connectivity alerts."
     else:
-        answer = f"InnerOS leyó el inventario en vivo de cámaras. {len(healthy)} de {len(entities)} señales permitidas de cámaras o grabadores están conectadas o grabando. " + "; ".join(details)
-    return {"answer": answer, "status": "all_clear" if len(healthy) == len(entities) else "attention_required", "reasoning_mode": "deterministic-camera-status"}, snapshot
+        answer = (
+            f"Revisé el sistema de cámaras en vivo. {len(healthy)} de {len(entities)} "
+            "señales monitoreadas de cámaras y grabadores están disponibles."
+        )
+        if problems:
+            answer += " Estas señales requieren atención: " + "; ".join(
+                problem_details
+            )
+        else:
+            answer += " No encontré alertas actuales de grabación o conectividad."
+    answer += news
+    return {
+        "answer": answer,
+        "status": "all_clear" if not problems else "attention_required",
+        "reasoning_mode": "deterministic-camera-status",
+    }, snapshot
 
 
 def _server_status_response(

@@ -517,13 +517,20 @@ class HomeAssistantBridge:
             "results": results,
         }
 
-    def _expanded_history_entities(self) -> tuple[list[str], dict[str, str]]:
+    def _expanded_history_entities(
+        self, categories: set[str] | None = None
+    ) -> tuple[list[str], dict[str, str]]:
         """Expand explicitly allowlisted prefixes without exposing all HA entities."""
-        exact = sorted(
+        exact = set(
             entity_id
             for entity_id in self.history_entity_allowlist
             if not entity_id.endswith("*")
         )
+        # Camera telemetry is already explicitly allowlisted for live reads. Make
+        # those same bounded entities available to the Recorder query only when a
+        # camera history report is requested.
+        if categories and "camera" in categories:
+            exact.update(self.camera_entity_allowlist)
         prefixes = sorted(
             entity_id[:-1]
             for entity_id in self.history_entity_allowlist
@@ -540,7 +547,7 @@ class HomeAssistantBridge:
             for item in response.json():
                 entity_id = str(item.get("entity_id") or "")
                 if any(entity_id.startswith(prefix) for prefix in prefixes):
-                    exact.append(entity_id)
+                    exact.add(entity_id)
                     friendly_name = str(
                         (item.get("attributes") or {}).get("friendly_name") or ""
                     ).strip()
@@ -559,6 +566,11 @@ class HomeAssistantBridge:
             return "security"
         if entity_id.startswith("light."):
             return "lighting"
+        if entity_id.startswith("camera.") or any(
+            marker in entity_id
+            for marker in ("camera", "nvr", "dahua", "imou", "ezviz", "recorder")
+        ):
+            return "camera"
         if any(
             marker in entity_id
             for marker in ("solar_", "grid_present", "battery_mode", "breaker_")
@@ -648,7 +660,7 @@ class HomeAssistantBridge:
             raise ValueError("long history windows require a category filter")
         max_events = max(1, min(int(max_events), 100))
 
-        entities, labels = self._expanded_history_entities()
+        entities, labels = self._expanded_history_entities(categories)
         if categories:
             entities = [
                 entity_id
