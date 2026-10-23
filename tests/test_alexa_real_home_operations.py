@@ -341,6 +341,47 @@ def test_plain_english_energy_status_uses_deterministic_real_home_report():
     assert result["energy_resilience"]["truth"] == "REAL"
 
 
+def test_energy_status_reports_todays_real_outage_and_restore_times():
+    state = _state()
+    state.home_assistant.history_timeline = lambda *args, **kwargs: {
+        "truth": "REAL",
+        "events": [
+            {
+                "entity_id": "binary_sensor.inneros_pi01_solar_grid_present",
+                "label": "Red eléctrica",
+                "category": "energy",
+                "state": "off",
+                "timestamp": "2026-10-22T13:10:00+00:00",
+                "summary": "Se perdió la red eléctrica",
+            },
+            {
+                "entity_id": "binary_sensor.inneros_pi01_solar_grid_present",
+                "label": "Red eléctrica",
+                "category": "energy",
+                "state": "on",
+                "timestamp": "2026-10-22T13:42:00+00:00",
+                "summary": "Se restableció la red eléctrica",
+            },
+        ],
+        "current_states": {
+            "binary_sensor.inneros_pi01_solar_grid_present": "on",
+            "binary_sensor.inneros_pi01_solar_battery_mode": "off",
+            "sensor.inneros_pi01_solar_mode": "utility_present_backup_float",
+            "sensor.inneros_pi01_solar_battery_capacity": "98",
+            "sensor.inneros_pi01_solar_output_power": "310",
+        },
+    }
+    result = simulated_alexa_turn(
+        "información de energía",
+        state,
+        FailIfReasonerRuns(),
+    )
+    assert "Hoy hubo un corte desde las 08:10 hasta las 08:42" in result["response"]["answer"]
+
+    localized = localize_alexa_result(result, "en-US")
+    assert "Today utility power was out from 08:10 until 08:42" in localized["response"]["answer"]
+
+
 def test_energy_resilience_can_be_rendered_in_english():
     result = simulated_alexa_turn(
         "show me the energy resilience status and energy saving plan",
