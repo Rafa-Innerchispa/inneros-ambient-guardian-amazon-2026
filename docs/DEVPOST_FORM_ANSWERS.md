@@ -6,7 +6,7 @@ Current canonical `main` before this evidence update: `8ffe96520ee0e018f427aa6b6
 
 Current evidence state:
 
-- 289 automated tests PASS on the Ring sandbox evidence and announcement candidate
+- 290 automated tests PASS on the Ring sandbox evidence and announcement candidate
 - GitHub Actions PASS
 - runtime HTTP + official MCP client smoke PASS
 - Judge Mode browser QA PASS

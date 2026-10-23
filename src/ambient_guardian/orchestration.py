@@ -1493,13 +1493,39 @@ def _ring_demo_response(state: GuardianState, *, english: bool = False) -> dict[
         )
     else:
         latest = ring_events[-1]
+        kind = str(latest.get("type") or "event")
+        raw_device = str(
+            (latest.get("metadata") or {}).get("device_name") or "Front Door"
+        )
+        english_device = "the front door" if raw_device.lower() == "front door" else raw_device
+        spanish_device = (
+            "la puerta principal" if raw_device.lower() == "front door" else raw_device
+        )
+        english_summaries = {
+            "motion": f"Motion was detected at {english_device}.",
+            "person_detected": f"A person was detected at {english_device}.",
+            "package_detected": f"A package was detected at {english_device}.",
+            "doorbell_pressed": f"The doorbell was pressed at {english_device}.",
+            "camera_offline": f"The camera at {english_device} is offline.",
+        }
+        spanish_summaries = {
+            "motion": f"Se detectó movimiento en {spanish_device}.",
+            "person_detected": f"Se detectó una persona en {spanish_device}.",
+            "package_detected": f"Se detectó un paquete en {spanish_device}.",
+            "doorbell_pressed": f"Tocaron el timbre en {spanish_device}.",
+            "camera_offline": f"La cámara de {spanish_device} está desconectada.",
+        }
+        event_count = len(ring_events)
         answer = (
-            f"Simulated Ring demo: {latest.get('summary')} There are {len(ring_events)} "
-            "Ring demo events in this session. The InnerOS analysis is real, but the Ring "
+            f"Simulated Ring demo: {english_summaries.get(kind, latest.get('summary'))} "
+            f"There {'is' if event_count == 1 else 'are'} {event_count} Ring demo "
+            f"{'event' if event_count == 1 else 'events'} in this session. "
+            "The InnerOS analysis is real, but the Ring "
             "source is simulated."
             if english
-            else f"Demo Ring simulado: {latest.get('summary')} Hay {len(ring_events)} eventos "
-            "Ring de demostración en la sesión. El análisis de InnerOS es real, pero la "
+            else f"Demo Ring simulado: {spanish_summaries.get(kind, latest.get('summary'))} "
+            f"Hay {event_count} {'evento' if event_count == 1 else 'eventos'} Ring de "
+            "demostración en la sesión. El análisis de InnerOS es real, pero la "
             "fuente Ring es simulada."
         )
     return {
