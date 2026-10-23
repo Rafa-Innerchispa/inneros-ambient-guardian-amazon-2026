@@ -279,6 +279,11 @@ def test_general_status_intent_preserves_the_requested_subsystem(
             "energy",
             "show me the energy resilience status and energy saving plan",
         ),
+        (
+            "en-US",
+            "Bellini",
+            "check the live status of the Bellini network",
+        ),
         ("es-US", "wifi", "revisa el estado en vivo de UniFi"),
         (
             "es-US",

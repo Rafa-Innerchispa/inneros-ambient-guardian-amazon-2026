@@ -117,13 +117,13 @@ _UNIFI_RESTART_QUERY = re.compile(
     re.I,
 )
 _UNIFI_STATUS_QUERY = re.compile(
-    r"\b(?:uni\s*fi|ubiquiti|wi[ -]?fi|wifi|network|red)\b[^.]*\b(?:status|health|online|connected|"
+    r"\b(?:uni\s*fi|ubiquiti|wi[ -]?fi|wifi|network|red|bellini)\b[^.]*\b(?:status|health|online|connected|"
     r"estado|salud|conectad[oa]|funcionando)\b"
     r"|\b(?:status|health|how\s+is|check|estado|salud|c[oó]mo\s+est[aá]|revisa)\b[^.]*"
-    r"\b(?:uni\s*fi|ubiquiti|wi[ -]?fi|wifi|network|red)\b"
+    r"\b(?:uni\s*fi|ubiquiti|wi[ -]?fi|wifi|network|red|bellini)\b"
     r"|\b(?:tell\s+me\s+about|what\s+about|is\s+there\s+(?:any|a)\s+problem\s+with|"
     r"cu[eé]ntame\s+(?:sobre|del?)|qu[eé]\s+hay\s+del?|hay\s+alg[uú]n\s+problema\s+con)\b[^.]*"
-    r"\b(?:uni\s*fi|ubiquiti|wi[ -]?fi|wifi|network|red)\b",
+    r"\b(?:uni\s*fi|ubiquiti|wi[ -]?fi|wifi|network|red|bellini)\b",
     re.I,
 )
 _CAMERA_STATUS_QUERY = re.compile(

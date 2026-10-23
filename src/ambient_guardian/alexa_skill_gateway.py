@@ -587,6 +587,15 @@ def _guardian_query(
     # paths instead of falling through to the slower general LLM response.
     normalized_query = " ".join(query.lower().split())
     if re.fullmatch(
+        r"(?:the |my |el |la |mi )?bellini(?: network| red)?",
+        normalized_query,
+    ):
+        return (
+            "check the live status of the Bellini network"
+            if english
+            else "revisa el estado en vivo de la red Bellini"
+        )
+    if re.fullmatch(
         r"(?:the |my |el |la |mi )?(?:uni\s*fi|ubiquiti|wi[ -]?fi)(?: network| red)?",
         normalized_query,
     ):
@@ -632,7 +641,7 @@ def _guardian_query(
         )
     if re.fullmatch(
         r"(?:the |my |el |la |mi )?(?:voice\s*ops|pbx|grandstream|"
-        r"phone\s+system|telephony|telefon[ií]a|central)",
+        r"phone\s+system|telephony|telefon[ií]a|central(?:\s+grandstream)?)",
         normalized_query,
     ):
         return (
