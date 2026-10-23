@@ -104,8 +104,23 @@ def test_integration_status_is_honest_about_ring_and_official_mcp():
     assert "2025-11-25" in data["mcp_protocol"]
     assert "demo simulator" in data["ring"]
     assert data["ring_device_verification"] == "pending_real_or_official_test_account"
+    assert data["ring_official_sandbox"] == {
+        "truth_label": "NOT_PROVEN",
+        "physical_device_verified": False,
+        "signed_live_webhook_verified": False,
+    }
     assert data["physical_alexa"].startswith("CODE_READY:")
     assert data["alexa_plus_mcp"]["entitlement"] == "NOT_PROVEN"
+
+
+def test_integration_status_reports_verified_official_ring_sandbox(monkeypatch):
+    monkeypatch.setenv("AMBIENT_GUARDIAN_RING_OFFICIAL_SANDBOX_VERIFIED", "1")
+
+    data = client.get("/api/integrations").json()
+
+    assert data["ring_official_sandbox"]["truth_label"] == "OFFICIAL_SANDBOX_VERIFIED"
+    assert data["ring_official_sandbox"]["physical_device_verified"] is False
+    assert data["ring_official_sandbox"]["signed_live_webhook_verified"] is False
 
 
 def test_owner_authorization_requires_matching_header(monkeypatch):
