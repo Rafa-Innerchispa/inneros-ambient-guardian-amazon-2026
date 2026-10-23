@@ -246,15 +246,21 @@ def test_guardian_intent_calls_local_backend(monkeypatch):
     assert response["response"]["shouldEndSession"] is False
 
 
-def test_launch_is_language_neutral_because_alexa_omits_spoken_invocation(monkeypatch):
-    monkeypatch.setenv("AMBIENT_GUARDIAN_VOICE_NAME", "InnerOS")
-    response = gateway._dispatch(
-        request_payload(launch_request(locale="es-US"))
-    )
+@pytest.mark.parametrize(
+    ("locale", "expected", "reprompt"),
+    [
+        ("en-US", "Atlas Control is online", "What would you like to check?"),
+        ("es-US", "Atlas Control está en línea", "¿Qué quieres revisar?"),
+    ],
+)
+def test_launch_summarizes_capabilities_and_keeps_session_open(locale, expected, reprompt):
+    response = gateway._dispatch(request_payload(launch_request(locale=locale)))
     speech = response["response"]["outputSpeech"]["text"]
-    assert speech == "InnerOS."
+    assert expected in speech
+    assert "Ring" in speech
+    assert "Grandstream" in speech
     assert response["response"]["shouldEndSession"] is False
-    assert response["response"]["reprompt"]["outputSpeech"]["text"] == "InnerOS."
+    assert response["response"]["reprompt"]["outputSpeech"]["text"] == reprompt
 
 
 def test_spanish_fallback_allows_one_retry_inside_same_session():
@@ -326,6 +332,16 @@ def test_general_status_intent_preserves_the_requested_subsystem(
             "en-US",
             "energy",
             "show me the energy resilience status and energy saving plan",
+        ),
+        (
+            "en-US",
+            "my solar system",
+            "show me the energy resilience status and energy saving plan",
+        ),
+        (
+            "en-US",
+            "my system",
+            "what can you do inside InnerOS",
         ),
         (
             "en-US",

@@ -60,7 +60,10 @@
           "samples": [
             "what can you do",
             "how can you help",
-            "what does inner os control"
+            "what does inner os control",
+            "what about my system",
+            "tell me about my system",
+            "what about inner os"
           ]
         },
         {
@@ -137,6 +140,10 @@
             "give me the energy status",
             "tell me about the energy",
             "what about the energy",
+            "what about my energy",
+            "what about my solar system",
+            "tell me about my solar system",
+            "how is my solar system",
             "is there any problem with the power",
             "how is the home energy system",
             "give me the energy report",
