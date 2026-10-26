@@ -65,6 +65,7 @@ class LocalVoiceOpsRuntimeClient:
     base_url: str
     bearer_token: str = ""
     timeout_seconds: float = 12.0
+    callback_timeout_seconds: float = 240.0
 
     def __post_init__(self) -> None:
         parsed = urlsplit(self.base_url.rstrip("/"))
@@ -78,6 +79,8 @@ class LocalVoiceOpsRuntimeClient:
             raise VoiceOpsConfigurationError("VoiceOps runtime URL must not include a path")
         if self.timeout_seconds <= 0:
             raise VoiceOpsConfigurationError("VoiceOps timeout must be positive")
+        if not 15 <= self.callback_timeout_seconds <= 300:
+            raise VoiceOpsConfigurationError("VoiceOps callback timeout must be 15..300 seconds")
 
     def status(self) -> Mapping[str, Any]:
         return self._json("/v1/telephony/status")
@@ -97,6 +100,7 @@ class LocalVoiceOpsRuntimeClient:
         return self._json(
             "/v1/callbacks",
             method="POST",
+            timeout_seconds=self.callback_timeout_seconds,
             payload={
                 "correlation_id": correlation_id,
                 "reason": " ".join(reason.split())[:600],
@@ -117,6 +121,7 @@ class LocalVoiceOpsRuntimeClient:
         *,
         method: str = "GET",
         payload: Mapping[str, Any] | None = None,
+        timeout_seconds: float | None = None,
     ) -> dict[str, Any]:
         headers = {"Accept": "application/json", "User-Agent": "AmbientGuardian/1"}
         if self.bearer_token:
@@ -126,7 +131,8 @@ class LocalVoiceOpsRuntimeClient:
             self.base_url.rstrip("/") + path,
             json=dict(payload) if payload is not None else None,
             headers=headers,
-            timeout=self.timeout_seconds,
+            timeout=httpx.Timeout(timeout_seconds or self.timeout_seconds,
+                                  connect=min(self.timeout_seconds, 5.0)),
         )
         response.raise_for_status()
         decoded = response.json()
@@ -263,12 +269,13 @@ class VoiceOpsBridge:
                 "adapter": "voiceops-runtime",
                 "truth_label": "CODE_READY",
                 "callback_status": "failed",
-                "target_alias": OWNER_TARGET_ALIAS,
+                "target_alias": target_alias,
                 "verification_scope": "voiceops_readback_failed",
                 "error": type(exc).__name__,
             }
 
         result = readback.get("result") if isinstance(readback.get("result"), Mapping) else {}
+        result_evidence = result.get("evidence") or {}
         dispatched_result = (
             dispatch.get("result") if isinstance(dispatch.get("result"), Mapping) else {}
         )
@@ -306,6 +313,10 @@ class VoiceOpsBridge:
             "adapter": "voiceops-runtime",
             "truth_label": "REAL" if verified else "CODE_READY",
             "callback_status": status or "unknown",
+            "callback_reason": str(result.get("reason") or "")[:120],
+            "sip_status": result_evidence.get("sip_status"),
+            "sip_stage": result_evidence.get("sip_stage"),
+            "transport_error_type": result_evidence.get("transport_error_type"),
             "target_alias": target_alias,
             "call_id_hash": hashlib.sha256(call_id.encode("utf-8")).hexdigest()
             if call_id
