@@ -1270,6 +1270,8 @@ def localize_alexa_result(result: dict[str, Any], locale: str) -> dict[str, Any]
         if isinstance(response, dict):
             english = str(locale).lower().startswith("en")
             label = str(prepared.get("target_label") or prepared.get("target_alias") or "")
+            if english and prepared.get("target_alias") == "voiceops.owner.mobile":
+                label = "your private mobile phone"
             if prepared.get("approval_delivery") in {"sent", "pending", "queued"}:
                 response["answer"] = (
                     f"I prepared the request for {label}. Please authorize it in the InnerOS "

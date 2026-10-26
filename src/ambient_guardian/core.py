@@ -820,6 +820,8 @@ class GuardianState:
             },
             approval_state="WAITING_FOR_OWNER",
             incident_receipt=linked_incident,
+            pbx_result=None,
+            verified_evidence=None,
             truth={
                 **dict(self.live_evidence.get("truth") or {}),
                 "action": (

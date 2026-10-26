@@ -40,6 +40,11 @@ bound proof before PSTN dispatch; Guardian's durable SQLite transition prevents
 concurrent execution or replay. Failed operations are not automatically retried.
 The dashboard's service scripts cannot run hardware actions directly.
 
+Status/preparation RPCs retain a short timeout. Only the separately authorized
+callback waits up to 240 seconds for the synchronous VoiceOps call receipt;
+ringing and conversation must not be mistaken for a failed 12-second status RPC.
+Recognized SIP rejection codes appear in terminal evidence and the inbox.
+
 Android heads-up presentation depends on OS notification channel settings. A
 Companion notification is not a Google-style full-screen authorization prompt.
 

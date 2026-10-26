@@ -285,6 +285,40 @@ def test_http_client_preserves_mobile_alias_and_whatsapp_approval(monkeypatch):
     assert len(captured) == 1
 
 
+def test_call_wait_is_separate_from_fast_status_timeout(monkeypatch):
+    calls = []
+    def request(method, url, **kwargs):
+        calls.append((method, kwargs['timeout']))
+        return httpx.Response(200, json={}, request=httpx.Request(method, url))
+    monkeypatch.setattr(httpx, 'request', request)
+    client = LocalVoiceOpsRuntimeClient('http://127.0.0.1:8796')
+    client.status()
+    client.request_owner_callback(correlation_id='authorized-action', reason='Owner call',
+                                  requested_by='ambient-guardian')
+    assert calls[0][1].read == 12
+    assert calls[1][1].read == 240
+    assert calls[1][1].connect == 5
+
+
+def test_failed_call_receipt_preserves_sip_rejection_without_claiming_execution():
+    class RejectedClient(FakeVoiceOpsClient):
+        def request_owner_callback(self, **kwargs):
+            return self.receipt(kwargs['correlation_id'])
+        def receipt(self, correlation_id):
+            return {'result': {'status': 'failed', 'reason': 'owner_mobile_transport_failed',
+                    'target_extension': OWNER_MOBILE_TARGET_ALIAS,
+                    'evidence': {'sip_status': 480, 'sip_stage': 'INVITE',
+                                 'transport_error_type': 'LiveTransportError'}},
+                    'autonomous_pstn_enabled': False}
+    outcome = VoiceOpsBridge(mode='real', client=RejectedClient()).request_owner_callback(
+        correlation_id='failed-action', reason='Owner requested call',
+        target_alias=OWNER_MOBILE_TARGET_ALIAS)
+    assert outcome['executed'] is False
+    assert outcome['verified'] is False
+    assert outcome['sip_status'] == 480
+    assert outcome['target_alias'] == OWNER_MOBILE_TARGET_ALIAS
+
+
 def test_slow_provider_does_not_block_mobile_preparation_or_bypass_approval(tmp_path):
     entered = threading.Event()
     release = threading.Event()

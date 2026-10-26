@@ -39,6 +39,15 @@ class MobileApprovalBridge(WhatsAppApprovalBridge):
         # bounded call. A persisted row means queued, never confirmed delivery.
         return self._run("request", payload)
 
+    def complete(self, task_id: str, evidence: dict[str, Any]) -> dict[str, Any]:
+        safe = {key: evidence.get(key) for key in (
+            "action_id", "action", "executed", "verified", "online_verified",
+            "adapter", "verified_at", "evidence_digest", "verification_truth_label")}
+        observed = evidence.get("observed_state") or {}
+        safe["observed_state"] = {key: observed.get(key) for key in (
+            "callback_status", "callback_reason", "sip_status", "sip_stage", "transport_error_type")}
+        return self._run("complete", {"task_id": task_id, "evidence": safe})
+
 
 def collection():
     from raphiia_openai import mongo_store
@@ -151,10 +160,13 @@ def cards_for(row: dict[str, Any]) -> list[dict[str, Any]]:
                          f"Caduca (UTC): {row['expires_at']}\n\nReferencia: `{row['task_id']}`"}]
     if row.get("evidence"):
         evidence = row["evidence"]
+        observed = evidence.get("observed_state") or row.get("diagnostic_readback") or {}
+        rejection = (f"\n\nLa central devolvió SIP {observed['sip_status']}."
+                     if observed.get("sip_status") else "")
         cards.append({"type": "markdown", "title": "Resultado verificado",
                       "content": f"Ejecutada: {'sí' if evidence.get('executed') else 'no'}. "
                                  f"Verificada: {'sí' if evidence.get('verified') else 'no'}.\n\n"
-                                 f"Comprobación: {evidence.get('verified_at') or 'sin confirmación'}"})
+                                 f"Comprobación: {evidence.get('verified_at') or 'sin confirmación'}{rejection}"})
     if row["status"] == "awaiting_owner_approval" and future(row["expires_at"]):
         buttons = []
         for decision, label, icon in (("approve", "Autorizar", "mdi:check-circle"),
