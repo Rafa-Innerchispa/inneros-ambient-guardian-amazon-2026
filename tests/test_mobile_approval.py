@@ -64,6 +64,18 @@ def test_runtime_proof_binds_actual_callback_and_is_consumed_once(row, monkeypat
     assert mobile.consume(payload) == {'approved': False}
 
 
+def test_internal_proof_cannot_authorize_mobile_call(row, monkeypatch):
+    row.update(action_type='voiceops_owner_callback', target_alias='voiceops.owner')
+    rows = Rows(row)
+    assert mobile.decide(rows, event(), 'owner')
+    monkeypatch.setattr(mobile, 'collection', lambda: rows)
+    payload = {'approval_id': row['task_id'], 'correlation_id': row['action_id'],
+               'target_alias': 'voiceops.owner.mobile'}
+    assert not mobile.consume(payload)['approved']
+    payload['target_alias'] = 'voiceops.owner'
+    assert mobile.consume(payload)['approved']
+
+
 @pytest.mark.parametrize('locale,word', [('es-US', 'Autorízala'), ('en-US', 'authorize')])
 def test_mobile_instructions_do_not_send_owner_to_whatsapp(locale, word):
     result = {'prepared_action': {'approval_channel': mobile.CHANNEL,

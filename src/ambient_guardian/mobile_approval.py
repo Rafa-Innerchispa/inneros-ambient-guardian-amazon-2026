@@ -138,10 +138,15 @@ def finish(payload: dict[str, Any]) -> dict[str, Any]:
 def consume(payload: dict[str, Any]) -> dict[str, Any]:
     """Private VoiceOps proof consumption, bound to the exact callback ID."""
     rows = collection()
+    target_alias = str(payload.get("target_alias") or "voiceops.owner.mobile")
+    action_type = {"voiceops.owner.mobile": "voiceops_owner_mobile_callback",
+                   "voiceops.owner": "voiceops_owner_callback"}.get(target_alias)
+    if action_type is None:
+        return {"approved": False}
     row = rows.find_one({"task_id": str(payload.get("approval_id") or ""),
                          "action_id": str(payload.get("correlation_id") or ""),
-                         "action_type": "voiceops_owner_mobile_callback",
-                         "target_alias": "voiceops.owner.mobile",
+                         "action_type": action_type,
+                         "target_alias": target_alias,
                          "authorization_channel": CHANNEL, "status": "approved"})
     if not row or not future(row["expires_at"]):
         return {"approved": False}
