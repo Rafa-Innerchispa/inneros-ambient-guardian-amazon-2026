@@ -679,7 +679,7 @@ async def simulated_alexa(request: Request) -> Response:
                 and not str(prepared.get("action") or "").startswith(
                     "voiceops_owner_"
                 )
-                else str((STATE.voiceops.status() or {}).get("truth_label") or "CODE_READY")
+                else ("SIMULATED" if STATE.voiceops.mode == "simulator" else "CODE_READY")
                 if prepared
                 else "CODE_READY"
             ),
