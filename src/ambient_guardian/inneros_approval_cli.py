@@ -216,6 +216,7 @@ def _status(payload: dict[str, Any]) -> dict[str, Any]:
         "rejected": rejected,
         "authorization_channel": row.get("owner_authorization_channel"),
         "authorized_at": row.get("owner_authorized_at"),
+        "approval_delivered_at": row.get("approval_delivered_at"),
     }
 
 

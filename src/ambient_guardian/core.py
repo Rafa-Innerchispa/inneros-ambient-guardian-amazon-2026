@@ -642,6 +642,7 @@ class GuardianState:
         reason: str = "",
         *,
         response_locale: str | None = None,
+        defer_approval: bool = False,
     ) -> dict[str, Any]:
         unifi_alias = None
         if action.startswith("unifi_restart:"):
@@ -730,6 +731,7 @@ class GuardianState:
             "linked_incident_id": item.linked_incident_id,
             "linked_incident_digest": item.linked_incident_digest,
         }
+        deferred_payload = None
         if action in {"voiceops_owner_callback", "voiceops_owner_mobile_callback"}:
             target_alias = (
                 OWNER_MOBILE_TARGET_ALIAS
@@ -743,26 +745,31 @@ class GuardianState:
             )
             prepared_result["target_alias"] = target_alias
             prepared_result["target_label"] = target_label
-            delivery = self.approval_bridge.request(
-                {
-                    "action_type": action,
-                    "action_id": action_id,
-                    "action_digest": action_digest,
-                    "target_alias": target_alias,
-                    "target_label": target_label,
-                    "expires_at": item.expires_at,
-                }
-            )
+            delivery_payload = {
+                "action_type": action,
+                "action_id": action_id,
+                "action_digest": action_digest,
+                "target_alias": target_alias,
+                "target_label": target_label,
+                "expires_at": item.expires_at,
+            }
+            if defer_approval:
+                prepared_result["approval_channel"] = "whatsapp"
+                prepared_result["approval_delivery"] = "pending"
+                deferred_payload = delivery_payload
+                delivery = {"pending": True}
+            else:
+                delivery = self.approval_bridge.request(delivery_payload)
             prepared_result["approval_channel"] = "whatsapp"
             prepared_result["approval_delivery"] = (
-                "sent" if delivery.get("ok") else "failed"
+                "pending" if delivery.get("pending") else "sent" if delivery.get("ok") else "failed"
             )
             if delivery.get("ok"):
                 item.approval_task_id = str(delivery.get("task_id") or "") or None
                 prepared_result["approval_task_id"] = item.approval_task_id
                 if item.approval_task_id:
                     self.approval_store.bind_task(action_id, item.approval_task_id)
-            else:
+            elif not delivery.get("pending"):
                 prepared_result["approval_delivery_error"] = str(
                     delivery.get("error") or "whatsapp_delivery_failed"
                 )
@@ -811,7 +818,36 @@ class GuardianState:
                 ),
             },
         )
+        if deferred_payload is not None:
+            threading.Thread(
+                target=self._deliver_deferred_approval,
+                args=(item, deferred_payload),
+                name=f"approval-delivery-{action_id}",
+                daemon=True,
+            ).start()
         return prepared_result
+
+    def _deliver_deferred_approval(self, item: PendingAction, payload: dict[str, Any]) -> None:
+        """Deliver after durable preparation so provider latency cannot time out Alexa."""
+        try:
+            delivery = self.approval_bridge.request(payload)
+        except Exception as exc:
+            delivery = {"ok": False, "error": type(exc).__name__}
+        task_id = str(delivery.get("task_id") or "") if delivery.get("ok") else ""
+        with self._lock:
+            if self.pending.get(item.token) is not item:
+                return
+            if task_id:
+                self.approval_store.bind_task(item.action_id, task_id)
+                item.approval_task_id = task_id
+            current = dict(self.live_evidence.get("prepared_action") or {})
+            if current.get("action_id") == item.action_id:
+                current["approval_delivery"] = "sent" if task_id else "failed"
+                if task_id:
+                    current["approval_task_id"] = task_id
+                else:
+                    current["approval_delivery_error"] = delivery.get("error", "whatsapp_delivery_failed")
+                self.record_live_evidence(prepared_action=current)
 
     @staticmethod
     def action_requires_owner(action: str | None) -> bool:
