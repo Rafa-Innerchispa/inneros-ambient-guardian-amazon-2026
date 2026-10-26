@@ -1410,7 +1410,8 @@ def localize_alexa_result(result: dict[str, Any], locale: str) -> dict[str, Any]
             destination = f" ending in {mobile_last_four}" if mobile_last_four else ""
             response["answer"] = (
                 "The Grandstream PBX route to the owner's private mobile"
-                f"{destination} is ready and has been validated end to end. To use it, say: "
+                f"{destination} is configured; VoiceOps reports a previously verified route. "
+                "A fresh call still needs delivery and approval. To request it, say: "
                 "call my cell phone using Grandstream. I will send authorization to WhatsApp "
                 "and will not dial until it is approved there. I did not place a call with "
                 "this status request."
@@ -1434,6 +1435,12 @@ def localize_alexa_result(result: dict[str, Any], locale: str) -> dict[str, Any]
                 "I prepared a Grandstream call to the owner's private mobile alias and sent "
                 "the authorization to WhatsApp. I have not dialed yet; VoiceOps will continue "
                 "only after approval there."
+            )
+        elif isinstance(prepared, dict) and prepared.get("approval_delivery") == "pending":
+            response["answer"] = (
+                "I prepared your Grandstream mobile call and am requesting authorization. "
+                "Please approve it in WhatsApp when it arrives. Delivery is not confirmed yet. "
+                "I have not dialed."
             )
         elif isinstance(prepared, dict):
             response["answer"] = (
@@ -2065,7 +2072,8 @@ def _voiceops_status_response(state: GuardianState) -> dict[str, Any]:
         destination = f" terminado en {mobile_last_four}" if mobile_last_four else ""
         answer = (
             "La ruta de la central Grandstream al celular privado"
-            f"{destination} está lista y ya fue validada de extremo a extremo. "
+            f"{destination} está configurada; VoiceOps informa una ruta validada anteriormente. "
+            "Una llamada nueva todavía requiere entregar y aprobar la solicitud. "
             "Para usarla, di: llama a mi celular usando Grandstream. Te enviaré la "
             "autorización por WhatsApp y no marcaré hasta que la confirmes. "
             "No inicié ninguna llamada con esta consulta."
@@ -2226,6 +2234,8 @@ def simulated_alexa_turn(
             prepared = state.prepare_action(
                 "voiceops_owner_mobile_callback",
                 "Explicit owner request for the private allowlisted mobile alias",
+                response_locale=(speaker_context or {}).get("response_locale"),
+                defer_approval=True,
             )
         except ValueError as exc:
             return {
@@ -2247,6 +2257,9 @@ def simulated_alexa_turn(
                     "celular. Te envié la autorización por WhatsApp. No marqué todavía; "
                     "VoiceOps solo continuará si confirmas allí."
                     if prepared.get("approval_delivery") == "sent"
+                    else "Preparé la llamada y estoy solicitando autorización. Confírmala en "
+                    "WhatsApp cuando llegue. Su entrega aún no está confirmada. No marqué."
+                    if prepared.get("approval_delivery") == "pending"
                     else "Preparé la llamada al alias privado de tu celular, pero no pude "
                     "entregar la autorización por WhatsApp. No marqué."
                 ),

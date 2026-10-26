@@ -98,7 +98,7 @@ class WhatsAppApprovalBridge:
             return result
         task_id = self.task_id_for_digest(action_digest)
         recovered = self.status(task_id)
-        if not recovered.get("ok"):
+        if not recovered.get("ok") or not recovered.get("approval_delivered_at"):
             return result
         return {
             "ok": True,

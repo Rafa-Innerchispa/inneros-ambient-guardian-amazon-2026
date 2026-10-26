@@ -475,10 +475,10 @@ def test_private_phone_destination_explains_current_english_boundary():
 
     localized = localize_alexa_result(result, "en-US")
     answer = localized["response"]["answer"]
-    assert "private mobile alias" in answer
-    assert "authorization to WhatsApp" in answer
+    assert "Grandstream mobile call" in answer
+    assert "Delivery is not confirmed yet" in answer
     assert result["prepared_action"]["action"] == "voiceops_owner_mobile_callback"
-    assert result["prepared_action"]["approval_delivery"] == "sent"
+    assert result["prepared_action"]["approval_delivery"] == "pending"
 
 
 def test_unifi_restart_is_prepared_then_executes_only_after_approval():

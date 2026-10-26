@@ -90,6 +90,8 @@ class LocalVoiceOpsRuntimeClient:
         target_alias: str = OWNER_TARGET_ALIAS,
         approval_id: str = "",
     ) -> Mapping[str, Any]:
+        if target_alias not in {OWNER_TARGET_ALIAS, OWNER_MOBILE_TARGET_ALIAS}:
+            raise VoiceOpsConfigurationError("VoiceOps target is outside the owner allowlist")
         return self._json(
             "/v1/callbacks",
             method="POST",
@@ -97,7 +99,7 @@ class LocalVoiceOpsRuntimeClient:
                 "correlation_id": correlation_id,
                 "reason": " ".join(reason.split())[:600],
                 "requested_by": requested_by[:80],
-                "target_alias": OWNER_TARGET_ALIAS,
+                "target_alias": target_alias,
                 "approval_channel": "whatsapp" if approval_id else "",
                 "approval_id": approval_id[:120],
             },

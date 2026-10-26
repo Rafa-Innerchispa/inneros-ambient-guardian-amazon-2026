@@ -1,5 +1,8 @@
 import hashlib
 import json
+import threading
+
+import httpx
 
 import pytest
 
@@ -259,3 +262,64 @@ def test_voiceops_runtime_rejects_public_or_credentialed_destinations():
         LocalVoiceOpsRuntimeClient("https://voice.example.com")
     with pytest.raises(VoiceOpsConfigurationError, match="path"):
         LocalVoiceOpsRuntimeClient("http://127.0.0.1:8796/v1")
+
+
+def test_http_client_preserves_mobile_alias_and_whatsapp_approval(monkeypatch):
+    captured = []
+
+    def request(method, url, **kwargs):
+        captured.append(kwargs["json"])
+        return httpx.Response(200, json={"result": {}}, request=httpx.Request(method, url))
+
+    monkeypatch.setattr(httpx, "request", request)
+    client = LocalVoiceOpsRuntimeClient("http://127.0.0.1:8796")
+    client.request_owner_callback(correlation_id="mobile-test", reason="test",
+        requested_by="ambient-guardian", target_alias=OWNER_MOBILE_TARGET_ALIAS,
+        approval_id="ops_test")
+    assert captured[0]["target_alias"] == OWNER_MOBILE_TARGET_ALIAS
+    assert captured[0]["approval_id"] == "ops_test"
+    assert captured[0]["approval_channel"] == "whatsapp"
+    with pytest.raises(VoiceOpsConfigurationError, match="allowlist"):
+        client.request_owner_callback(correlation_id="invalid", reason="test",
+            requested_by="test", target_alias="arbitrary-number")
+    assert len(captured) == 1
+
+
+def test_slow_provider_does_not_block_mobile_preparation_or_bypass_approval(tmp_path):
+    entered = threading.Event()
+    release = threading.Event()
+    delivered = threading.Event()
+
+    class SlowApproval(FakeWhatsAppApproval):
+        def request(self, payload):
+            entered.set()
+            release.wait(5)
+            return super().request(payload)
+
+    approval = SlowApproval()
+    fake = FakeVoiceOpsClient()
+    state = GuardianState(incident_db_path=str(tmp_path / "incidents.sqlite3"),
+        action_db_path=str(tmp_path / "actions.sqlite3"), approval_bridge=approval)
+    state.voiceops = VoiceOpsBridge(mode="real", client=fake)
+    original = state._deliver_deferred_approval
+
+    def delivery(*args):
+        try:
+            original(*args)
+        finally:
+            delivered.set()
+
+    state._deliver_deferred_approval = delivery
+    try:
+        prepared = state.prepare_action("voiceops_owner_mobile_callback", defer_approval=True)
+        assert entered.wait(1)
+        assert prepared["approval_delivery"] == "pending"
+        assert fake.calls == []
+        assert state.approval_store.list_pending()[0]["action_id"] == prepared["action_id"]
+    finally:
+        release.set()
+    assert delivered.wait(2)
+    assert state.process_whatsapp_approvals() == []
+    approval.approved = True
+    assert state.process_whatsapp_approvals()[0]["status"] == "completed"
+    assert fake.calls[0]["target_alias"] == OWNER_MOBILE_TARGET_ALIAS

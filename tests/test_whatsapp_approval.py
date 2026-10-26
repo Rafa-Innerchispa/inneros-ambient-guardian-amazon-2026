@@ -14,6 +14,7 @@ def test_request_reconciles_durable_task_after_provider_timeout(monkeypatch):
             "status": "awaiting_owner_approval",
             "approved": False,
             "rejected": False,
+            "approval_delivered_at": "2026-10-26T16:00:00+00:00",
         }
 
     monkeypatch.setattr(bridge, "_run", fake_run)
@@ -45,4 +46,15 @@ def test_request_preserves_timeout_when_no_durable_task_exists(monkeypatch):
     assert bridge.request({"action_digest": "b" * 64}) == {
         "ok": False,
         "error": "TimeoutExpired",
+    }
+
+
+def test_durable_task_without_delivery_is_not_reported_as_sent(monkeypatch):
+    bridge = WhatsAppApprovalBridge()
+    monkeypatch.setattr(bridge, "_run", lambda command, payload: (
+        {"ok": False, "error": "TimeoutExpired"} if command == "request"
+        else {"ok": True, "status": "awaiting_owner_approval", "approval_delivered_at": None}
+    ))
+    assert bridge.request({"action_digest": "c" * 64}) == {
+        "ok": False, "error": "TimeoutExpired",
     }
