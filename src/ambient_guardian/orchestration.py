@@ -1264,6 +1264,28 @@ def _english_history_answer(timeline: dict[str, Any]) -> str:
 
 def localize_alexa_result(result: dict[str, Any], locale: str) -> dict[str, Any]:
     """Localize stable demo responses without using a model or changing safety policy."""
+    prepared = result.get("prepared_action") or {}
+    if prepared.get("approval_channel") == "home_assistant_companion":
+        response = result.get("response")
+        if isinstance(response, dict):
+            english = str(locale).lower().startswith("en")
+            label = str(prepared.get("target_label") or prepared.get("target_alias") or "")
+            if prepared.get("approval_delivery") in {"sent", "pending", "queued"}:
+                response["answer"] = (
+                    f"I prepared the request for {label}. Please authorize it in the InnerOS "
+                    "approval screen in Home Assistant. I am requesting the Android notification; "
+                    "delivery is not confirmed yet. Nothing has executed."
+                    if english else
+                    f"Preparé la solicitud para {label}. Autorízala en la pantalla de "
+                    "aprobaciones InnerOS de Home Assistant. Estoy solicitando el aviso Android; "
+                    "su entrega todavía no está confirmada. No ejecuté ninguna acción."
+                )
+            else:
+                response["answer"] = (
+                    "I could not queue the InnerOS approval. Nothing has executed."
+                    if english else "No pude registrar la aprobación InnerOS. No ejecuté ninguna acción."
+                )
+        return result
     if not str(locale or "").lower().startswith("en"):
         return result
     response = result.get("response")

@@ -21,6 +21,7 @@ from .music_assistant import MusicAssistantBridge
 from .ring import RingAdapterStatus, RingOfficialAdapter, RingSimulatorAdapter
 from .voiceops import OWNER_MOBILE_TARGET_ALIAS, OWNER_TARGET_ALIAS, VoiceOpsBridge
 from .whatsapp_approval import WhatsAppApprovalBridge
+from .mobile_approval import MobileApprovalBridge
 
 
 def utc_now() -> datetime:
@@ -44,6 +45,7 @@ class PendingAction:
     linked_incident_digest: str | None = None
     approval_task_id: str | None = None
     response_locale: str | None = None
+    approval_channel: str = "whatsapp"
 
 
 class SimulatorAdapter:
@@ -92,7 +94,11 @@ class GuardianState:
         self._ttl = action_ttl_seconds
         self.incident_store = IncidentStore(incident_db_path)
         self.approval_store = ApprovalStore(action_db_path)
-        self.approval_bridge = approval_bridge or WhatsAppApprovalBridge()
+        self.approval_bridge = approval_bridge or (
+            MobileApprovalBridge()
+            if os.getenv("AMBIENT_GUARDIAN_APPROVAL_CHANNEL") == "home_assistant_companion"
+            else WhatsAppApprovalBridge()
+        )
         self.adapter = SimulatorAdapter()
         self.ring_adapter = RingSimulatorAdapter()
         self.ring_official = RingOfficialAdapter()
@@ -165,6 +171,7 @@ class GuardianState:
             "linked_incident_digest": item.linked_incident_digest,
             "approval_task_id": item.approval_task_id,
             "response_locale": item.response_locale,
+            "approval_channel": item.approval_channel,
         }
 
     def _restore_pending_actions(self) -> None:
@@ -663,6 +670,10 @@ class GuardianState:
                 f"Incident report {linked_incident['incident_id']}: {incident.get('summary') or 'Review the recorded incident.'}".split()
             )[:600]
         elif action == "voiceops_owner_mobile_callback":
+            if getattr(self.approval_bridge, "channel", "whatsapp") == "home_assistant_companion":
+                # A standalone mobile callback must not narrate an old Ring
+                # demo incident merely because it is the latest stored receipt.
+                linked_incident = None
             if linked_incident is not None:
                 incident = self.incident_store.get(str(linked_incident["incident_id"])) or {}
                 reason = " ".join(
@@ -670,7 +681,7 @@ class GuardianState:
                     f"{incident.get('summary') or 'Review the recorded incident.'}".split()
                 )[:600]
             else:
-                reason = "InnerOS owner mobile callback requested by voice and approved through WhatsApp."
+                reason = "InnerOS owner mobile callback requested by voice; separate owner authorization is required."
         elif unifi_alias:
             target = self.home_assistant.unifi_restart_targets[unifi_alias]
             reason = (
@@ -714,6 +725,7 @@ class GuardianState:
                 str(linked_incident.get("digest")) if linked_incident else None
             ),
             response_locale=response_locale,
+            approval_channel=getattr(self.approval_bridge, "channel", "whatsapp"),
         )
         with self._lock:
             self.pending[token] = item
@@ -754,15 +766,15 @@ class GuardianState:
                 "expires_at": item.expires_at,
             }
             if defer_approval:
-                prepared_result["approval_channel"] = "whatsapp"
+                prepared_result["approval_channel"] = item.approval_channel
                 prepared_result["approval_delivery"] = "pending"
                 deferred_payload = delivery_payload
                 delivery = {"pending": True}
             else:
                 delivery = self.approval_bridge.request(delivery_payload)
-            prepared_result["approval_channel"] = "whatsapp"
+            prepared_result["approval_channel"] = item.approval_channel
             prepared_result["approval_delivery"] = (
-                "pending" if delivery.get("pending") else "sent" if delivery.get("ok") else "failed"
+                "pending" if delivery.get("pending") or delivery.get("queued") else "sent" if delivery.get("ok") else "failed"
             )
             if delivery.get("ok"):
                 item.approval_task_id = str(delivery.get("task_id") or "") or None
@@ -787,9 +799,9 @@ class GuardianState:
                     "expires_at": item.expires_at,
                 }
             )
-            prepared_result["approval_channel"] = "whatsapp"
+            prepared_result["approval_channel"] = item.approval_channel
             prepared_result["approval_delivery"] = (
-                "sent" if delivery.get("ok") else "failed"
+                "pending" if delivery.get("queued") else "sent" if delivery.get("ok") else "failed"
             )
             if delivery.get("ok"):
                 item.approval_task_id = str(delivery.get("task_id") or "") or None
@@ -842,7 +854,9 @@ class GuardianState:
                 item.approval_task_id = task_id
             current = dict(self.live_evidence.get("prepared_action") or {})
             if current.get("action_id") == item.action_id:
-                current["approval_delivery"] = "sent" if task_id else "failed"
+                current["approval_delivery"] = (
+                    "pending" if task_id and delivery.get("queued") else "sent" if task_id else "failed"
+                )
                 if task_id:
                     current["approval_task_id"] = task_id
                 else:
@@ -921,6 +935,8 @@ class GuardianState:
                         else OWNER_TARGET_ALIAS
                     ),
                     approval_id=item.approval_task_id or "",
+                    **({"approval_channel": item.approval_channel}
+                       if item.approval_channel != "whatsapp" else {}),
                 )
                 adapter_verified = bool(after.get("verified"))
             elif item.action.startswith("unifi_restart:"):
@@ -1026,6 +1042,9 @@ class GuardianState:
                 outcomes.append({"action_id": item.action_id, "status": "expired"})
                 continue
             decision = self.approval_bridge.status(item.approval_task_id)
+            if item.approval_channel != getattr(self.approval_bridge, "channel", "whatsapp"):
+                # Never reinterpret an old approval after switching transports.
+                continue
             if not decision.get("ok"):
                 continue
             if decision.get("rejected"):

@@ -307,6 +307,15 @@ def main() -> None:
             "close": _close,
             "probe": _probe,
         }
+        if command.startswith("mobile_"):
+            from . import mobile_approval
+            handlers.update({
+                "mobile_request": mobile_approval.request,
+                "mobile_status": mobile_approval.status,
+                "mobile_complete": mobile_approval.finish,
+                "mobile_close": mobile_approval.finish,
+                "mobile_consume": mobile_approval.consume,
+            })
         if command not in handlers:
             raise ValueError("unsupported command")
         result = handlers[command](payload)

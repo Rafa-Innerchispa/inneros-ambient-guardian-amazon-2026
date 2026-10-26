@@ -31,6 +31,7 @@ class VoiceOpsClient(Protocol):
         requested_by: str,
         target_alias: str = OWNER_TARGET_ALIAS,
         approval_id: str = "",
+        approval_channel: str = "whatsapp",
     ) -> Mapping[str, Any]: ...
 
     def receipt(self, correlation_id: str) -> Mapping[str, Any]: ...
@@ -89,6 +90,7 @@ class LocalVoiceOpsRuntimeClient:
         requested_by: str,
         target_alias: str = OWNER_TARGET_ALIAS,
         approval_id: str = "",
+        approval_channel: str = "whatsapp",
     ) -> Mapping[str, Any]:
         if target_alias not in {OWNER_TARGET_ALIAS, OWNER_MOBILE_TARGET_ALIAS}:
             raise VoiceOpsConfigurationError("VoiceOps target is outside the owner allowlist")
@@ -100,7 +102,7 @@ class LocalVoiceOpsRuntimeClient:
                 "reason": " ".join(reason.split())[:600],
                 "requested_by": requested_by[:80],
                 "target_alias": target_alias,
-                "approval_channel": "whatsapp" if approval_id else "",
+                "approval_channel": approval_channel if approval_id else "",
                 "approval_id": approval_id[:120],
             },
         )
@@ -218,6 +220,7 @@ class VoiceOpsBridge:
         reason: str,
         target_alias: str = OWNER_TARGET_ALIAS,
         approval_id: str = "",
+        approval_channel: str = "whatsapp",
     ) -> dict[str, Any]:
         if self.mode == "simulator":
             simulated = {
@@ -247,6 +250,8 @@ class VoiceOpsBridge:
                     requested_by="ambient-guardian",
                     target_alias=target_alias,
                     approval_id=approval_id,
+                    **({"approval_channel": approval_channel}
+                       if approval_channel != "whatsapp" else {}),
                 )
             )
             readback = dict(self.client.receipt(correlation_id))
