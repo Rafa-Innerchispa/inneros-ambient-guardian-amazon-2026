@@ -11,6 +11,8 @@ from typing import Any
 class WhatsAppApprovalBridge:
     """Small adapter to InnerOS's existing owner-authenticated WhatsApp lane."""
 
+    channel = "whatsapp"
+
     def __init__(self) -> None:
         self.enabled = os.getenv(
             "AMBIENT_GUARDIAN_WHATSAPP_APPROVAL_ENABLED", "0"
