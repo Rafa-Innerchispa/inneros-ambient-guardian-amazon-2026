@@ -663,12 +663,18 @@ class GuardianState:
             raise ValueError("Action is outside the public demo allowlist")
         linked_incident = self.incident_store.latest_receipt()
         if action == "voiceops_owner_callback":
-            if linked_incident is None:
+            companion_internal = getattr(self.approval_bridge, "channel", "whatsapp") == "home_assistant_companion"
+            if companion_internal:
+                linked_incident = None
+            if linked_incident is None and not companion_internal:
                 raise ValueError("An Incident Receipt is required before preparing a PBX callback")
-            incident = self.incident_store.get(str(linked_incident["incident_id"])) or {}
-            reason = " ".join(
-                f"Incident report {linked_incident['incident_id']}: {incident.get('summary') or 'Review the recorded incident.'}".split()
-            )[:600]
+            if companion_internal:
+                reason = "InnerOS owner internal callback requested; separate owner authorization is required."
+            else:
+                incident = self.incident_store.get(str(linked_incident["incident_id"])) or {}
+                reason = " ".join(
+                    f"Incident report {linked_incident['incident_id']}: {incident.get('summary') or 'Review the recorded incident.'}".split()
+                )[:600]
         elif action == "voiceops_owner_mobile_callback":
             if getattr(self.approval_bridge, "channel", "whatsapp") == "home_assistant_companion":
                 # A standalone mobile callback must not narrate an old Ring
