@@ -357,3 +357,46 @@ def test_slow_provider_does_not_block_mobile_preparation_or_bypass_approval(tmp_
     approval.approved = True
     assert state.process_whatsapp_approvals()[0]["status"] == "completed"
     assert fake.calls[0]["target_alias"] == OWNER_MOBILE_TARGET_ALIAS
+
+
+def test_device_approval_can_finish_while_authorized_phone_call_is_open(tmp_path):
+    entered,release=threading.Event(),threading.Event()
+    class SlowCall(FakeVoiceOpsClient):
+        def request_owner_callback(self,**kwargs):
+            entered.set()
+            assert release.wait(3)
+            return super().request_owner_callback(**kwargs)
+    approval=FakeWhatsAppApproval()
+    state=GuardianState(incident_db_path=str(tmp_path/'incidents.sqlite3'),
+        action_db_path=str(tmp_path/'actions.sqlite3'),approval_bridge=approval)
+    client=SlowCall()
+    state.voiceops=VoiceOpsBridge(mode='real',client=client)
+    state.home_assistant.unifi_restart_enabled=True
+    state.home_assistant.unifi_restart_targets={'living':{'label':'Living','button':'button.living_restart'}}
+    state.home_assistant.alexa_notify_allowlist=set()
+    restarts=[]
+    state.home_assistant.restart_unifi_device=lambda alias: restarts.append(alias) or {'executed':True,'verified':True}
+    state.prepare_action('voiceops_owner_mobile_callback')
+    state.prepare_action('unifi_restart:living')
+    approval.approved=True
+    errors=[]
+    def run_call():
+        try:
+            state.process_whatsapp_approvals(action_family='calls')
+        except Exception as exc:
+            errors.append(exc)
+    thread=threading.Thread(target=run_call)
+    thread.start()
+    try:
+        assert entered.wait(1)
+        result=state.process_whatsapp_approvals(action_family='devices')
+        assert result[0]['status']=='completed'
+        assert restarts==['living']
+        assert thread.is_alive()
+    finally:
+        release.set()
+        thread.join(2)
+    assert not errors and not thread.is_alive()
+    assert len(client.calls)==1
+    assert state.process_whatsapp_approvals(action_family='calls')==[]
+    assert state.process_whatsapp_approvals(action_family='devices')==[]

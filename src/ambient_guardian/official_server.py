@@ -876,14 +876,14 @@ def build_app():
 app = build_app()
 
 
-def _approval_worker() -> None:
+def _approval_worker(action_family: str | None = None) -> None:
     interval = max(
         1.0,
         min(float(os.getenv("AMBIENT_GUARDIAN_APPROVAL_POLL_SECONDS", "3")), 30.0),
     )
     while True:
         try:
-            STATE.process_whatsapp_approvals()
+            STATE.process_whatsapp_approvals(action_family=action_family)
         except Exception:
             # Fail closed. The durable record remains pending or failed and is
             # inspected again; this worker never fabricates an approval.
@@ -894,13 +894,15 @@ def _approval_worker() -> None:
 def _start_approval_worker() -> threading.Thread | None:
     if not STATE.approval_bridge.enabled:
         return None
-    worker = threading.Thread(
-        target=_approval_worker,
-        name="ambient-guardian-whatsapp-approval",
-        daemon=True,
-    )
-    worker.start()
-    return worker
+    workers = []
+    # Disjoint action families retain the same durable compare-and-swap gates.
+    # A three-minute phone conversation must not block an authorized device job.
+    for family in ('calls','devices'):
+        worker = threading.Thread(target=_approval_worker,args=(family,),
+            name=f'ambient-guardian-approval-{family}',daemon=True)
+        worker.start()
+        workers.append(worker)
+    return workers[0]
 
 
 def main() -> None:
