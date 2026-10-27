@@ -1025,12 +1025,17 @@ class GuardianState:
         )
         return evidence
 
-    def process_whatsapp_approvals(self) -> list[dict[str, Any]]:
+    def process_whatsapp_approvals(self, *, action_family: str | None = None) -> list[dict[str, Any]]:
         """Consume authenticated WhatsApp decisions without exposing an approval API."""
+        if action_family not in {None, 'calls', 'devices'}:
+            raise ValueError('Unknown approval execution family')
         outcomes: list[dict[str, Any]] = []
         with self._lock:
             pending_items = list(self.pending.values())
         for item in pending_items:
+            is_call = item.action in {'voiceops_owner_callback','voiceops_owner_mobile_callback'}
+            if (action_family == 'calls' and not is_call) or (action_family == 'devices' and is_call):
+                continue
             with self._lock:
                 if not any(
                     current.action_id == item.action_id
