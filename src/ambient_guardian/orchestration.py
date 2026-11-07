@@ -1804,6 +1804,23 @@ def _unifi_status_response(
                 f"{_format_local_time(started_at.isoformat())}. "
                 f"{'Ahora está conectado' if connected else 'Todavía se está reconectando'}"
             )
+    radio_reader = getattr(state.home_assistant, "unifi_radio_status", None)
+    if scope == "home" and radio_reader:
+        from .unifi_radio import spoken_radio_report
+        radio = radio_reader()
+        snapshot["radio_diagnostics"] = radio
+        if radio.get("reachable"):
+            answer = spoken_radio_report(radio, english=english)
+            if radio.get("stale_or_offline_aps") or not any(r.get("utilization_percent") is not None for r in radio.get("radios", [])) or any(
+                r.get("utilization_percent") is not None and r["utilization_percent"] >= 80
+                for r in radio.get("radios", [])
+            ):
+                problem.append({"kind": "radio_attention"})
+        elif radio.get("configured"):
+            answer += (
+                ". The controller radio reading is unavailable; these status signals do not establish that WiFi is uncongested."
+                if english else ". La lectura de radio del controlador no está disponible; estas señales de estado no permiten afirmar que el WiFi esté libre de congestión."
+            )
     return {"answer": answer, "status": "attention_required" if problem else "all_clear", "reasoning_mode": "deterministic-unifi-status"}, snapshot
 
 
