@@ -77,3 +77,22 @@ def test_energy_query_limits_recorder_to_energy(monkeypatch):
     monkeypatch.setattr(state.home_assistant,"history_timeline",history)
     simulated_alexa_turn("dame información de energía",state,None)
     assert calls and calls[0]["categories"]=={"energy"}
+
+
+def test_general_energy_slot_uses_meter_reading_without_model_context(monkeypatch):
+    from ambient_guardian.alexa_skill_gateway import _guardian_query
+
+    query = _guardian_query({
+        "locale": "en-US", "intent": {
+            "name": "SystemStatusQueryIntent",
+            "slots": {"query": {"value": "my energy"}},
+        },
+    })
+    state = GuardianState()
+    monkeypatch.setattr(state, "guardian_status", lambda: pytest.fail("Energy must read the meter, not generic model context"))
+    monkeypatch.setattr(state.home_assistant, "history_timeline", lambda *a, **kw: {
+        "events": [],
+        "current_states": {"binary_sensor.inneros_pi01_solar_grid_present": "on"},
+    })
+    result = simulated_alexa_turn(query, state, None)
+    assert result["response"]["reasoning_mode"] == "deterministic-energy-resilience"

@@ -302,6 +302,9 @@ def test_spanish_fallback_allows_one_retry_inside_same_session():
         ("es-US", "wifi", "revisa el estado en vivo de wifi"),
         ("es-US", "los Raspberry Pi", "revisa el estado en vivo de los Raspberry Pi"),
         ("en-US", "the phone system", "check the live status of the phone system"),
+        ("en-US", "my energy", "show me the energy resilience status and energy saving plan"),
+        ("en-US", "the power", "show me the energy resilience status and energy saving plan"),
+        ("es-US", "mi energía", "dame el estado de resiliencia energética y el plan de ahorro"),
     ],
 )
 def test_general_status_intent_preserves_the_requested_subsystem(

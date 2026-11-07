@@ -532,7 +532,8 @@ def _guardian_query(
             )
         if re.fullmatch(
             r"(?:the |my |el |la |mi )?(?:solar system|solar power|solar panels?|"
-            r"energy system|sistema solar|panel(?:es)? solares?|sistema de energ[ií]a)",
+            r"energy system|energy|power|electricity|energ[ií]a|electricidad|"
+            r"sistema solar|panel(?:es)? solares?|sistema de energ[ií]a)",
             normalized_query,
         ):
             return (
