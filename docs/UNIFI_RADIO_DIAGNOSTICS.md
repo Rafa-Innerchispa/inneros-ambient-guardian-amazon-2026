@@ -54,6 +54,29 @@ Recommendations are recorded as `REVIEW_REQUIRED`, `executed=false`. Alexa reads
 the recent trend alongside its on-demand snapshot. A Home Assistant dashboard
 can display these sensors, a history graph and the recommendation attributes.
 
+The deployed owner dashboard is `/atlas-network/overview` in Home Assistant.
+Its configuration is preserved in `deploy/atlas-unifi-dashboard.json`: current
+readings with icons, a 24-hour history graph, sustained findings, passive channel
+observations and a logbook. It uses the existing HA login; it is not a public,
+unauthenticated infrastructure dashboard.
+
+On 2026-11-07 the deployed observer recorded six real one-minute observations,
+confirmed a sustained high-occupancy finding and received HTTP acceptance from
+the owner HA mobile notification service. Subsequent observations did not resend
+the alert within the cooldown. This verifies recording and server-side delivery,
+not Android display/acknowledgement.
+
+## Invocation versus conversation
+
+All four published development models use `atlas control`. Amazon's signed v2
+endpoint test returned the new RF report, and an English text command through
+the existing HA integration was recorded in the physical Echo's activity history
+with four APs and current channel readings. An owner's Spanish compound opening
+was instead recorded as a general Alexa conversation, returning the old status
+list without reaching this gateway. A stale-looking response outside the skill
+must not be treated as a successful telemetry query. Physical owner voice
+confirmation with an explicit skill invocation remains a separate check.
+
 ## Automatic repairs boundary
 
 This release implements automatic observation, history, diagnosis and warning.

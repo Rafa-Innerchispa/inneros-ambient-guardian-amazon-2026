@@ -29,6 +29,13 @@ simulation opened Atlas, read live home Wi-Fi and read the server inventory. The
 owner subsequently confirmed the physical Echo opened the skill. Its failure on
 other spoken phrases remains under investigation; no unproven root cause is claimed.
 
+The gateway's systemd configuration was also missing its bridge credential-file
+reference while the backend loaded it. Restoring the existing versioned
+`deploy/ambient-guardian-skill-bridge.conf` for **both** services preserves the
+authenticated speaker/language context. Do not bypass bridge authentication to
+repair language handling. Only the protected file reference belongs in systemd;
+never commit the credential itself.
+
 Follow-up read audit: unrelated alarm/context reads ran before every query, HA
 inventory entities were read sequentially, and the energy request retrieved all
 categories of history. The natural plural phrase `cómo están mis servidores`
@@ -125,6 +132,11 @@ stock-Alexa failover. The installation can erase local device data and needs
 physical USB access. Home Assistant's generic `Echo Dot` model labels do not prove
 generation compatibility. No firmware installation was attempted. Identify the
 exact hardware and obtain explicit installation approval before considering it.
+
+Amazon's registered-device inventory was subsequently checked: two Echo Dot 3rd
+Gen devices, two Echo Dot 4th Gen devices and one Echo Flex. None of those five
+matches LibreEcho's currently supported 2nd Gen hardware. No second-generation
+device has been verified in that registered inventory; preserve stock firmware.
 
 ## Backup and rollback
 

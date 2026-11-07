@@ -1,0 +1,69 @@
+{
+  "title": "Atlas · UniFi",
+  "views": [
+    {
+      "title": "Diagnóstico",
+      "path": "overview",
+      "icon": "mdi:wifi",
+      "cards": [
+        {
+          "type": "markdown",
+          "content": "# 📡 Atlas · UniFi\nLecturas reales del controlador local, cada minuto. Historial y escucha pasiva del entorno. Las recomendaciones requieren revisión; no se cambian canales, potencia ni firmware automáticamente."
+        },
+        {
+          "type": "entities",
+          "title": "Última lectura",
+          "entities": [
+            "sensor.atlas_wifi_diagnosis",
+            "sensor.atlas_wifi_utilization_2_4",
+            "sensor.atlas_wifi_utilization_5",
+            "sensor.atlas_wifi_utilization_6",
+            {
+              "type": "attribute",
+              "entity": "sensor.atlas_wifi_diagnosis",
+              "attribute": "observed_at",
+              "name": "Hora de medición"
+            },
+            {
+              "type": "attribute",
+              "entity": "sensor.atlas_wifi_diagnosis",
+              "attribute": "sample_count_10_minutes",
+              "name": "Muestras recientes"
+            }
+          ]
+        },
+        {
+          "type": "history-graph",
+          "title": "Ocupación máxima por banda · 24 horas",
+          "hours_to_show": 24,
+          "refresh_interval": 60,
+          "entities": [
+            "sensor.atlas_wifi_utilization_2_4",
+            "sensor.atlas_wifi_utilization_5",
+            "sensor.atlas_wifi_utilization_6"
+          ]
+        },
+        {
+          "type": "markdown",
+          "title": "Hallazgos sostenidos",
+          "content": "{% set findings = state_attr('sensor.atlas_wifi_diagnosis','sustained_findings') or [] %}\n{% for f in findings %}\n**{{ f.ap }} · {{ f.band_ghz }} GHz · canal {{ f.channel | int }}**\nOcupación media: **{{ f.mean_utilization_percent }} %** en {{ f.samples }} lecturas. Conviene revisar solapamiento y cobertura antes de elegir un cambio.\n{% else %}\nNo hay un hallazgo sostenido confirmado en la ventana reciente. Se necesitan seis muestras; una lectura baja o alta aislada no demuestra que la red sea óptima.\n{% endfor %}"
+        },
+        {
+          "type": "markdown",
+          "title": "Observaciones del entorno",
+          "content": "{% set n = state_attr('sensor.atlas_wifi_diagnosis','neighbour_observations') or {} %}\nSeñales vecinas recientes: **{{ n.get('recent_neighbour_bssids', 'no disponible') }}**.\n{% for channel, count in n.get('channel_counts', {}).items() %}\n- Canal {{ channel }}: {{ count }} señales observadas.\n{% endfor %}\n\nSon observaciones pasivas de los últimos 15 minutos; un mismo equipo puede emitir varias señales. No se ejecutó un barrido activo que interrumpa el Wi-Fi."
+        },
+        {
+          "type": "logbook",
+          "title": "Registro Atlas",
+          "hours_to_show": 24,
+          "entities": [
+            "sensor.atlas_wifi_diagnosis",
+            "sensor.atlas_wifi_utilization_2_4",
+            "sensor.atlas_wifi_utilization_5"
+          ]
+        }
+      ]
+    }
+  ]
+}
