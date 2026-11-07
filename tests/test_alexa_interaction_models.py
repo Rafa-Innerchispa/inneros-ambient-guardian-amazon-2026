@@ -26,6 +26,8 @@ def test_all_locales_have_general_status_and_live_infrastructure_intents():
         "ServerStatusIntent",
         "VoiceOpsStatusIntent",
         "PBXCallbackIntent",
+        "SwitchToSpanishIntent",
+        "SwitchToEnglishIntent",
     }
     for path in MODEL_PATHS:
         model = _model(path)

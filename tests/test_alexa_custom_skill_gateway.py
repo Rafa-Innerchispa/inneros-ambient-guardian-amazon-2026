@@ -16,6 +16,20 @@ from ambient_guardian import alexa_skill_gateway as gateway
 SKILL_ID = "amzn1.ask.skill.test-ambient-guardian"
 
 
+@pytest.mark.parametrize("name,expected", [("SwitchToSpanishIntent", "es-US"), ("SwitchToEnglishIntent", "en-US")])
+def test_explicit_language_switch_never_calls_backend(monkeypatch, name, expected):
+    monkeypatch.setattr(gateway, "_backend_turn", lambda *a: pytest.fail("Language selection cannot execute actions"))
+    result = gateway._dispatch(request_payload(intent_request(query=None, intent_name=name)))
+    assert result["sessionAttributes"]["response_locale"] == expected
+    assert result["response"]["shouldEndSession"] is False
+
+
+def test_help_retains_explicit_session_spanish():
+    result = gateway._dispatch(request_payload(intent_request(query=None, intent_name="AMAZON.HelpIntent", locale="en-US"), session_attributes={"response_locale":"es-US"}))
+    assert "Puedes preguntarme" in result["response"]["outputSpeech"]["text"]
+    assert result["sessionAttributes"]["response_locale"] == "es-US"
+
+
 def request_payload(request, *, person=None, access_token=None, session_attributes=None):
     system = {
         "application": {"applicationId": SKILL_ID},

@@ -1,0 +1,19 @@
+[Unit]
+Description=Atlas local-only Home Assistant voice bridge (Whisper + Piper)
+After=network.target
+
+[Service]
+Type=simple
+ExecStart=/home/rlopez/data/atlas-offline-voice/venv/bin/python /home/rlopez/data/atlas-offline-voice/offline_voice.py
+Restart=on-failure
+RestartSec=5
+NoNewPrivileges=yes
+PrivateTmp=yes
+ProtectSystem=strict
+ProtectHome=read-only
+MemoryMax=1G
+CPUQuota=100%
+UMask=0077
+
+[Install]
+WantedBy=default.target
