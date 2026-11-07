@@ -20,6 +20,7 @@ dependencies = [
 
 [project.optional-dependencies]
 dev = ["pytest>=8.0"]
+offline-voice = ["wyoming>=1.7,<2"]
 
 [project.scripts]
 ambient-guardian = "ambient_guardian.official_server:main"

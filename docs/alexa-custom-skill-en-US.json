@@ -504,6 +504,28 @@
         {
           "name": "AMAZON.NavigateHomeIntent",
           "samples": []
+        },
+        {
+          "name": "SwitchToSpanishIntent",
+          "slots": [],
+          "samples": [
+            "responde en español",
+            "habla en español",
+            "cambia a español",
+            "switch to Spanish",
+            "speak Spanish"
+          ]
+        },
+        {
+          "name": "SwitchToEnglishIntent",
+          "slots": [],
+          "samples": [
+            "responde en inglés",
+            "habla en inglés",
+            "cambia a inglés",
+            "switch to English",
+            "speak English"
+          ]
         }
       ],
       "types": [

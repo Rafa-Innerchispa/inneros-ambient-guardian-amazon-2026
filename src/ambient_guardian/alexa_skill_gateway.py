@@ -775,15 +775,15 @@ def _dispatch(payload: dict[str, Any]) -> dict[str, Any]:
                 "Atlas Control está en línea. Puedo informar energía e historial de apagones, "
                 "UniFi y Bellini, cámaras, servidores, llamadas Grandstream, luces DMX y el "
                 "demo Ring claramente simulado. Las acciones sensibles esperan tu aprobación "
-                "por WhatsApp. Puedes preguntar: qué hay de mi sistema."
+                "en tu celular mediante Home Assistant. Puedes preguntar: cómo está el WiFi."
             )
             reprompt = "¿Qué quieres revisar?"
         else:
             speech = (
                 "Atlas Control is online. I can report energy and outage history, UniFi and "
                 "Bellini, cameras, servers, Grandstream calls, DMX lighting, and the clearly "
-                "simulated Ring demo. Sensitive actions wait for your WhatsApp approval. "
-                "You can ask: what about my system."
+                "simulated Ring demo. Sensitive actions wait for your approval in Home Assistant on your phone. "
+                "You can ask: how is my WiFi."
             )
             reprompt = "What would you like to check?"
         return _plain_response(
@@ -802,17 +802,27 @@ def _dispatch(payload: dict[str, Any]) -> dict[str, Any]:
         )
 
     intent_name = str(((request_payload.get("intent") or {}).get("name") or ""))
+    if intent_name in {"SwitchToSpanishIntent", "SwitchToEnglishIntent"}:
+        spanish = intent_name == "SwitchToSpanishIntent"
+        locale = "es-US" if spanish else "en-US"
+        return _plain_response(
+            "De acuerdo, responderé en español. Puedes preguntar: cómo está el WiFi o cómo están mis servidores."
+            if spanish else
+            "Okay, I will answer in English. You can ask: how is my WiFi or how are my servers.",
+            reprompt="¿Qué quieres consultar?" if spanish else "What would you like to check?",
+            session_attributes={"fallback_count": 0, "response_locale": locale},
+        )
     if intent_name == "ResumeConversationIntent":
-        if _request_locale(request_payload).lower().startswith("es"):
+        if _response_locale(payload, request_payload).lower().startswith("es"):
             return _plain_response(
                 "Sigo aquí. Puedes continuar con energía, seguridad, red, DMX o VoiceOps.",
                 reprompt="¿Qué quieres revisar?",
-                session_attributes={"fallback_count": 0},
+                session_attributes={"fallback_count": 0, "response_locale": _response_locale(payload, request_payload)},
             )
         return _plain_response(
             "I am still here. You can continue with energy, security, network, DMX, or VoiceOps.",
             reprompt="What would you like to check?",
-            session_attributes={"fallback_count": 0},
+            session_attributes={"fallback_count": 0, "response_locale": _response_locale(payload, request_payload)},
         )
     if intent_name in {
         "AskGuardianIntent",
@@ -894,21 +904,21 @@ def _dispatch(payload: dict[str, Any]) -> dict[str, Any]:
             },
         )
     if intent_name == "AMAZON.HelpIntent":
-        if _request_locale(request_payload).lower().startswith("es"):
+        if _response_locale(payload, request_payload).lower().startswith("es"):
             return _plain_response(
                 "Puedes preguntarme qué puede hacer InnerOS, qué pasó en la casa, "
                 "cómo está VoiceOps o pedirme que prepare una llamada por la central. "
                 "También puedo preparar un borrador de tarea para Antigravity. "
                 "Las acciones sensibles conservan su aprobación independiente.",
                 reprompt="¿Qué quieres consultar?",
-                session_attributes={"fallback_count": 0},
+                session_attributes={"fallback_count": 0, "response_locale": _response_locale(payload, request_payload)},
             )
         return _plain_response(
             "You can ask whether the home is okay, what happened at the front door, "
             "or ask InnerOS to prepare an action. Physical actions still "
             "require separate human approval.",
             reprompt="What would you like to ask?",
-            session_attributes={"fallback_count": 0},
+            session_attributes={"fallback_count": 0, "response_locale": _response_locale(payload, request_payload)},
         )
     if intent_name in {
         "AMAZON.StopIntent",
@@ -917,7 +927,7 @@ def _dispatch(payload: dict[str, Any]) -> dict[str, Any]:
     }:
         speech = (
             "InnerOS queda en espera."
-            if _request_locale(request_payload).lower().startswith("es")
+            if _response_locale(payload, request_payload).lower().startswith("es")
             else "InnerOS is standing by."
         )
         return _plain_response(speech, end_session=True)
@@ -927,20 +937,20 @@ def _dispatch(payload: dict[str, Any]) -> dict[str, Any]:
     # same session, then close on a second miss to avoid trapping the user in a loop.
     fallback_count = int(_session_attributes(payload).get("fallback_count") or 0)
     if fallback_count < 1:
-        if _request_locale(request_payload).lower().startswith("es"):
+        if _response_locale(payload, request_payload).lower().startswith("es"):
             return _plain_response(
                 "No entendí esa frase y no realicé ninguna acción. Sigo aquí; prueba con: "
                 "estado del WiFi, estado de los servidores, o di salir.",
                 reprompt="Puedes decir: estado del WiFi.",
-                session_attributes={"fallback_count": 1},
+                session_attributes={"fallback_count": 1, "response_locale": _response_locale(payload, request_payload)},
             )
         return _plain_response(
             "I did not understand that request and took no action. I am still here; "
             "try: status of the WiFi, or say exit.",
             reprompt="You can say: status of the WiFi.",
-            session_attributes={"fallback_count": 1},
+            session_attributes={"fallback_count": 1, "response_locale": _response_locale(payload, request_payload)},
         )
-    if _request_locale(request_payload).lower().startswith("es"):
+    if _response_locale(payload, request_payload).lower().startswith("es"):
         return _plain_response(
             "Todavía no entendí. Cierro esta conversación para evitar un ciclo; "
             "cuando quieras, di: Alexa, pide a Atlas Control el estado de energía.",
