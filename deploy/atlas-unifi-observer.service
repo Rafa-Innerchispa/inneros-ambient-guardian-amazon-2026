@@ -1,0 +1,19 @@
+[Unit]
+Description=Atlas local UniFi radio observer (read only)
+After=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=/home/rlopez/inneros/inneros_core/workspaces/inneros-ambient-guardian-amazon-2026
+Environment=PYTHONPATH=/home/rlopez/inneros/inneros_core/workspaces/inneros-ambient-guardian-amazon-2026/src
+Environment=AMBIENT_GUARDIAN_SHARED_ENV_FILE=/home/rlopez/inneros/inneros_core/platform/.env
+EnvironmentFile=/home/rlopez/.config/ambient-guardian/unifi-radio.env
+ExecStart=/home/rlopez/inneros/inneros_core/workspaces/inneros-ambient-guardian-amazon-2026/.venv/bin/python -m ambient_guardian.unifi_observer
+Restart=on-failure
+RestartSec=10
+MemoryMax=180M
+CPUQuota=10%
+UMask=0077
+
+[Install]
+WantedBy=default.target

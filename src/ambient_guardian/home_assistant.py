@@ -11,6 +11,8 @@ from typing import Any
 
 import httpx
 
+from .unifi_radio import UnifiRadioBridge
+
 
 @dataclass(slots=True)
 class HomeAssistantStatus:
@@ -96,6 +98,7 @@ class HomeAssistantBridge:
         return found
 
     def __init__(self) -> None:
+        self._unifi_radio = UnifiRadioBridge()
         shared = self._selected_shared_env(
             os.getenv("AMBIENT_GUARDIAN_SHARED_ENV_FILE", "")
         )
@@ -412,6 +415,9 @@ class HomeAssistantBridge:
             "entities": self._allowlisted_states(entity_ids) if self.configured else [],
             "targets": targets,
         }
+
+    def unifi_radio_status(self) -> dict[str, Any]:
+        return self._unifi_radio.snapshot()
 
     def raspberry_status(self) -> dict[str, Any]:
         """Return only the explicitly allowlisted Raspberry Pi telemetry."""
