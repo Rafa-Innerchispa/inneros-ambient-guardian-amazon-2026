@@ -14,6 +14,7 @@ from mcp.server import MCPServer
 from mcp.server.transport_security import TransportSecuritySettings
 from starlette.requests import Request
 from starlette.responses import HTMLResponse, JSONResponse, Response
+from starlette.concurrency import run_in_threadpool
 
 from . import aws_strands
 from .core import GuardianReasoner, GuardianState
@@ -468,7 +469,8 @@ async def simulated_alexa(request: Request) -> Response:
     speaker_context = payload.get("speaker_context") if skill_bridge else {}
     if not isinstance(speaker_context, dict):
         speaker_context = {}
-    result = simulated_alexa_turn(
+    result = await run_in_threadpool(
+        simulated_alexa_turn,
         utterance,
         STATE,
         REASONER,
@@ -909,6 +911,7 @@ def main() -> None:
     import uvicorn
 
     _start_approval_worker()
+    STATE.infrastructure.prefetch()
     uvicorn.run(
         app,
         host=os.getenv("HOST", "0.0.0.0"),
