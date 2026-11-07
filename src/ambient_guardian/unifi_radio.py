@@ -1,6 +1,6 @@
 """On-demand, read-only radio observations using HA's existing local login.
 
-Only authentication and two fixed statistics routes are reachable. No controller
+Only authentication and three fixed statistics routes are reachable. No controller
 commands, client identities, addresses, passwords or cookies enter the result.
 """
 from __future__ import annotations
