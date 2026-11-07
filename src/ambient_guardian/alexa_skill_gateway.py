@@ -20,6 +20,7 @@ from cryptography.x509.verification import PolicyBuilder, Store
 from starlette.applications import Starlette
 from starlette.requests import Request
 from starlette.responses import JSONResponse, Response
+from starlette.concurrency import run_in_threadpool
 from starlette.routing import Route
 
 DEFAULT_BACKEND = "http://127.0.0.1:8794/api/alexa"
@@ -967,8 +968,8 @@ async def skill_endpoint(request: Request) -> Response:
     body = await request.body()
     headers = {str(k): str(v) for k, v in request.headers.items()}
     try:
-        payload = _verify_request(headers, body)
-        response = _dispatch(payload)
+        payload = await run_in_threadpool(_verify_request, headers, body)
+        response = await run_in_threadpool(_dispatch, payload)
     except Exception as exc:
         _record_gateway_error(exc)
         return JSONResponse({"detail": "invalid Alexa request"}, status_code=400)

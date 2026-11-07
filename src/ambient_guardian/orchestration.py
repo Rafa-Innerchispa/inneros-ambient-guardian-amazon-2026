@@ -151,7 +151,7 @@ _SERVER_STATUS_QUERY = re.compile(
     r"\b(?:servers?|servidores?|fleet|flota|intel|amd|node|nodo|raspberry\s*pi(?:s)?|(?:one|uno|1)?\s*point\s*(?:four|five)|"
     r"punto\s+(?:cuatro|cinco)|\.4|\.5)\b[^.]*\b(?:status|health|services?|gpu|inventory|"
     r"estado|salud|servicios?|inventario|tiene|tenemos)\b"
-    r"|\b(?:status|health|what|which|check|estado|salud|qu[eé]|cu[aá]les|revisa)\b[^.]*"
+    r"|\b(?:status|health|what|which|check|how\s+(?:is|are)|c[oó]mo\s+est[aá]n?|estado|salud|qu[eé]|cu[aá]les|revisa)\b[^.]*"
     r"\b(?:servers?|servidores?|fleet|flota|intel|amd|node|nodo|raspberry\s*pi(?:s)?|punto\s+(?:cuatro|cinco)|\.4|\.5)\b"
     r"|\b(?:tell\s+me\s+about|what\s+about|is\s+there\s+(?:any|a)\s+problem\s+(?:in|with)|"
     r"which\s+services\s+are\s+available\s+(?:in|on)|what\s+services\s+are\s+running\s+(?:in|on)|"
@@ -925,7 +925,7 @@ def _energy_resilience_response(state: GuardianState) -> dict[str, Any]:
     """Report a real electrical snapshot and the configured resilience policy."""
     start, end, _ = _history_window("hoy")
     try:
-        timeline = state.home_assistant.history_timeline(start, end, max_events=80)
+        timeline = state.home_assistant.history_timeline(start, end, max_events=80, categories={"energy"})
     except Exception as exc:
         return {
             "response": {
@@ -1967,6 +1967,11 @@ def _server_status_response(
     elif re.search(r"(?:\.5|point\s+five|punto\s+cinco|amd)", lower):
         nodes = [node for node in nodes if "amd" in (str(node).lower()) or ".5" in (str(node).lower())]
     if not snapshot.get("reachable") or not nodes:
+        if snapshot.get("refresh_in_progress"):
+            return {"answer": (
+                "I am refreshing the server inventory. Please ask again in a few seconds; I do not have a verified reading yet."
+                if english else "Estoy actualizando el inventario de servidores. Pregunta de nuevo en unos segundos; todavía no tengo una lectura verificada."
+            ), "status": "attention_required", "reasoning_mode": "deterministic-server-status"}, snapshot
         answer = (
             "InnerOS cannot reach the read-only server inventory right now. I will not invent a system status."
             if english
@@ -1995,6 +2000,12 @@ def _server_status_response(
             detail += f", {summary}"
         details.append(detail)
     prefix = "InnerOS read the live server inventory. " if english else "InnerOS leyó el inventario en vivo de servidores. "
+    if snapshot.get("cached"):
+        age = int(float(snapshot.get("age_seconds") or 0))
+        prefix = (
+            f"The last verified server reading is {age} seconds old. "
+            if english else f"La última lectura verificada de servidores es de hace {age} segundos. "
+        )
     return {"answer": prefix + "; ".join(details), "status": "all_clear" if all(node.get("ok") for node in nodes) else "attention_required", "reasoning_mode": "deterministic-server-status"}, snapshot
 
 
@@ -2146,9 +2157,6 @@ def simulated_alexa_turn(
     *,
     speaker_context: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
-    status = state.guardian_status()
-    events = state.recent_events(8)
-
     normalized_utterance = " ".join(utterance.strip().split())
 
     antigravity_draft = _antigravity_task_draft(normalized_utterance)
@@ -2516,6 +2524,7 @@ def simulated_alexa_turn(
             }
 
     if _ALARM_STATUS_QUERY.search(normalized_utterance):
+        status = state.guardian_status()
         return {
             "utterance": utterance,
             "response": _alarm_status_response(status),
@@ -2742,6 +2751,8 @@ def simulated_alexa_turn(
                 "evidence_count": len(state.evidence_snapshot()),
             }
 
+    status = state.guardian_status()
+    events = state.recent_events(8)
     if aws_strands.is_enabled():
         # Strands is the single model-backed inference path in this mode.
         # Start from a zero-model fallback so we never spend one Qwen call only

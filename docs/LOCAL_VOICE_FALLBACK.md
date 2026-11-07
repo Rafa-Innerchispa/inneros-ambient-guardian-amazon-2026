@@ -29,6 +29,21 @@ simulation opened Atlas, read live home Wi-Fi and read the server inventory. The
 owner subsequently confirmed the physical Echo opened the skill. Its failure on
 other spoken phrases remains under investigation; no unproven root cause is claimed.
 
+Follow-up read audit: unrelated alarm/context reads ran before every query, HA
+inventory entities were read sequentially, and the energy request retrieved all
+categories of history. The natural plural phrase `cómo están mis servidores`
+also missed the server route. The correction removes those unrelated waits,
+parallelizes only allowlisted reads and requests only energy history for energy.
+Server inventory refresh has a three-second wait budget and a single background
+fetch. Cached readings disclose their age and expire after 90 seconds. HTTP
+handlers offload blocking reads so one slow source does not freeze other requests.
+
+An isolated read-only instance with production inventory configuration returned
+real Wi-Fi in 0.47 s, servers in 1.23 s, energy in 1.04 s, cameras in 0.33 s and
+Grandstream readiness in 4.33 s. These are measured samples, not latency guarantees.
+No call or physical operation was executed. Physical Echo follow-up confirmation
+is still required after deployment.
+
 An Echo may send en-US for a Spanish invocation. LaunchRequest omits the raw
 spoken invocation, so the skill cannot infer that opening phrase's language.
 After opening, use **responde en español** or **switch to English**. The explicit
@@ -98,6 +113,19 @@ Assist is manually activated; an always-listening satellite is separate hardware
 - This fallback depends on Intel, local Wi-Fi and power. Cross-server high
   availability remains the separate infrastructure work owned by Antigravity.
 
+## Reusing Echo hardware
+
+Providing a fake WAN connection or changing DNS does not replace Amazon's voice
+processing and authenticated cloud endpoints. Amazon documents limited Local
+Voice Control on selected devices, not execution of a Custom Skill/local LLM.
+
+The independent LibreEcho project currently supports Echo 2nd Gen (`RADAR`) and
+Echo Dot 2nd Gen (`BISCUIT`). It replaces Amazon's firmware; it is not an automatic
+stock-Alexa failover. The installation can erase local device data and needs
+physical USB access. Home Assistant's generic `Echo Dot` model labels do not prove
+generation compatibility. No firmware installation was attempted. Identify the
+exact hardware and obtain explicit installation approval before considering it.
+
 ## Backup and rollback
 
 Before adding Wyoming/pipelines, copies of `assist_pipeline.pipelines` and
@@ -115,3 +143,5 @@ References:
 - https://developer.amazon.com/en-US/docs/alexa/build/build-your-skill-overview.html
 - https://www.home-assistant.io/voice_control/voice_remote_local_assistant
 - https://www.home-assistant.io/integrations/wyoming/
+- https://digprjsurvey.amazon.com/csad/help/node/201602230
+- https://github.com/aslater3/LibreEcho

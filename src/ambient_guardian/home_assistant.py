@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import os
 import time
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
@@ -340,11 +341,23 @@ class HomeAssistantBridge:
         }
 
     def _allowlisted_states(self, entity_ids: set[str]) -> list[dict[str, Any]]:
-        states: list[dict[str, Any]] = []
-        for entity_id in sorted(entity_ids)[:32]:
+        selected = sorted(entity_ids)[:32]
+        if not selected:
+            return []
+
+        def read(entity_id: str) -> dict[str, Any] | None:
             try:
-                state = self.get_entity_state(entity_id)
+                return self.get_entity_state(entity_id)
             except (httpx.HTTPError, RuntimeError, ValueError):
+                return None
+
+        # Individual allowlisted reads only; no whole-house data fetch or stale
+        # control-state cache. Concurrency and output size remain bounded.
+        with ThreadPoolExecutor(max_workers=min(16, len(selected))) as pool:
+            readings = list(pool.map(read, selected))
+        states: list[dict[str, Any]] = []
+        for entity_id, state in zip(selected, readings, strict=True):
+            if state is None:
                 states.append(
                     {"entity_id": entity_id, "state": "unavailable", "label": entity_id}
                 )
