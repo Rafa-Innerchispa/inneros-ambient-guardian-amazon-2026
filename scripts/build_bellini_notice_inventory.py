@@ -13,7 +13,12 @@ output = Path(sys.argv[2])
 tree = ast.parse((platform / 'inneros_core_runtime/bellini_network_guardian.py').read_text())
 targets = next(ast.literal_eval(node.value) for node in tree.body if isinstance(node, ast.Assign)
                and any(isinstance(t, ast.Name) and t.id == 'TARGETS' for t in node.targets))
-maps = json.loads((platform / 'outputs/bellini_switch_port_map.json').read_text())
+candidates = [platform / 'outputs/bellini_switch_port_map.json',
+              platform.parent / 'var/deploy-clones/innerops-agentic-platform-main/outputs/bellini_switch_port_map.json']
+map_file = next((p for p in candidates if p.is_file()), None)
+if map_file is None:
+    raise RuntimeError('Existing Bellini switch-port inventory was not found; do not invent topology')
+maps = json.loads(map_file.read_text())
 metadata = maps.get('metadata', {})
 parents = {}
 for switch in maps.get('switches', []):
