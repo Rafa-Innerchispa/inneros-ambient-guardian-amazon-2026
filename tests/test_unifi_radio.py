@@ -1,5 +1,6 @@
 import json
 import socket
+from datetime import datetime,timezone
 from types import SimpleNamespace
 
 import httpx
@@ -18,7 +19,7 @@ def device(**overrides):
 
 
 def snapshot(now=NOW):
-    return {"configured":True,"reachable":True,"observed_at":"2026-11-07T17:47:20+00:00", "age_seconds":0,
+    return {"configured":True,"reachable":True,"observed_at":datetime.fromtimestamp(now,timezone.utc).isoformat(), "age_seconds":0,
             **normalize_radios([device(last_seen=now-10)],[],now=now)}
 
 

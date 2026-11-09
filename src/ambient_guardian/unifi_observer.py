@@ -64,6 +64,12 @@ def _sensor(client: httpx.Client, entity: str, value, attributes: dict):
 def run_cycle(radio: UnifiRadioBridge, home: HomeAssistantBridge, history: RadioHistory, *, now: float | None = None) -> dict:
     now = time.time() if now is None else now
     snapshot = radio.snapshot()
+    try:
+        stamp = datetime.fromisoformat(str(snapshot.get('observed_at', '')).replace('Z', '+00:00')).timestamp()
+        if not -30 <= now - stamp <= 120:
+            raise ValueError('Stale observation')
+    except (ValueError, TypeError):
+        snapshot = {**snapshot, 'reachable': False, 'error_type': 'StaleOrMissingObservation'}
     if not snapshot.get('reachable'):
         if home.configured:
             with httpx.Client(base_url=home.url, headers=home._headers(), timeout=3, trust_env=False) as client:
