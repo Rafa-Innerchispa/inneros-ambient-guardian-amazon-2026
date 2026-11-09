@@ -163,7 +163,7 @@ def speech_chunks(message: str) -> list[str]:
     return chunks[:6]
 
 
-def deliver(home: HomeAssistantBridge, message: str, *, tag: str, now: float, voice: bool=True, critical: bool=False):
+def deliver(home: HomeAssistantBridge, message: str, *, tag: str, now: float, voice: bool=True, critical: bool=False, voice_message: str | None=None):
     service=os.getenv('AMBIENT_GUARDIAN_UNIFI_RF_MOBILE_SERVICE','mobile_app_infinix_x6873')
     if not re.fullmatch(r'mobile_app_[a-zA-Z0-9_]+',service):raise ValueError('Invalid mobile service')
     with httpx.Client(base_url=home.url,headers=home._headers(),timeout=5,trust_env=False) as client:
@@ -175,7 +175,7 @@ def deliver(home: HomeAssistantBridge, message: str, *, tag: str, now: float, vo
     if voice and (critical or 8<=local.hour<22):
         target=os.getenv('AMBIENT_GUARDIAN_UNIFI_RF_ECHO_TARGET','notify.echo_cuarto_speak')
         try:
-            for chunk in speech_chunks(message):
+            for chunk in speech_chunks(voice_message or message):
                 home.speak(target,chunk);chunks_accepted+=1
             echo_accepted=True
         except (RuntimeError,PermissionError,ValueError,httpx.HTTPError):pass
@@ -254,6 +254,30 @@ def periodic_message(views: list[dict], *, now: float, english: bool) -> str:
     return ' '.join(parts)
 
 
+def periodic_voice(views: list[dict], *, now: float, english: bool) -> str:
+    local=datetime.fromtimestamp(now,timezone.utc).astimezone(ZoneInfo('America/Guayaquil'))
+    parts=[f'Rafael, {local:%H:%M}.']
+    for view in views:
+        site=view.get('site','Bellini')
+        if not view['fresh']:
+            parts.append(f'{site}: monitoring unavailable.' if english else f'{site}: monitoreo no disponible.')
+            continue
+        failures=[a for a in view['assets'] if not a['online']]
+        failed=len(failures)
+        if failed:
+            name=safe_name(failures[0]['name'])[:45]
+            more=(f' and {failed-1} more' if english else f' y {failed-1} más') if failed>1 else ''
+            parts.append(f'{site}: {name}{more} not responding.' if english else f'{site}: {name}{more} no responden.')
+        else:parts.append(f'{site}: {len(view["assets"])} devices responding.' if english else f'{site}: {len(view["assets"])} equipos responden.')
+        radios=[r for r in view.get('snapshot',{}).get('radios',[]) if (r.get('utilization_percent') or 0)>=80]
+        if radios:
+            r=max(radios,key=lambda r:r['utilization_percent'])
+            parts.append(f'{safe_name(r["ap"])[:25]}: {round(r["utilization_percent"])} percent channel occupancy.' if english else f'{safe_name(r["ap"])[:25]}: ocupación del canal {round(r["utilization_percent"])} por ciento.')
+    suffix='Names and recommendations are in your phone report.' if english else 'Nombres y recomendaciones en el informe del celular.'
+    # One short utterance avoids overlapping multiple Alexa announcements.
+    return ' '.join(parts)[:215].rsplit(' ',1)[0]+'. '+suffix if len(' '.join(parts)+' '+suffix)>280 else ' '.join(parts)+' '+suffix
+
+
 def run_problems(state: NoticeState, home: HomeAssistantBridge, *, now: float):
     english=os.getenv('AMBIENT_GUARDIAN_UNIFI_RF_ALERT_LOCALE','en-US').startswith('en')
     try:row=_db().client['pcdoctor_swarm']['bellini_guardian_state'].find_one({'site_id':'bellini-i-ii'},{'_id':0,'timestamp':1,'gateway_online':1,'targets':1})
@@ -297,9 +321,10 @@ def run_problems(state: NoticeState, home: HomeAssistantBridge, *, now: float):
             statuses=dict(checks.get('results',{})) if now-checks.get('at',0)<=15 else {}
             if fast.get('icmp_responding'):statuses['bellini_nvr_dahua']=True
             report_views=[views[0],{**bellini,'assets':[{**a,'online':statuses.get(a['id'],a['online'])} for a in bellini['assets']]}]
-        deliver(home,periodic_message(report_views,now=now,english=english),tag='infrastructure-20-min',now=now)
+        receipt=deliver(home,periodic_message(report_views,now=now,english=english),tag='infrastructure-20-min',now=now,voice_message=periodic_voice(report_views,now=now,english=english))
+        state.put('last_periodic_receipt',{'at':now,**receipt})
         state.delivered(['periodic:'+bucket],now=now);reported=True
-    return {'sources':[{k:v.get(k) for k in ('site','fresh','observed_at')} for v in views], 'periodic_report_accepted':reported,'confirmed_transitions':events,'controller_changes':0}
+    return {'sources':[{k:v.get(k) for k in ('site','fresh','observed_at')} for v in views], 'periodic_report_accepted':reported,'last_report_delivery':state.get('last_periodic_receipt'),'confirmed_transitions':events,'controller_changes':0}
 
 
 def main():
