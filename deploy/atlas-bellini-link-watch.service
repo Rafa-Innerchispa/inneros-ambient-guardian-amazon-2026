@@ -1,0 +1,23 @@
+[Unit]
+Description=Atlas fast Bellini Dahua reachability sentinel (no AI credits)
+After=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=/home/rlopez/inneros/inneros_core/workspaces/inneros-ambient-guardian-amazon-2026
+Environment=PYTHONPATH=/home/rlopez/inneros/inneros_core/workspaces/inneros-ambient-guardian-amazon-2026/src:/home/rlopez/inneros/inneros_core/platform
+Environment=AMBIENT_GUARDIAN_SHARED_ENV_FILE=/home/rlopez/inneros/inneros_core/platform/.env
+Environment=AMBIENT_GUARDIAN_BELLINI_WATCH_CONFIG=/home/rlopez/.config/ambient-guardian/bellini-link-watch.json
+Environment=AMBIENT_GUARDIAN_UNIFI_RF_ALERT_LOCALE=en-US
+Environment=AMBIENT_GUARDIAN_UNIFI_RF_ECHO_TARGET=notify.echo_cuarto_speak
+Environment=AMBIENT_GUARDIAN_ALEXA_SPEAK_ENABLED=1
+Environment=AMBIENT_GUARDIAN_ALEXA_NOTIFY_ALLOWLIST=notify.echo_cuarto_speak
+ExecStart=/home/rlopez/inneros/inneros_core/platform/venv/bin/python -m ambient_guardian.bellini_link_watch
+Restart=on-failure
+RestartSec=5
+MemoryMax=120M
+CPUQuota=5%
+UMask=0077
+
+[Install]
+WantedBy=default.target

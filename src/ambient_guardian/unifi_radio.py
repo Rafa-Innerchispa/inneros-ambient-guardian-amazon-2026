@@ -51,12 +51,15 @@ def normalize_radios(devices: list, clients: list, *, now: float) -> dict[str, A
             band = {"ng": "2.4", "na": "5", "6e": "6", "6g": "6"}.get(radio.get("radio"))
             if not band:
                 continue
+            config = next((r for r in device.get("radio_table", []) if r.get("radio") == radio.get("radio")), {})
             radios.append({
                 "ap": label, "band_ghz": band,
                 "channel": _number(radio.get("channel"), 1, 233),
                 "utilization_percent": _number(radio.get("cu_total"), 0, 100),
                 "clients": _number(radio.get("num_sta"), 0, 10000),
                 "retry_percent": _number(radio.get("tx_retries_pct"), 0, 100),
+                "configured_width_mhz": _number(config.get("ht"), 1, 320),
+                "reported_width_mhz": _number(radio.get("bw"), 1, 320),
                 "last_seen_age_seconds": round(max(0, now - last_seen), 1),
             })
     bands = []
