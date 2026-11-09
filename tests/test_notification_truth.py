@@ -5,7 +5,7 @@ import json
 import httpx
 
 from ambient_guardian.notification_brief import (NoticeState, agent_events, bellini_view,
-    deliver, periodic_message, run_problems, speech_chunks)
+    deliver, periodic_message, periodic_voice, run_problems, speech_chunks)
 from ambient_guardian.incident_notice import observe, scenarios, safe_name
 
 NOW=datetime(2026,11,9,8,0,tzinfo=timezone.utc).timestamp()  # 03:00 Ecuador
@@ -92,6 +92,12 @@ def test_long_reports_fit_existing_ha_speech_guard():
     chunks=speech_chunks(message)
     assert len(chunks)>1 and all(len(c)<=280 for c in chunks)
     assert ' '.join(chunks)==message
+
+
+def test_periodic_voice_is_one_short_utterance_with_a_device_name():
+    for english in (True,False):
+        text=periodic_voice([view(states=(True,False,False)),view()],now=NOW,english=english)
+        assert len(text)<=280 and 'Cámara entrada' in text
 
 
 def test_periodic_20_minute_dedup_and_no_night_report(tmp_path,monkeypatch):

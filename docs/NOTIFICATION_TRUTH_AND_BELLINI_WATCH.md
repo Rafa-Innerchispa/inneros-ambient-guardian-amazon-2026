@@ -48,8 +48,11 @@ separate and unchanged (five-second timer). Android notification permissions,
 channel settings, DND and Internet delivery still affect arrival; API acceptance
 does not prove the owner heard or saw an alert.
 
-Full reports go to the owner Android service. Speech is split into at most six
-280-character fragments to retain the existing HA bridge's 300-character guard.
+Full reports go to the owner Android service. The regular Echo report is one
+short utterance (at most 280 characters) naming a current finding; Android has
+the complete device list and recommendation. Longer critical/agent speech is
+split into at most six 280-character fragments, retaining the existing HA bridge's
+300-character guard. HA acceptance receipts are retained for periodic reports.
 Language is configured as English for the owner's US-English Echo; no mixed
 language model-generated summaries are used. Explicit Spanish templates also
 exist. Changing that environment setting requires matching the Echo voice locale.
