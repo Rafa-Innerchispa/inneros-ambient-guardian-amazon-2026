@@ -10,6 +10,7 @@ Environment=AMBIENT_GUARDIAN_SHARED_ENV_FILE=/home/rlopez/inneros/inneros_core/p
 Environment=AMBIENT_GUARDIAN_UNIFI_RADIO_ADJUST_ENABLED=1
 EnvironmentFile=/home/rlopez/.config/ambient-guardian/skill-bridge.env
 EnvironmentFile=/home/rlopez/.config/ambient-guardian/unifi-radio.env
+EnvironmentFile=/home/rlopez/.config/ambient-guardian/radio-owner.env
 ExecStart=/home/rlopez/inneros/inneros_core/platform/venv/bin/python -m ambient_guardian.radio_correction worker
 Restart=on-failure
 RestartSec=10
