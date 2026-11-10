@@ -21,7 +21,7 @@ from .whatsapp_approval import WhatsAppApprovalBridge
 CHANNEL = "home_assistant_companion"
 COLLECTION = "ambient_guardian_mobile_approvals"
 EVENT = "inneros_owner_approval_decision"
-ALLOWED = {"unifi_restart", "voiceops_owner_callback", "voiceops_owner_mobile_callback"}
+ALLOWED = {"unifi_restart", "voiceops_owner_callback", "voiceops_owner_mobile_callback", "unifi_radio_width_20"}
 
 
 class MobileApprovalBridge(WhatsAppApprovalBridge):
@@ -160,6 +160,7 @@ def consume(payload: dict[str, Any]) -> dict[str, Any]:
 def cards_for(row: dict[str, Any]) -> list[dict[str, Any]]:
     target = str(row.get("target_label") or row.get("target_alias") or "equipo")
     action = "Llamada Grandstream" if row.get("action_type", "").startswith("voiceops_") else "Reinicio UniFi"
+    if row.get('action_type')=='unifi_radio_width_20':action='Ajuste Wi-Fi · ancho de canal'
     cards = [{"type": "markdown", "title": action,
               "content": f"**Destino:** {target}\n\n**Estado:** {row['status']}\n\n"
                          f"Caduca (UTC): {row['expires_at']}\n\nReferencia: `{row['task_id']}`"}]
@@ -168,8 +169,9 @@ def cards_for(row: dict[str, Any]) -> list[dict[str, Any]]:
         observed = evidence.get("observed_state") or row.get("diagnostic_readback") or {}
         rejection = (f"\n\nLa central devolvió SIP {observed['sip_status']}."
                      if observed.get("sip_status") else "")
+        execution_label='sin confirmación; revisión manual requerida' if evidence.get('outcome_unknown') else 'sí' if evidence.get('executed') else 'no'
         cards.append({"type": "markdown", "title": "Resultado verificado",
-                      "content": f"Ejecutada: {'sí' if evidence.get('executed') else 'no'}. "
+                      "content": f"Ejecutada: {execution_label}. "
                                  f"Verificada: {'sí' if evidence.get('verified') else 'no'}.\n\n"
                                  f"Comprobación: {evidence.get('verified_at') or 'sin confirmación'}{rejection}"})
     if row["status"] == "awaiting_owner_approval" and future(row["expires_at"]):
