@@ -1,0 +1,9 @@
+{"entities":[
+ {"entity_id":"camera.entrada","en":"Camera feed entrada","es":"Flujo de cámara entrada"},
+ {"entity_id":"camera.estudio","en":"Study camera feed","es":"Flujo de cámara Estudio"},
+ {"entity_id":"device_tracker.nvr_dahua","en":"Dahua recorder","es":"Grabador Dahua"},
+ {"entity_id":"device_tracker.nvr_ezviz","en":"EZVIZ recorder","es":"Grabador EZVIZ"},
+ {"entity_id":"device_tracker.camara_los_rios_izq_dahua","en":"Los Rios left camera","es":"Cámara Los Ríos izquierda"},
+ {"entity_id":"device_tracker.camara_los_rios_der_dahua","en":"Los Rios right camera","es":"Cámara Los Ríos derecha"},
+ {"entity_id":"alarm_control_panel.panel_home_ralphi_panel_home_ralphi","en":"House alarm panel","es":"Panel de alarma de casa"}
+]}

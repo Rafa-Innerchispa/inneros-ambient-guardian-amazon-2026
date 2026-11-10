@@ -21,6 +21,7 @@ import httpx
 
 from .home_assistant import HomeAssistantBridge
 from .incident_notice import safe_name, observe, incident_message
+from . import general_health
 
 
 def timestamp(value) -> float | None:
@@ -116,7 +117,7 @@ def bellini_view(row: dict | None, *, now: float, inventory: dict | None = None,
         label=mapped.get('name_en' if english else 'name')
         # Unmapped roles stay recognizable without reading IPs or invented names.
         label=label or safe_name(item.get('name') or '', 'Unnamed network device' if english else 'Equipo de red sin nombre')
-        assets.append({**mapped,'id':key,'name':safe_name(label),'type':item['device_type'],'online':item['online']})
+        assets.append({**mapped,'id':key,'name':safe_name(label),'name_es':safe_name(mapped.get('name') or label),'type':item['device_type'],'online':item['online']})
     issues=[a for a in assets if not a['online']]
     if not assets:return {'fresh':False,'observed_at':datetime.fromtimestamp(at,timezone.utc).isoformat()}
     return {'fresh':True,'site':'Bellini','assets':assets,'observed_at':datetime.fromtimestamp(at,timezone.utc).isoformat(),'gateway_online':row.get('gateway_online') is True,
@@ -167,7 +168,7 @@ def deliver(home: HomeAssistantBridge, message: str, *, tag: str, now: float, vo
     service=os.getenv('AMBIENT_GUARDIAN_UNIFI_RF_MOBILE_SERVICE','mobile_app_infinix_x6873')
     if not re.fullmatch(r'mobile_app_[a-zA-Z0-9_]+',service):raise ValueError('Invalid mobile service')
     with httpx.Client(base_url=home.url,headers=home._headers(),timeout=5,trust_env=False) as client:
-        data={'tag':tag,'url':'/atlas-network/overview','channel':'InnerOS Critical' if critical else 'InnerOS Reports','importance':'high' if critical else 'default','priority':'high' if critical else 'normal','ttl':0 if critical else 1200}
+        data={'tag':tag,'url':'/atlas-network/general' if tag=='infrastructure-20-min' else '/atlas-network/overview','channel':'InnerOS Critical' if critical else 'InnerOS Reports','importance':'high' if critical else 'default','priority':'high' if critical else 'normal','ttl':0 if critical else 1200}
         response=client.post('/api/services/notify/'+service,json={'title':'Atlas · '+tag,'message':message,'data':data})
         response.raise_for_status()
     local=datetime.fromtimestamp(now,timezone.utc).astimezone(ZoneInfo('America/Guayaquil'))
@@ -285,6 +286,12 @@ def run_problems(state: NoticeState, home: HomeAssistantBridge, *, now: float):
     bellini=bellini_view(row,now=now,inventory=load_inventory(),english=english)
     bellini.setdefault('site','Bellini')
     views=[home_view(now=now),bellini]
+    rich=os.getenv('AMBIENT_GUARDIAN_GENERAL_HEALTH_ENABLED','0')=='1'
+    health=general_health.collect(home,now) if rich else []
+    units=next((s for s in health if s['id']=='services' and s['fresh']),None)
+    if units:
+        views.append({'site':'InnerOS Intel services','fresh':True,'observed_at':units['observed_at'],
+                      'assets':[{'id':a['id'],'name':a['name'],'online':a['online'],'type':'service'} for a in units['units'] if a['installed']]})
     events=[]
     local=datetime.fromtimestamp(now,timezone.utc).astimezone(ZoneInfo('America/Guayaquil'))
     for view in views:
@@ -320,8 +327,24 @@ def run_problems(state: NoticeState, home: HomeAssistantBridge, *, now: float):
         if bellini['fresh'] and 0<=now-fast.get('checked_at',0)<=15:
             statuses=dict(checks.get('results',{})) if now-checks.get('at',0)<=15 else {}
             if fast.get('icmp_responding'):statuses['bellini_nvr_dahua']=True
-            report_views=[views[0],{**bellini,'assets':[{**a,'online':statuses.get(a['id'],a['online'])} for a in bellini['assets']]}]
-        receipt=deliver(home,periodic_message(report_views,now=now,english=english),tag='infrastructure-20-min',now=now,voice_message=periodic_voice(report_views,now=now,english=english))
+            report_views=[views[0],{**bellini,'assets':[{**a,'online':statuses.get(a['id'],a['online'])} for a in bellini['assets']]},*views[2:]]
+        if rich:
+            sources=health+general_health.network_sources(report_views[:2])
+            voice_state,speak,message=general_health.voice_decision(sources,state.get('general-voice'),now=now,english=english)
+            measured=datetime.fromtimestamp(now,timezone.utc).astimezone(ZoneInfo('America/Guayaquil'))
+            body=(f'Atlas infrastructure report, {measured:%Y-%m-%d %H:%M}.\n' if english else f'Informe de infraestructura Atlas, {measured:%Y-%m-%d %H:%M}.\n')+general_health.full_report(sources,english=english)
+            for source in sources:
+                if source.get('observed_at'):body+=f'\n{source["id"]}: {source["observed_at"]}'
+            with httpx.Client(base_url=home.url,headers=home._headers(),timeout=5,trust_env=False) as client:
+                response=client.post('/api/states/sensor.atlas_infrastructure_report',json={'state':'attention_required' if any(s.get('findings') for s in sources) else 'observing',
+                    'attributes':{'friendly_name':'Atlas · infrastructure report','icon':'mdi:home-heart','observed_at':datetime.fromtimestamp(now,timezone.utc).isoformat(),
+                                  'report':body,'source_count':len(sources),'fresh_source_count':sum(s['fresh'] for s in sources),'paid_model_calls':0}})
+                response.raise_for_status()
+            receipt=deliver(home,body,tag='infrastructure-20-min',now=now,voice=speak,voice_message=message)
+            if speak and receipt.get('echo_request_accepted_by_ha'):state.put('general-voice',voice_state)
+            else:state.put('general-voice',{**voice_state,'spoken_at':state.get('general-voice').get('spoken_at',0)})
+        else:
+            receipt=deliver(home,periodic_message(report_views,now=now,english=english),tag='infrastructure-20-min',now=now,voice_message=periodic_voice(report_views,now=now,english=english))
         state.put('last_periodic_receipt',{'at':now,**receipt})
         state.delivered(['periodic:'+bucket],now=now);reported=True
     return {'sources':[{k:v.get(k) for k in ('site','fresh','observed_at')} for v in views], 'periodic_report_accepted':reported,'last_report_delivery':state.get('last_periodic_receipt'),'confirmed_transitions':events,'controller_changes':0}

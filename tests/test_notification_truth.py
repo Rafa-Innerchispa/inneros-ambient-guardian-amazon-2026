@@ -126,3 +126,24 @@ def test_critical_transition_at_night_is_not_silenced(tmp_path,monkeypatch):
         monkeypatch.setattr(module,'home_view',lambda online=online,**kw:view(kw['now'],online))
         run_problems(state,None,now=NOW+t)
     assert len(sent)==1 and sent[0]['critical']
+
+
+def test_general_reports_include_energy_and_silence_unchanged_voice(tmp_path,monkeypatch):
+    import ambient_guardian.notification_brief as module
+    sent=[];published=[]
+    monkeypatch.setenv('AMBIENT_GUARDIAN_GENERAL_HEALTH_ENABLED','1')
+    monkeypatch.setattr(module,'_db',lambda: (_ for _ in ()).throw(RuntimeError()))
+    monkeypatch.setattr(module,'load_inventory',lambda:{})
+    monkeypatch.setattr(module,'home_view',lambda **kw:view(kw['now']))
+    monkeypatch.setattr(module.general_health,'collect',lambda home,now:[{'id':'energy','fresh':True,'observed_at':stamp(now),'en':'Battery 100 percent.','es':'Batería 100 por ciento.','findings':[]}])
+    monkeypatch.setattr(module,'deliver',lambda home,message,**kw:sent.append((message,kw)) or {'echo_request_accepted_by_ha':bool(kw.get('voice'))})
+    original=httpx.Client
+    def handle(req):published.append(json.loads(req.content));return httpx.Response(200,json={})
+    monkeypatch.setattr(httpx,'Client',lambda **kw:original(**kw,transport=httpx.MockTransport(handle)))
+    state=NoticeState(str(tmp_path/'notice.sqlite3'));home=SimpleNamespace(url='http://ha.local',_headers=lambda:{})
+    day=NOW+5*3600
+    run_problems(state,home,now=day)
+    run_problems(state,home,now=day+1200)
+    assert len(sent)==2 and sent[0][1]['voice'] and not sent[1][1]['voice']
+    assert 'Battery 100' in sent[0][0]
+    assert published[0]['attributes']['paid_model_calls']==0
