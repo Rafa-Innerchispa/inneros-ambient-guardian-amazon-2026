@@ -70,7 +70,10 @@ Preserve Muse's pre-existing local `bellini_link_watch.py` change (30-second pol
 and its backup; do not reset or silently commit it. Fast-forward only this
 reviewed project change. Install the general-report drop-in/profile and dedicated
 correction executor, then restart only the project report worker and project HA
-approval inbox. Existing calls, backend, Router and HA remain running.
+approval inbox. Before starting the correction unit, run
+`scripts/configure_radio_owner.py` to bind its private environment to the owner
+already configured on the canonical Companion worker. A missing identity fails
+closed. Existing calls, backend, Router and HA remain running.
 
 Rollback stops the correction executor first, restores the previous report
 drop-in/profile/dashboard, and restarts only those project workers. Preserve
