@@ -279,7 +279,7 @@ def periodic_voice(views: list[dict], *, now: float, english: bool) -> str:
     return ' '.join(parts)[:215].rsplit(' ',1)[0]+'. '+suffix if len(' '.join(parts)+' '+suffix)>280 else ' '.join(parts)+' '+suffix
 
 
-def run_problems(state: NoticeState, home: HomeAssistantBridge, *, now: float):
+def run_problems(state: NoticeState, home: HomeAssistantBridge, *, now: float, force_report: bool=False):
     english=os.getenv('AMBIENT_GUARDIAN_UNIFI_RF_ALERT_LOCALE','en-US').startswith('en')
     try:row=_db().client['pcdoctor_swarm']['bellini_guardian_state'].find_one({'site_id':'bellini-i-ii'},{'_id':0,'timestamp':1,'gateway_online':1,'targets':1})
     except Exception:row=None
@@ -319,7 +319,7 @@ def run_problems(state: NoticeState, home: HomeAssistantBridge, *, now: float):
         state.put(key,updated)
     bucket=str(int(now//1200))
     reported=False
-    if 8<=local.hour<22 and not state.seen('periodic:'+bucket):
+    if 8<=local.hour<22 and (force_report or not state.seen('periodic:'+bucket)):
         report_views=views
         fast=state.get('fast-bellini')
         # Overlay only the two directly checked devices, not the whole site.
