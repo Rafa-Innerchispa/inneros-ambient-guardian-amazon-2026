@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import secrets
 import time
+import os
 
 from .ops_decisions import runtime_broker, decision_text
 from .ops_announcements import announcement
@@ -31,8 +32,8 @@ def pin_outcome(cause, confidence, *, now):
 def pin_failure_message(outcome):
     if outcome['provider_code'] == '200':
         if outcome['status'] == 'NOT_ENABLED':
-            return ('PIN confirmation is off for Atlas Control in your Alexa app. Open this skill settings and enable PIN Confirmation for your profile. Then ask to link your voice again. No decision was taken.',
-                    'La confirmación por PIN está desactivada para Atlas Control en tu app Alexa. Abre la configuración de esta skill y activa Confirmación por PIN para tu perfil. Después pide vincular tu voz otra vez. No se tomó ninguna decisión.')
+            return ('Amazon has not enabled profile PIN confirmation for Atlas Control. Owner voice setup is incomplete. Telegram approvals remain available. No voice was linked and no decision was taken.',
+                    'Amazon no tiene habilitada la confirmación de PIN de perfil para Atlas Control. La configuración de la voz del propietario está incompleta. Puedes seguir autorizando por Telegram. No se vinculó ninguna voz ni se tomó ninguna decisión.')
         if outcome['reason'] in {'VERIFICATION_METHOD_NOT_SETUP','PREREQUISITE_NOT_SETUP_ERROR'}:
             return ('Amazon reports that profile PIN setup is incomplete. Set up your profile PIN in the Alexa app and enable PIN Confirmation for Atlas Control. No decision was taken.',
                     'Amazon indica que falta completar el PIN de perfil. Configúralo en la app Alexa y activa Confirmación por PIN para Atlas Control. No se tomó ninguna decisión.')
@@ -116,6 +117,21 @@ def handle(payload, *, broker=None, now=None):
                                      {'$set': {'pin_outcome': outcome}})
             if (str((cause.get('status') or {}).get('code')) != '200'
                     or (cause.get('result') or {}).get('status') != 'ACHIEVED' or confidence != 400):
+                system = (payload.get('context') or {}).get('System') or {}
+                has_token = any(str(source.get('accessToken') or '').strip() for source in (
+                    system.get('person') or {}, system.get('user') or {},
+                    (payload.get('session') or {}).get('user') or {}))
+                # Opt-in only AFTER the account-linking configuration is approved
+                # and published. A card initiates consent; it never grants it or
+                # substitutes account linking for the native voice + PIN proof.
+                if (outcome['provider_code'] == '200' and outcome['status'] == 'NOT_ENABLED'
+                        and os.getenv('ATLAS_OPS_ACCOUNT_LINKING_AVAILABLE', '0') == '1'
+                        and not has_token):
+                    response = reply(
+                        'Amazon has not enabled profile PIN confirmation. I sent a Link Account card to your Alexa app to start the optional InnerOS account setup. Voice approval is still unavailable until voice and PIN verification succeeds. Telegram remains available.',
+                        'Amazon no tiene habilitada la confirmación de PIN de perfil. Envié una tarjeta Vincular cuenta a tu app Alexa para iniciar la configuración opcional de tu cuenta InnerOS. La autorización por voz sigue pendiente hasta verificar voz y PIN. Telegram sigue disponible.')
+                    response['response']['card'] = {'type': 'LinkAccount'}
+                    return response
                 return reply(*pin_failure_message(outcome))
             if not person or row.get('person_id') != person:
                 return reply('The verified speaker differs from the voice that started this request. No voice was linked and no decision was taken.',

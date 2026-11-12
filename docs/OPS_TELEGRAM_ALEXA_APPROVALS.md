@@ -68,6 +68,15 @@ la app Alexa, el propietario debe habilitar **PIN Confirmation** para su perfil.
 Si Amazon pide configurar el PIN de perfil, se hace directamente en la app;
 no enviarlo al chat, Telegram, al servidor ni guardarlo en logs.
 
+La captura del propietario del 12 de noviembre confirmó que la ficha móvil de
+la skill de desarrollo muestra descripción y desactivación, sin control de PIN.
+Por ello `NOT_ENABLED` ya no manda a buscar repetidamente ese ajuste. El código
+admite una tarjeta `LinkAccount` solo si se publica antes la configuración de
+Account Linking opcional y se habilita explícitamente
+`ATLAS_OPS_ACCOUNT_LINKING_AVAILABLE=1` (por defecto 0). La tarjeta inicia el
+consentimiento; no demuestra que Amazon vaya a habilitar el PIN ni concede
+autorización. Un token ya presente evita un bucle de revinculación.
+
 Desde el 12 de noviembre el resultado nativo se registra en el challenge como
 `pin_outcome`: hora, código del proveedor, estado, motivo y nivel alcanzado.
 Solo se aceptan enums conocidos; no se conserva el mensaje libre del proveedor,
