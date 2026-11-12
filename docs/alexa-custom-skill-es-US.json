@@ -423,6 +423,44 @@
             "switch to English",
             "speak English"
           ]
+        },
+        {
+          "name": "PendingTaskApprovalsIntent",
+          "samples": [
+            "autorizaciones pendientes",
+            "qué tareas necesitan mi autorización",
+            "revisa las autorizaciones pendientes",
+            "aprobar tareas pendientes"
+          ]
+        },
+        {
+          "name": "LinkApprovalVoiceIntent",
+          "samples": [
+            "vincula mi voz para autorizaciones",
+            "configura las autorizaciones por voz"
+          ]
+        },
+        {
+          "name": "ApprovePendingTaskIntent",
+          "samples": [
+            "autoriza esta tarea",
+            "aprueba esta tarea"
+          ]
+        },
+        {
+          "name": "RejectPendingTaskIntent",
+          "samples": [
+            "rechaza esta tarea",
+            "deniega esta tarea"
+          ]
+        },
+        {
+          "name": "AMAZON.YesIntent",
+          "samples": []
+        },
+        {
+          "name": "AMAZON.NoIntent",
+          "samples": []
         }
       ],
       "types": [

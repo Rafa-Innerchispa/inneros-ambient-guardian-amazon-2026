@@ -766,6 +766,13 @@ def _dispatch(payload: dict[str, Any]) -> dict[str, Any]:
     )
     if account_linking_required and not linked:
         return _link_account_response()
+    # The gateway has already validated ASK signature, freshness and skill ID.
+    # OPS authorizations never pass through the conversational model or use an
+    # anonymous yes/no as owner proof. Existing alarm PIN flow stays separate.
+    from .ops_voice_approval import handle as handle_ops_approval
+    ops_response = handle_ops_approval(payload)
+    if ops_response is not None:
+        return ops_response
     if request_type == "LaunchRequest":
         # Alexa does not include the spoken invocation phrase in a LaunchRequest.
         # A device configured for en-US can therefore receive a Spanish invocation
