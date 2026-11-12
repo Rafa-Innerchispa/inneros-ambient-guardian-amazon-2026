@@ -35,8 +35,8 @@ def pin_failure_message(outcome):
             return ('Amazon has not enabled profile PIN confirmation for Atlas Control. Owner voice setup is incomplete. Telegram approvals remain available. No voice was linked and no decision was taken.',
                     'Amazon no tiene habilitada la confirmación de PIN de perfil para Atlas Control. La configuración de la voz del propietario está incompleta. Puedes seguir autorizando por Telegram. No se vinculó ninguna voz ni se tomó ninguna decisión.')
         if outcome['reason'] in {'VERIFICATION_METHOD_NOT_SETUP','PREREQUISITE_NOT_SETUP_ERROR'}:
-            return ('Amazon reports that profile PIN setup is incomplete. Set up your profile PIN in the Alexa app and enable PIN Confirmation for Atlas Control. No decision was taken.',
-                    'Amazon indica que falta completar el PIN de perfil. Configúralo en la app Alexa y activa Confirmación por PIN para Atlas Control. No se tomó ninguna decisión.')
+            return ('Amazon reports that profile PIN setup is incomplete. This requires your Alexa profile PIN, not your voice purchasing code. I added setup guidance to a card in the Alexa app. If the profile PIN option is missing, use Telegram and contact Amazon support. No decision was taken.',
+                    'Amazon indica que falta completar el PIN de perfil. Se necesita el PIN de tu perfil Alexa; el código para compras por voz no sirve para esto. Dejé la guía en una tarjeta de la app Alexa. Si no aparece la opción de PIN de perfil, usa Telegram y contacta con soporte de Amazon. No se tomó ninguna decisión.')
         if outcome['reason'] == 'METHOD_LOCKOUT':
             return ('Amazon has temporarily locked profile PIN verification after failed attempts. Do not keep retrying. Reset your profile PIN in the Alexa app. Telegram remains available.',
                     'Amazon bloqueó temporalmente la verificación del PIN tras intentos fallidos. No sigas reintentando. Restablece tu PIN de perfil en la app Alexa. Telegram sigue disponible.')
@@ -46,11 +46,35 @@ def pin_failure_message(outcome):
     if outcome['provider_code'] == '403':
         return ('Amazon did not allow Atlas Control to use native PIN verification. This needs a skill configuration check. Use Telegram for now; no decision was taken.',
                 'Amazon no permitió que Atlas Control use la verificación nativa de PIN. Hay que revisar la configuración de la skill. Por ahora usa Telegram; no se tomó ninguna decisión.')
-    if outcome['provider_code'] in {'404','500'}:
+    if outcome['provider_code'] == '500':
+        return ('Amazon could not complete profile PIN verification because of a server error. This error does not tell me whether your profile PIN is set up. I added troubleshooting details to a card in the Alexa app. Use Telegram for approvals; no decision was taken.',
+                'Amazon no pudo completar la verificación del PIN de perfil por un error de su servidor. Este error no permite saber si tu PIN de perfil está configurado. Dejé los detalles en una tarjeta de la app Alexa. Autoriza por Telegram; no se tomó ninguna decisión.')
+    if outcome['provider_code'] == '404':
         return ('Amazon PIN verification is unavailable right now. Use Telegram; no decision was taken.',
                 'La verificación de PIN de Amazon no está disponible en este momento. Usa Telegram; no se tomó ninguna decisión.')
     return ('Voice ID and profile PIN could not be verified. No decision was taken. Check your profile PIN and Atlas Control PIN Confirmation in the Alexa app.',
             'No pude verificar Voice ID y PIN de perfil. No se tomó ninguna decisión. Revisa el PIN de tu perfil y Confirmación por PIN de Atlas Control en la app Alexa.')
+
+
+def pin_help_card(outcome, *, spanish):
+    """Readable guidance only: never invent a PIN-settings deep link or handle PINs."""
+    en, es = pin_failure_message(outcome)
+    guidance = (
+        'El PIN de perfil Alexa y el código para compras por voz son distintos. '
+        'Si no aparece el PIN de perfil o el interruptor de Atlas vuelve a desactivado, '
+        'no sigas repitiendo la activación ni elimines perfiles. Amazon controla ese ajuste; '
+        'Atlas no puede crear el PIN ni activarlo por ti. Contacta con soporte de Amazon '
+        'e indica que el ajuste no se conserva. Telegram sigue disponible.' if spanish else
+        'Your Alexa profile PIN and voice purchasing code are different. '
+        'If the profile PIN setting is missing or the Atlas toggle switches back off, '
+        'do not keep repeating activation or delete profiles. Amazon controls that setting; '
+        'Atlas cannot create or enable the PIN for you. Contact Amazon support '
+        'and explain that the setting does not persist. Telegram remains available.')
+    return {'type': 'Simple',
+        'title': 'Atlas Control: autorizaciones por voz' if spanish else 'Atlas Control: voice approvals',
+        'content': (es if spanish else en) + '\n\n' + guidance
+            + '\n\nAmazon VerifyPerson: ' + outcome['provider_code'] + ' / ' + outcome['status']
+            + '\nhttps://developer.amazon.com/en-US/docs/alexa/custom-skills/pin-confirmation-for-alexa-skills.html'}
 
 
 def identity(payload):
@@ -138,7 +162,9 @@ def handle(payload, *, broker=None, now=None):
                         'Amazon no tiene habilitada la confirmación de PIN de perfil. Envié una tarjeta Vincular cuenta a tu app Alexa para iniciar la configuración opcional de tu cuenta InnerOS. La autorización por voz sigue pendiente hasta verificar voz y PIN. Telegram sigue disponible.')
                     response['response']['card'] = {'type': 'LinkAccount'}
                     return response
-                return reply(*pin_failure_message(outcome))
+                response = reply(*pin_failure_message(outcome))
+                response['response']['card'] = pin_help_card(outcome, spanish=spanish)
+                return response
             if not person or row.get('person_id') != person:
                 return reply('The verified speaker differs from the voice that started this request. No voice was linked and no decision was taken.',
                              'La persona verificada no coincide con quien inició esta solicitud. No se vinculó ninguna voz ni se tomó ninguna decisión.')
