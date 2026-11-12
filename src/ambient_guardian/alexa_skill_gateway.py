@@ -152,6 +152,12 @@ def _capture_speaker_candidate(payload: dict[str, Any]) -> dict[str, Any] | None
         )
     ).expanduser()
     candidate_path.parent.mkdir(parents=True, exist_ok=True)
+    system = (payload.get("context") or {}).get("System") or {}
+    # Presence-only diagnostic for personal versus shared account linking.
+    # Neither the token nor its validity is recorded; these flags grant nothing.
+    personal_token_present = bool(str((system.get("person") or {}).get("accessToken") or "").strip())
+    shared_token_present = any(str(source.get("accessToken") or "").strip() for source in (
+        system.get("user") or {}, (payload.get("session") or {}).get("user") or {}))
     record = {
         "person_id": person_id,
         "authentication_confidence": int(
@@ -160,6 +166,10 @@ def _capture_speaker_candidate(payload: dict[str, Any]) -> dict[str, Any] | None
         "captured_at": datetime.now(timezone.utc).isoformat(),
         "application_id": _application_id(payload),
         "authorized": False,
+        "account_link_context": {
+            "personal_token_present": personal_token_present,
+            "shared_token_present": shared_token_present,
+        },
     }
     data = (json.dumps(record, indent=2) + "\n").encode("utf-8")
     fd = os.open(
