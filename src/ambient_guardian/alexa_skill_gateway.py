@@ -96,12 +96,16 @@ def _speaker_context(payload: dict[str, Any]) -> dict[str, Any]:
 
 
 def _access_token(payload: dict[str, Any]) -> str:
+    context_person = (
+        (((payload.get("context") or {}).get("System") or {}).get("person") or {})
+    )
     context_user = (
         (((payload.get("context") or {}).get("System") or {}).get("user") or {})
     )
     session_user = ((payload.get("session") or {}).get("user") or {})
     return str(
-        context_user.get("accessToken")
+        context_person.get("accessToken")
+        or context_user.get("accessToken")
         or session_user.get("accessToken")
         or ""
     ).strip()

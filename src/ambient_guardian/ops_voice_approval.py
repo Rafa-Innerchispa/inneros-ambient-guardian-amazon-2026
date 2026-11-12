@@ -59,6 +59,17 @@ def identity(payload):
     return str((system.get('user') or {}).get('userId') or ''), str(person.get('personId') or '')
 
 
+def has_account_token(payload):
+    system = (payload.get('context') or {}).get('System') or {}
+    return any(str(source.get('accessToken') or '').strip() for source in (
+        system.get('person') or {}, system.get('user') or {},
+        (payload.get('session') or {}).get('user') or {}))
+
+
+def account_linking_available():
+    return os.getenv('ATLAS_OPS_ACCOUNT_LINKING_AVAILABLE', '0') == '1'
+
+
 def native_pin(token):
     return {'version': '1.0', 'response': {'directives': [{
         'type': 'Connections.StartConnection', 'uri': 'connection://AMAZON.VerifyPerson/2',
@@ -117,16 +128,11 @@ def handle(payload, *, broker=None, now=None):
                                      {'$set': {'pin_outcome': outcome}})
             if (str((cause.get('status') or {}).get('code')) != '200'
                     or (cause.get('result') or {}).get('status') != 'ACHIEVED' or confidence != 400):
-                system = (payload.get('context') or {}).get('System') or {}
-                has_token = any(str(source.get('accessToken') or '').strip() for source in (
-                    system.get('person') or {}, system.get('user') or {},
-                    (payload.get('session') or {}).get('user') or {}))
                 # Opt-in only AFTER the account-linking configuration is approved
                 # and published. A card initiates consent; it never grants it or
                 # substitutes account linking for the native voice + PIN proof.
                 if (outcome['provider_code'] == '200' and outcome['status'] == 'NOT_ENABLED'
-                        and os.getenv('ATLAS_OPS_ACCOUNT_LINKING_AVAILABLE', '0') == '1'
-                        and not has_token):
+                        and account_linking_available() and not has_account_token(payload)):
                     response = reply(
                         'Amazon has not enabled profile PIN confirmation. I sent a Link Account card to your Alexa app to start the optional InnerOS account setup. Voice approval is still unavailable until voice and PIN verification succeeds. Telegram remains available.',
                         'Amazon no tiene habilitada la confirmación de PIN de perfil. Envié una tarjeta Vincular cuenta a tu app Alexa para iniciar la configuración opcional de tu cuenta InnerOS. La autorización por voz sigue pendiente hasta verificar voz y PIN. Telegram sigue disponible.')
@@ -156,6 +162,12 @@ def handle(payload, *, broker=None, now=None):
             result = broker.decide(row['task_id'], row['nonce'], row['action'], channel='alexa', verified_owner=True, now=now)
             return reply(decision_text(result))
         if name == 'LinkApprovalVoiceIntent':
+            if account_linking_available() and not has_account_token(payload):
+                response = reply(
+                    'First link your InnerOS account using the Link Account card in your Alexa app. This is optional for normal questions. After linking, ask to set up voice approvals again. Voice and profile PIN verification are still required before you can authorize a task.',
+                    'Primero vincula tu cuenta InnerOS con la tarjeta Vincular cuenta de tu app Alexa. Las consultas habituales no necesitan vinculación. Después pide configurar las autorizaciones por voz otra vez. Seguirá siendo necesario verificar tu voz y PIN de perfil antes de autorizar una tarea.')
+                response['response']['card'] = {'type': 'LinkAccount'}
+                return response
             if not person or not user:
                 return reply('Enable Voice ID and Personalize skills for Atlas Control in the Alexa app first. Telegram remains available.',
                              'Primero habilita Voice ID y Personalizar skills para Atlas Control en la app Alexa. Telegram sigue disponible.')
