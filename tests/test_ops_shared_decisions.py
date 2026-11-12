@@ -273,7 +273,7 @@ def test_manifest_preserves_optional_owner_voice_verification():
     ('200','NOT_ACHIEVED','NOT_MATCH','could not match'),
     ('403','','','configuration check'),
     ('404','','','unavailable right now'),
-    ('500','','','unavailable right now'),
+    ('500','','','server error'),
 ])
 def test_pin_failure_has_actionable_native_reason_and_no_authority_call(setup,code,status,reason,expected):
     db,broker,task,row,calls=setup
@@ -351,3 +351,37 @@ def test_existing_personal_link_reaches_native_pin_without_linking_loop(setup,mo
     assert 'card' not in out['response']
     assert len(db[voice.CHALLENGES].rows)==1 and not calls
     assert 'private-test-token' not in str(db[voice.CHALLENGES].rows)
+
+
+@pytest.mark.parametrize('locale',['en-US','es-US'])
+@pytest.mark.parametrize('missing_pin',[False,True])
+def test_pin_help_card_distinguishes_provider_error_from_missing_setup(setup,locale,missing_pin):
+    db,broker,task,row,calls=setup
+    db[voice.CHALLENGES].insert_one({'_id':'help','action':'pair','user_id':'account',
+        'person_id':'owner','expires_at':200,'consumed':False})
+    request=payload('unused',confidence=300)
+    request['context']['System']['person']['accessToken']='private-test-token'
+    request['request']={'type':'SessionResumedRequest','locale':locale,'cause':{
+        'token':'atlas-ops:help','status':{'code':'200' if missing_pin else '500',
+            'message':'provider-private-detail'},
+        'result':{'status':'NOT_ACHIEVED','reason':'VERIFICATION_METHOD_NOT_SETUP'} if missing_pin else {}}}
+    out=voice.handle(request,broker=broker,now=101)
+    speech=out['response']['outputSpeech']['text']
+    card=out['response']['card']
+    assert card['type']=='Simple'
+    assert out['response']['shouldEndSession'] is True
+    assert not out['response'].get('directives') and not out['response'].get('reprompt')
+    if locale.startswith('es'):
+        assert 'compras por voz' in card['content'] and 'Telegram' in speech
+        assert ('falta completar' in speech)==missing_pin
+        assert ('no permite saber' in speech)==(not missing_pin)
+        assert 'no sigas repitiendo' in card['content']
+    else:
+        assert 'voice purchasing code' in card['content'] and 'Telegram' in speech
+        assert ('PIN setup is incomplete' in speech)==missing_pin
+        assert ('does not tell me' in speech)==(not missing_pin)
+        assert 'do not keep repeating' in card['content']
+    assert 'https://developer.amazon.com/' in card['content']
+    assert not calls and not db[voice.BINDINGS].rows
+    for private in ['private-test-token','provider-private-detail','personId','atlas-ops:help']:
+        assert private not in str(out)

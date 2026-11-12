@@ -1,12 +1,31 @@
 # Configuración preparada: vinculación opcional de cuenta
 
-Estado al 12 de noviembre: **publicada y comprobada en SMAPI; consentimiento
-del propietario e intercambio positivo de tokens todavía pendientes**.
+Estado al 12 de noviembre: **publicada y comprobada en SMAPI; el propietario
+confirmó la vinculación y se verificó emisión de acceso/refresco para el cliente
+existente, sin leer ni mostrar sus valores. La verificación nativa de PIN sigue
+pendiente**.
 El propietario confirmó que la ficha móvil de desarrollo carece de ajustes
 de PIN. Su petición real devuelve `200 / NOT_ENABLED / confianza 300`.
 Esto confirma consentimiento PIN no habilitado, sin establecer la causa de
 que el control falte en la app. Configurar Account Linking es un siguiente
 paso de alta, no una reparación de PIN ya demostrada.
+
+Tras vincular la cuenta apareció el control de confirmación por PIN, pero el
+propietario informa que no conserva la activación y no abrió la creación del
+PIN de perfil. Tres solicitudes reales posteriores devolvieron `500`, con
+confianza 300. Ese error no demuestra que falte el PIN ni identifica su causa.
+No se alcanzó confianza 400, no se vinculó la voz del propietario y no se
+autorizó ninguna tarea. No borrar perfiles de nombres parecidos ni forzar el
+consentimiento desde el servidor.
+
+Los fallos nativos entregan una tarjeta Simple bilingüe con diagnóstico y
+ayuda oficial. Solo `VERIFICATION_METHOD_NOT_SETUP` o
+`PREREQUISITE_NOT_SETUP_ERROR` afirman que falta configurar el PIN. Un `500`
+indica error del servidor del proveedor y declara que su causa se desconoce.
+El código de compras por voz no sustituye al PIN de perfil. No existe en esta
+implementación un enlace profundo verificado a la pantalla nativa de PIN:
+la tarjeta informa, no abre esa pantalla ni crea o activa un PIN. No se
+solicitan, guardan ni comparan PINs en InnerOS. Telegram sigue disponible.
 
 ## Cambio concreto propuesto
 
@@ -64,8 +83,8 @@ confianza 400 ni el vínculo explícito de Voice ID al propietario mediante
 Telegram. La selección de una tarjeta nunca autoriza una tarea ni ejecuta
 acciones sobre equipos. El PIN de Amazon continúa fuera del servidor.
 
-La publicación fue autorizada por el propietario; aceptar el consentimiento
-personal sigue pendiente. Se respalda el estado de Amazon y el drop-in del
+La publicación fue autorizada por el propietario, quien después confirmó la
+vinculación. Se respalda el estado de Amazon y el drop-in del
 gateway antes de activar la tarjeta.
 Si el flujo falla antes del consentimiento, se desactiva la tarjeta y se
 restaura la configuración anterior. No borrar ni revocar concesiones ya
