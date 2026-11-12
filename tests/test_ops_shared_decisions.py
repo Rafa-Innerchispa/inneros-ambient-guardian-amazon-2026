@@ -263,3 +263,49 @@ def test_manifest_preserves_optional_owner_voice_verification():
     permissions={p['name'] for p in manifest['permissions']}
     assert {'alexa::person_id:read','alexa::authenticate:2:optional'} <= permissions
     assert 'alexa::authenticate:2:mandatory' not in permissions
+
+
+@pytest.mark.parametrize('code,status,reason,expected', [
+    ('200','NOT_ENABLED','','PIN confirmation is off'),
+    ('200','NOT_ACHIEVED','VERIFICATION_METHOD_NOT_SETUP','PIN setup is incomplete'),
+    ('200','NOT_ACHIEVED','PREREQUISITE_NOT_SETUP_ERROR','PIN setup is incomplete'),
+    ('200','NOT_ACHIEVED','METHOD_LOCKOUT','Do not keep retrying'),
+    ('200','NOT_ACHIEVED','NOT_MATCH','could not match'),
+    ('403','','','configuration check'),
+    ('404','','','unavailable right now'),
+    ('500','','','unavailable right now'),
+])
+def test_pin_failure_has_actionable_native_reason_and_no_authority_call(setup,code,status,reason,expected):
+    db,broker,task,row,calls=setup
+    db[voice.CHALLENGES].insert_one({'_id':'diagnostic','action':'pair','user_id':'account',
+        'person_id':'owner','expires_at':200,'consumed':False})
+    request=payload('unused',confidence=300)
+    request['request']={'type':'SessionResumedRequest','locale':'en-US','cause':{
+        'token':'atlas-ops:diagnostic','status':{'code':code,'message':'private provider detail'},
+        'result':{'status':status,'reason':reason}}}
+    if reason=='NOT_MATCH':request['context']['System'].pop('person')
+    out=voice.handle(request,broker=broker,now=101)
+    assert expected in out['response']['outputSpeech']['text']
+    audit=db[voice.CHALLENGES].find_one({'_id':'diagnostic'})['pin_outcome']
+    assert audit['provider_code']==code and audit['status']==(status or 'UNKNOWN')
+    assert set(audit)=={'at','provider_code','status','reason','confidence_level'}
+    assert 'private provider detail' not in str(audit)
+    assert not calls and not db[voice.BINDINGS].find_one({'_id':'owner'})
+
+
+def test_native_success_cannot_link_a_different_person(setup):
+    db,broker,task,row,calls=setup
+    db[voice.CHALLENGES].insert_one({'_id':'test','action':'pair','user_id':'account',
+        'person_id':'original','expires_at':200,'consumed':False})
+    request=payload('unused',person='other',confidence=400)
+    request['request']={'type':'SessionResumedRequest','cause':{'token':'atlas-ops:test',
+        'status':{'code':'200'},'result':{'status':'ACHIEVED'}}}
+    out=voice.handle(request,broker=broker,now=101)
+    assert 'differs' in out['response']['outputSpeech']['text']
+    assert not calls and not db[voice.BINDINGS].find_one({'_id':'owner'})
+
+
+def test_pin_failure_diagnostic_whitelists_enums_not_provider_text():
+    audit=voice.pin_outcome({'status':{'code':'unexpected secret'},
+        'result':{'status':'private text','reason':'1234'}},999,now=101)
+    assert audit=={'at':101,'provider_code':'UNKNOWN','status':'UNKNOWN','reason':'UNKNOWN','confidence_level':0}
