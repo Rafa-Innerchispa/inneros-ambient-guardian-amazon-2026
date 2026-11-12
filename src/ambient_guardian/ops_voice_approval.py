@@ -14,6 +14,44 @@ INTENTS = {'PendingTaskApprovalsIntent', 'LinkApprovalVoiceIntent',
            'AMAZON.YesIntent', 'AMAZON.NoIntent'}
 
 
+def pin_outcome(cause, confidence, *, now):
+    """Keep only documented machine enums, never provider text/PINs/tokens."""
+    code = str((cause.get('status') or {}).get('code') or '')
+    result = cause.get('result') or {}
+    status = str(result.get('status') or '')
+    reason = str(result.get('reason') or '')
+    return {'at': now,
+        'provider_code': code if code in {'200','400','403','404','500'} else 'UNKNOWN',
+        'status': status if status in {'ACHIEVED','NOT_ACHIEVED','NOT_ENABLED'} else 'UNKNOWN',
+        'reason': reason if reason in {'METHOD_LOCKOUT','VERIFICATION_METHOD_NOT_SETUP',
+            'PREREQUISITE_NOT_SETUP_ERROR','NOT_MATCH'} else 'UNKNOWN',
+        'confidence_level': confidence if confidence in {0,100,200,300,400} else 0}
+
+
+def pin_failure_message(outcome):
+    if outcome['provider_code'] == '200':
+        if outcome['status'] == 'NOT_ENABLED':
+            return ('PIN confirmation is off for Atlas Control in your Alexa app. Open this skill settings and enable PIN Confirmation for your profile. Then ask to link your voice again. No decision was taken.',
+                    'La confirmación por PIN está desactivada para Atlas Control en tu app Alexa. Abre la configuración de esta skill y activa Confirmación por PIN para tu perfil. Después pide vincular tu voz otra vez. No se tomó ninguna decisión.')
+        if outcome['reason'] in {'VERIFICATION_METHOD_NOT_SETUP','PREREQUISITE_NOT_SETUP_ERROR'}:
+            return ('Amazon reports that profile PIN setup is incomplete. Set up your profile PIN in the Alexa app and enable PIN Confirmation for Atlas Control. No decision was taken.',
+                    'Amazon indica que falta completar el PIN de perfil. Configúralo en la app Alexa y activa Confirmación por PIN para Atlas Control. No se tomó ninguna decisión.')
+        if outcome['reason'] == 'METHOD_LOCKOUT':
+            return ('Amazon has temporarily locked profile PIN verification after failed attempts. Do not keep retrying. Reset your profile PIN in the Alexa app. Telegram remains available.',
+                    'Amazon bloqueó temporalmente la verificación del PIN tras intentos fallidos. No sigas reintentando. Restablece tu PIN de perfil en la app Alexa. Telegram sigue disponible.')
+        if outcome['reason'] == 'NOT_MATCH':
+            return ('Amazon could not match the speaker to a Voice ID. Check your voice profile in the Alexa app. No voice was linked and no decision was taken.',
+                    'Amazon no pudo reconocer el perfil de voz de quien habla. Revisa tu Voice ID en la app Alexa. No se vinculó ninguna voz ni se tomó ninguna decisión.')
+    if outcome['provider_code'] == '403':
+        return ('Amazon did not allow Atlas Control to use native PIN verification. This needs a skill configuration check. Use Telegram for now; no decision was taken.',
+                'Amazon no permitió que Atlas Control use la verificación nativa de PIN. Hay que revisar la configuración de la skill. Por ahora usa Telegram; no se tomó ninguna decisión.')
+    if outcome['provider_code'] in {'404','500'}:
+        return ('Amazon PIN verification is unavailable right now. Use Telegram; no decision was taken.',
+                'La verificación de PIN de Amazon no está disponible en este momento. Usa Telegram; no se tomó ninguna decisión.')
+    return ('Voice ID and profile PIN could not be verified. No decision was taken. Check your profile PIN and Atlas Control PIN Confirmation in the Alexa app.',
+            'No pude verificar Voice ID y PIN de perfil. No se tomó ninguna decisión. Revisa el PIN de tu perfil y Confirmación por PIN de Atlas Control en la app Alexa.')
+
+
 def identity(payload):
     system = (payload.get('context') or {}).get('System') or {}
     person = system.get('person') or {}
@@ -67,13 +105,21 @@ def handle(payload, *, broker=None, now=None):
         if resumed:
             cause = request.get('cause') or {}
             row = db[CHALLENGES].find_one({'_id': token[10:], 'consumed': False,
-                'expires_at': {'$gt': now}, 'user_id': user, 'person_id': person})
+                'expires_at': {'$gt': now}, 'user_id': user})
             if not row:
                 return reply('This confirmation expired or belongs to another speaker.', 'Esta confirmación caducó o pertenece a otra persona.')
+            outcome = pin_outcome(cause, confidence, now=now)
+            # Failed recognition can omit personId. Record and explain the native
+            # failure using the account-bound opaque challenge. A successful PIN
+            # still MUST match the exact original person before binding/approval.
+            db[CHALLENGES].update_one({'_id': row['_id'], 'consumed': False},
+                                     {'$set': {'pin_outcome': outcome}})
             if (str((cause.get('status') or {}).get('code')) != '200'
                     or (cause.get('result') or {}).get('status') != 'ACHIEVED' or confidence != 400):
-                return reply('Voice ID and profile PIN could not be verified. No decision was taken. Use Telegram or enable PIN confirmation for Atlas Control in the Alexa app.',
-                             'No pude verificar Voice ID y PIN de perfil. No se tomó ninguna decisión. Usa Telegram o habilita la confirmación por PIN de Atlas Control en la app Alexa.')
+                return reply(*pin_failure_message(outcome))
+            if not person or row.get('person_id') != person:
+                return reply('The verified speaker differs from the voice that started this request. No voice was linked and no decision was taken.',
+                             'La persona verificada no coincide con quien inició esta solicitud. No se vinculó ninguna voz ni se tomó ninguna decisión.')
             if row['action'] == 'pair':
                 db[CHALLENGES].update_one({'_id': row['_id'], 'consumed': False}, {'$set': {'action': 'pair_ready'}})
                 from inneros_core_runtime.notifications import telegram_client as tg

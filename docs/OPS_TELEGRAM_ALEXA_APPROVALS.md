@@ -60,6 +60,22 @@ replay, cambio de usuario, sesión diferente o PIN fallido no autoriza nada.
 Sin personalización/PIN configurados, Telegram funciona y Alexa explica el
 bloqueo. No se promete que un Echo sin perfil de voz autorice tareas.
 
+### Si la vinculación falla
+
+La activación opcional en Developer Console no activa el consentimiento de
+PIN en la app del propietario. En la configuración de Atlas Control dentro de
+la app Alexa, el propietario debe habilitar **PIN Confirmation** para su perfil.
+Si Amazon pide configurar el PIN de perfil, se hace directamente en la app;
+no enviarlo al chat, Telegram, al servidor ni guardarlo en logs.
+
+Desde el 12 de noviembre el resultado nativo se registra en el challenge como
+`pin_outcome`: hora, código del proveedor, estado, motivo y nivel alcanzado.
+Solo se aceptan enums conocidos; no se conserva el mensaje libre del proveedor,
+PIN, audio ni tokens en ese diagnóstico. Los mensajes distinguen consentimiento
+desactivado (`NOT_ENABLED`), PIN incompleto, voz no reconocida, bloqueo por
+intentos fallidos y proveedor no disponible. Un resultado HTTP 200 por sí solo
+no autentica; se sigue exigiendo `ACHIEVED`, nivel 400 y la misma persona.
+
 ## Despliegue y reversión
 
 El código vive en este proyecto. No se editan archivos del runtime global:
