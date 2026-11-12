@@ -329,3 +329,25 @@ def test_optional_account_link_card_never_grants_voice_approval(setup,monkeypatc
     assert 'private-test-token' not in str(db[voice.CHALLENGES].rows)
     if not expected_card:
         assert 'Open this skill settings' not in out['response']['outputSpeech']['text']
+
+
+def test_link_setup_starts_with_account_card_without_enrolling_a_synthetic_person(setup,monkeypatch):
+    db,broker,task,row,calls=setup
+    monkeypatch.setenv('ATLAS_OPS_ACCOUNT_LINKING_AVAILABLE','1')
+    request=payload('LinkApprovalVoiceIntent',confidence=0)
+    request['context']['System'].pop('person')
+    out=voice.handle(request,broker=broker,now=101)
+    assert out['response']['card']=={'type':'LinkAccount'}
+    assert not db[voice.CHALLENGES].rows and not db[voice.BINDINGS].rows and not calls
+
+
+def test_existing_personal_link_reaches_native_pin_without_linking_loop(setup,monkeypatch):
+    db,broker,task,row,calls=setup
+    monkeypatch.setenv('ATLAS_OPS_ACCOUNT_LINKING_AVAILABLE','1')
+    request=payload('LinkApprovalVoiceIntent',confidence=300)
+    request['context']['System']['person']['accessToken']='private-test-token'
+    out=voice.handle(request,broker=broker,now=101)
+    assert out['response']['directives'][0]['uri']=='connection://AMAZON.VerifyPerson/2'
+    assert 'card' not in out['response']
+    assert len(db[voice.CHALLENGES].rows)==1 and not calls
+    assert 'private-test-token' not in str(db[voice.CHALLENGES].rows)

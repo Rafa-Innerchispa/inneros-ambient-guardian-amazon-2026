@@ -16,6 +16,22 @@ from ambient_guardian import alexa_skill_gateway as gateway
 SKILL_ID = "amzn1.ask.skill.test-ambient-guardian"
 
 
+def test_personal_account_token_takes_precedence_over_shared_account():
+    data=request_payload(launch_request(),person={'personId':'person','accessToken':'personal-token'},access_token='shared-token')
+    assert gateway._access_token(data)=='personal-token'
+
+
+def test_invalid_personal_token_does_not_fall_back_to_shared_identity(monkeypatch):
+    seen=[]
+    def reject(url,**kwargs):
+        seen.append(kwargs['headers']['Authorization'])
+        return httpx.Response(401,request=httpx.Request('GET',url))
+    monkeypatch.setattr(gateway.httpx,'get',reject)
+    data=request_payload(launch_request(),person={'personId':'person','accessToken':'invalid-personal'},access_token='shared-token')
+    assert not gateway._account_linked(data)
+    assert seen==['Bearer invalid-personal']
+
+
 @pytest.mark.parametrize("name,expected", [("SwitchToSpanishIntent", "es-US"), ("SwitchToEnglishIntent", "en-US")])
 def test_explicit_language_switch_never_calls_backend(monkeypatch, name, expected):
     monkeypatch.setattr(gateway, "_backend_turn", lambda *a: pytest.fail("Language selection cannot execute actions"))
