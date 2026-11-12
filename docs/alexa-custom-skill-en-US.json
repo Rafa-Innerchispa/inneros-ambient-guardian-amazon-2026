@@ -526,6 +526,44 @@
             "switch to English",
             "speak English"
           ]
+        },
+        {
+          "name": "PendingTaskApprovalsIntent",
+          "samples": [
+            "pending approvals",
+            "what tasks need my approval",
+            "review pending task approvals",
+            "check pending approvals"
+          ]
+        },
+        {
+          "name": "LinkApprovalVoiceIntent",
+          "samples": [
+            "link my voice for approvals",
+            "set up voice approvals"
+          ]
+        },
+        {
+          "name": "ApprovePendingTaskIntent",
+          "samples": [
+            "authorize this task",
+            "approve this task"
+          ]
+        },
+        {
+          "name": "RejectPendingTaskIntent",
+          "samples": [
+            "reject this task",
+            "deny this task"
+          ]
+        },
+        {
+          "name": "AMAZON.YesIntent",
+          "samples": []
+        },
+        {
+          "name": "AMAZON.NoIntent",
+          "samples": []
         }
       ],
       "types": [
