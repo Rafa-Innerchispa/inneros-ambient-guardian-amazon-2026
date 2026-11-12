@@ -266,7 +266,7 @@ def test_manifest_preserves_optional_owner_voice_verification():
 
 
 @pytest.mark.parametrize('code,status,reason,expected', [
-    ('200','NOT_ENABLED','','PIN confirmation is off'),
+    ('200','NOT_ENABLED','','has not enabled'),
     ('200','NOT_ACHIEVED','VERIFICATION_METHOD_NOT_SETUP','PIN setup is incomplete'),
     ('200','NOT_ACHIEVED','PREREQUISITE_NOT_SETUP_ERROR','PIN setup is incomplete'),
     ('200','NOT_ACHIEVED','METHOD_LOCKOUT','Do not keep retrying'),
@@ -309,3 +309,23 @@ def test_pin_failure_diagnostic_whitelists_enums_not_provider_text():
     audit=voice.pin_outcome({'status':{'code':'unexpected secret'},
         'result':{'status':'private text','reason':'1234'}},999,now=101)
     assert audit=={'at':101,'provider_code':'UNKNOWN','status':'UNKNOWN','reason':'UNKNOWN','confidence_level':0}
+
+
+@pytest.mark.parametrize('enabled,token_source,expected_card',[
+    ('0',None,False),('1',None,True),('1','person',False),('1','user',False),('1','session',False)])
+def test_optional_account_link_card_never_grants_voice_approval(setup,monkeypatch,enabled,token_source,expected_card):
+    db,broker,task,row,calls=setup
+    monkeypatch.setenv('ATLAS_OPS_ACCOUNT_LINKING_AVAILABLE',enabled)
+    db[voice.CHALLENGES].insert_one({'_id':'onboarding','action':'pair','user_id':'account',
+        'person_id':'owner','expires_at':200,'consumed':False})
+    request=payload('unused',confidence=300)
+    request['request']={'type':'SessionResumedRequest','locale':'en-US','cause':{
+        'token':'atlas-ops:onboarding','status':{'code':'200'},'result':{'status':'NOT_ENABLED'}}}
+    if token_source=='session':request['session']['user']={'accessToken':'private-test-token'}
+    elif token_source:request['context']['System'][token_source]['accessToken']='private-test-token'
+    out=voice.handle(request,broker=broker,now=101)
+    assert (out['response'].get('card')=={'type':'LinkAccount'})==expected_card
+    assert not calls and not db[voice.BINDINGS].find_one({'_id':'owner'})
+    assert 'private-test-token' not in str(db[voice.CHALLENGES].rows)
+    if not expected_card:
+        assert 'Open this skill settings' not in out['response']['outputSpeech']['text']
