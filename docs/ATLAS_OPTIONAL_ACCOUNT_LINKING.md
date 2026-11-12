@@ -27,6 +27,20 @@ implementación un enlace profundo verificado a la pantalla nativa de PIN:
 la tarjeta informa, no abre esa pantalla ni crea o activa un PIN. No se
 solicitan, guardan ni comparan PINs en InnerOS. Telegram sigue disponible.
 
+El propietario completó posteriormente el teléfono y PIN del perfil desde
+Amazon Family web; se verificó la presencia del teléfono y editor sin leer
+sus valores. Aun así informa que el interruptor de la skill vuelve a apagado.
+Por tanto, no atribuir el fallo restante únicamente a la falta de PIN.
+
+Para distinguir vinculación personal de compartida en la siguiente solicitud
+firmada de un Echo, la captura local opcional de interlocutor añade solo dos
+booleanos: `personal_token_present` y `shared_token_present` bajo
+`account_link_context`. No copia tokens ni verifica su validez con esos
+booleanos, no autoriza al interlocutor y permanece apagada por defecto. La
+hora de captura debe ser posterior al despliegue y corresponder a una petición
+física, no al simulador. La presencia de tokens emitidos en OAuth por sí sola
+no prueba que Amazon los haya asociado al perfil de voz.
+
 ## Cambio concreto propuesto
 
 - Skill: `amzn1.ask.skill.4a096414-e312-49d1-b2f5-4e538d7fdb93`, development.
