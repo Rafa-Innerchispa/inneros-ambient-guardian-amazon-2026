@@ -1,6 +1,10 @@
 {
   "manifest": {
     "manifestVersion": "1.0",
+    "permissions": [
+      {"name": "alexa::person_id:read"},
+      {"name": "alexa::authenticate:2:optional"}
+    ],
     "publishingInformation": {
       "category": "KNOWLEDGE_AND_TRIVIA",
       "distributionCountries": [],

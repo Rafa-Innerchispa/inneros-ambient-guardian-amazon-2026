@@ -254,3 +254,12 @@ def test_presented_voice_request_cannot_be_transferred(setup,kind):
     if kind=='wrong_person':request['context']['System']['person']['personId']='other'
     voice.handle(request,broker=broker,now=300 if kind=='expired' else 102)
     assert not calls
+
+
+def test_manifest_preserves_optional_owner_voice_verification():
+    import json
+    from pathlib import Path
+    manifest=json.loads((Path(__file__).parents[1]/'docs/alexa-skill-manifest.json').read_text())['manifest']
+    permissions={p['name'] for p in manifest['permissions']}
+    assert {'alexa::person_id:read','alexa::authenticate:2:optional'} <= permissions
+    assert 'alexa::authenticate:2:mandatory' not in permissions
