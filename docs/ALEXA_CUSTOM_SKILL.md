@@ -180,8 +180,12 @@ The development skill can be tested in the Alexa simulator and on a physical
 Alexa device only when the device uses a supported skill locale and the device
 is registered to the same Amazon account used for development testing.
 
-For owner security actions, enable **Skills Personalization** and **PIN Confirmation**
-in Developer Console. The owner must have Voice ID, Personalize skills, and a
+For owner security actions, enable **Skills Personalization** and **PIN Confirmation → Mandatory**
+in Developer Console. Optional has a provider-confirmed enrollment limitation
+(Amazon Support case 70871743). Mandatory was owner-authorized and verified on
+a physical Echo on November 12, 2026; it requires PIN setup for skill use and
+does not offer opt-out. See [the verification receipt](ALEXA_PIN_VERIFIED_20261112.md).
+The owner must have Voice ID, Personalize skills, and a
 profile PIN configured in the Alexa app. Ambient Guardian never receives or stores
 the PIN digits; Alexa performs verification and resumes the skill with authentication
 confidence level 400 when Voice ID + PIN succeed.
@@ -397,8 +401,11 @@ For a physical Echo used in Ecuador, the canonical compatibility profile is:
 - Physical country does not require `es-MX` or `es-ES`.
 - Alexa+ is not required for this path; this is a standard Alexa Custom Skill.
 
-For hackathon/demo compatibility, keep PIN Confirmation and Skills Personalization
-out of the base invocation path. Set:
+The earlier hackathon/demo profile below excluded PIN from base invocation.
+It is historical, **not the current deployment configuration**: the owner-authorized
+Mandatory PIN profile verified on November 12 supersedes this guidance. Do not
+disable Personalization or replace the manifest's Mandatory permission when deploying.
+The former runtime flags were:
 
 ```bash
 AMBIENT_GUARDIAN_PIN_CONFIRMATION_ENABLED=0
@@ -410,5 +417,5 @@ actions still fail closed in the backend without the enrolled owner identity and
 the required authentication confidence, or use the separate owner-authenticated
 approval route for PBX callbacks.
 
-After the physical `es-US` invocation is proven, PIN Confirmation can be
-re-enabled deliberately for supported owner-security flows.
+PIN Confirmation is now enabled as Mandatory for the verified owner-security
+flow. Authentication by Amazon still does not itself authorize a task.
