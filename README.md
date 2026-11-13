@@ -1,5 +1,13 @@
 # InnerOS Ambient Guardian
 
+## Amazon Developer Hackathon 2026: submission snapshot
+
+**Judging reference (October 23, 2026):** The exact project source available when ATLAS was submitted is preserved at commit [`d12f1c882f846f01a4df13c11061bd90014b129f`](https://github.com/Rafa-Innerchispa/inneros-ambient-guardian-amazon-2026/tree/d12f1c882f846f01a4df13c11061bd90014b129f). An additional historical branch, [`submission/amazon-developer-hackathon-2026-frozen`](https://github.com/Rafa-Innerchispa/inneros-ambient-guardian-amazon-2026/tree/submission/amazon-developer-hackathon-2026-frozen), points to that same snapshot.
+
+**Important distinction:** `main` is an actively developed InnerOS/ATLAS product branch. Commits, features, test results, integrations, and documentation added **after October 23, 2026** are ongoing product work, **not part of the submitted hackathon entry**. For reproducible hackathon judging, use the immutable commit link above, rather than the latest `main` state. This notice does not request or imply any modification to the submission on Devpost.
+
+---
+
 **Alexa becomes the voice of a local-first AI guardian that explains home incidents, prepares bounded actions, requires separate human approval, and returns verified evidence.**
 
 [![tests](https://github.com/Rafa-Innerchispa/inneros-ambient-guardian-amazon-2026/actions/workflows/tests.yml/badge.svg)](https://github.com/Rafa-Innerchispa/inneros-ambient-guardian-amazon-2026/actions/workflows/tests.yml)
