@@ -99,6 +99,22 @@ def observe(tasks, previous, *, now):
     return {'baseline_at': baseline, 'checked_at': now, 'tasks': current}, events
 
 
+def outbox_event(event, *, now):
+    """Persist only speech metadata, never a BSON task or execution payload.
+
+    Mongo includes _id unless explicitly excluded. Task dates and nested
+    evidence may also be non-JSON values. Authorization always reloads the
+    canonical task; none of those fields belongs in a notification outbox.
+    """
+    task = event['task']
+    limits = {'task_id': 50, 'assignee': 24, 'provider': 24,
+              'title': 800, 'claim_host': 128}
+    speech = {key: str(task[key])[:limit] for key, limit in limits.items()
+              if isinstance(task.get(key), str)}
+    return {'task': speech, 'status': event['status'],
+            'key': event['key'], 'observed_at': now}
+
+
 def tick(state, home, broker, *, now):
     projection = {k: 1 for k in ['task_id', 'status', 'assignee', 'title', 'run_id',
         'claim_host', 'created_at', 'current_execution_state', 'started_at',
@@ -107,7 +123,7 @@ def tick(state, home, broker, *, now):
     updated, events = observe(rows, state.get('ops-lifecycle-v1'), now=now)
     queue = state.get('ops-outbox-v1')
     for event in events:
-        queue.setdefault(event['key'], {**event, 'observed_at': now})
+        queue.setdefault(event['key'], outbox_event(event, now=now))
     # Persist before delivery so a transient provider failure/restart cannot
     # silently drop a transition or replay an already accepted announcement.
     state.put('ops-outbox-v1', queue)

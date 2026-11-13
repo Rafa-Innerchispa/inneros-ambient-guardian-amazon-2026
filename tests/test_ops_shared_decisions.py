@@ -244,6 +244,33 @@ def test_registration_never_reopens_canaries_authorized_or_running_tasks(setup,f
     assert not calls
 
 
+def test_lifecycle_outbox_handles_bson_and_dates_without_persisting_task_payload(setup, tmp_path):
+    from datetime import datetime, timezone
+    from ambient_guardian.ops_announcements import tick
+    from ambient_guardian.notification_brief import NoticeState
+    db,broker,task,row,calls=setup
+    now=1762952400
+    taskrow=db[TASKS].rows[0]
+    # An opaque object reproduces ObjectId's non-JSON behavior without requiring
+    # pymongo in the unit environment. Date and private payload are also excluded.
+    taskrow.update(_id=object(), created_at=datetime.fromtimestamp(now-100,timezone.utc),
+                   status='in_progress', payload={'private_marker':'must-not-persist'})
+    class Home:
+        def speak(self, target, text): raise RuntimeError('notification unavailable')
+    state=NoticeState(str(tmp_path/'bson.sqlite'))
+    tick(state,Home(),broker,now=now)
+    taskrow.update(status='failed',failed_at=datetime.fromtimestamp(now+10,timezone.utc))
+    with pytest.raises(RuntimeError,match='notification unavailable'):
+        tick(state,Home(),broker,now=now+10)
+    queue=state.get('ops-outbox-v1')
+    assert len(queue)==1
+    stored=next(iter(queue.values()))['task']
+    assert stored['task_id']==task['task_id']
+    assert '_id' not in stored and 'created_at' not in stored and 'failed_at' not in stored
+    assert 'payload' not in stored and 'current_execution_state' not in stored
+    assert not calls
+
+
 @pytest.mark.parametrize('kind',['wrong_session','wrong_person','expired'])
 def test_presented_voice_request_cannot_be_transferred(setup,kind):
     db,broker,task,row,calls=setup
