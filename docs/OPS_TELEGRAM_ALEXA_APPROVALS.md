@@ -46,7 +46,9 @@ convierten automáticamente en canales de este adaptador.
 Un anuncio TTS no abre el micrófono de una skill. Para responder:
 
 1. Una sola vez, configurar Voice ID y PIN de perfil en Alexa y habilitar para
-   Atlas Control personalización y confirmación por PIN opcional.
+   Atlas Control personalización y confirmación por PIN obligatoria (Mandatory).
+   Esta configuración exige configurar el PIN para usar la skill; no permite
+   excluirse de la confirmación. Fue autorizada y comprobada en un Echo físico.
 2. Decir **Alexa, ask Atlas Control to link my voice for approvals**.
 3. Tras la verificación nativa, confirmar el vínculo de propietario desde el
    Telegram privado ya configurado. Este paso no autoriza una tarea.
@@ -62,11 +64,16 @@ bloqueo. No se promete que un Echo sin perfil de voz autorice tareas.
 
 ### Si la vinculación falla
 
-La activación opcional en Developer Console no activa el consentimiento de
-PIN en la app del propietario. En la configuración de Atlas Control dentro de
-la app Alexa, el propietario debe habilitar **PIN Confirmation** para su perfil.
-Si Amazon pide configurar el PIN de perfil, se hace directamente en la app;
-no enviarlo al chat, Telegram, al servidor ni guardarlo en logs.
+La configuración vigente en Developer Console es **PIN Confirmation → Mandatory**,
+junto con **Skills Personalization**. Amazon Support confirmó en el caso 70871743
+una limitación de Optional que puede desactivar el interruptor móvil y devolver
+500 en `AMAZON.VerifyPerson/2`. No volver a publicar Optional automáticamente.
+El 12 de noviembre el propietario completó el PIN en un Echo físico: respuesta
+200, `ACHIEVED`, nivel 400 y vínculo de propietario confirmado desde Telegram.
+La evidencia y los límites de esa prueba están en
+[ALEXA_PIN_VERIFIED_20261112.md](ALEXA_PIN_VERIFIED_20261112.md).
+El PIN se configura y verifica directamente con Amazon; no enviarlo al chat,
+Telegram, al servidor ni guardarlo en logs. Un fallo de Amazon no permite omitirlo.
 
 La captura del propietario del 12 de noviembre confirmó que la ficha móvil de
 la skill de desarrollo muestra descripción y desactivación, sin control de PIN.

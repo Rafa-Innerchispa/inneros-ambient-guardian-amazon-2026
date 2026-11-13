@@ -256,13 +256,13 @@ def test_presented_voice_request_cannot_be_transferred(setup,kind):
     assert not calls
 
 
-def test_manifest_preserves_optional_owner_voice_verification():
+def test_manifest_preserves_verified_mandatory_owner_voice_verification():
     import json
     from pathlib import Path
     manifest=json.loads((Path(__file__).parents[1]/'docs/alexa-skill-manifest.json').read_text())['manifest']
     permissions={p['name'] for p in manifest['permissions']}
-    assert {'alexa::person_id:read','alexa::authenticate:2:optional'} <= permissions
-    assert 'alexa::authenticate:2:mandatory' not in permissions
+    assert {'alexa::person_id:read','alexa::authenticate:2:mandatory'} <= permissions
+    assert 'alexa::authenticate:2:optional' not in permissions
 
 
 @pytest.mark.parametrize('code,status,reason,expected', [

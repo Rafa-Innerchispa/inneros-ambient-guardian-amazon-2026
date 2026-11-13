@@ -1,5 +1,9 @@
 # Evidencia de avisos y autorizaciones — 11 de noviembre de 2026
 
+> Registro histórico: la configuración Optional y el vínculo pendiente descritos
+> aquí fueron sustituidos por Mandatory y la vinculación física verificada el
+> 12 de noviembre. Véase [la evidencia actual](ALEXA_PIN_VERIFIED_20261112.md).
+
 Registro UTC: 12 de noviembre, 04:22. Horario del propietario: Ecuador, UTC−5.
 
 ## Código y runtime
