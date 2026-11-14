@@ -19,7 +19,7 @@ services:
     volumes:
       - /srv/inneros-cloud/data:/data
       - /srv/inneros-cloud/secrets:/run/secrets:ro
-    tmpfs: [/tmp:size=32m,noexec,nosuid]
+    tmpfs: ["/tmp:size=32m,noexec,nosuid"]
     ports: ["127.0.0.1:18080:8080"]
     logging:
       driver: json-file
