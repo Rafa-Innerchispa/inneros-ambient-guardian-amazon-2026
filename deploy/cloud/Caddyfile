@@ -3,7 +3,7 @@
     redir @legacy https://{$ATLAS_DOMAIN}{uri} 308
     encode zstd gzip
     request_body {
-        max_size 128KB
+        max_size 384KB
     }
     header {
         -Server

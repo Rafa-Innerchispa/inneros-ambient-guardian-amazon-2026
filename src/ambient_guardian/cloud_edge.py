@@ -15,6 +15,7 @@ from urllib.parse import urlsplit
 
 import httpx
 from .cloud_model import local_answer
+from .cloud_speech import local_transcribe
 
 LOG = logging.getLogger("atlas.cloud.edge")
 
@@ -80,7 +81,19 @@ async def run(config: dict):
             if not isinstance(job, dict) or time.time() >= job.get("expires", 0):
                 return
             raw = job.get("body", "")
-            if not isinstance(raw, str) or len(raw.encode()) > 65536:
+            maximum = 280000 if job.get('kind') == 'local_transcription' else 65536
+            if not isinstance(raw, str) or len(raw.encode()) > maximum:
+                return
+            if job.get('kind') == 'local_transcription':
+                try:
+                    result = await local_transcribe(json.loads(raw))
+                except Exception:
+                    result = {'ok':False}
+                try:
+                    await client.post(origin+f"/api/sites/{site}/speech-jobs/{job['id']}",
+                        headers={'Authorization':'Bearer '+sites[site]},json=result)
+                except httpx.HTTPError:
+                    LOG.warning('Transcription result unavailable; no replay or external fallback')
                 return
             if job.get("kind") == "local_model":
                 try:
