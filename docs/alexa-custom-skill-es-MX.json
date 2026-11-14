@@ -461,6 +461,71 @@
         {
           "name": "AMAZON.NoIntent",
           "samples": []
+        },
+        {
+          "name": "LatestNoticeIntent",
+          "slots": [],
+          "samples": [
+            "qué fue esa notificación",
+            "explícame la última alerta",
+            "cuál fue el último aviso de InnerOS",
+            "dime la última notificación"
+          ]
+        },
+        {
+          "name": "InvestigateNoticeIntent",
+          "slots": [],
+          "samples": [
+            "investiga esa alerta",
+            "investiga el último evento",
+            "investiga más",
+            "dime más sobre ese aviso"
+          ]
+        },
+        {
+          "name": "NoticeDeviceIntent",
+          "slots": [
+            {
+              "name": "device",
+              "type": "AMAZON.SearchQuery"
+            }
+          ],
+          "samples": [
+            "investiga el equipo de Bellini {device}",
+            "revisa el equipo de Bellini {device}",
+            "dime más del equipo de Bellini {device}"
+          ]
+        },
+        {
+          "name": "MuteNoticesIntent",
+          "slots": [
+            {
+              "name": "duration",
+              "type": "AMAZON.DURATION"
+            }
+          ],
+          "samples": [
+            "silencia las notificaciones de InnerOS",
+            "pausa los avisos de InnerOS",
+            "silencia las notificaciones de InnerOS por {duration}",
+            "pausa los avisos de InnerOS durante {duration}"
+          ]
+        },
+        {
+          "name": "ResumeNoticesIntent",
+          "slots": [],
+          "samples": [
+            "reactiva las notificaciones de InnerOS",
+            "reanuda los avisos de InnerOS"
+          ]
+        },
+        {
+          "name": "QuietNoticesIntent",
+          "slots": [],
+          "samples": [
+            "baja la voz de las notificaciones",
+            "baja el volumen de los avisos de InnerOS"
+          ]
         }
       ],
       "types": []

@@ -27,7 +27,7 @@ def _is_address(value):
         return False
 
 
-def observe(view: dict, previous: dict) -> tuple[dict, dict | None]:
+def observe(view: dict, previous: dict, *, confirmations=2, down_seconds=0, recovery_seconds=0) -> tuple[dict, dict | None]:
     """Emit confirmed *new* failures/recoveries only, with durable deduplication."""
     if not view.get('fresh'):
         return previous, None
@@ -52,8 +52,10 @@ def observe(view: dict, previous: dict) -> tuple[dict, dict | None]:
             continue
         old = candidates.get(key, {})
         count = old.get('count', 0) + 1 if old.get('status') == status else 1
-        candidates[key] = {'status': status, 'count': count}
-        if count >= 2:
+        since = old.get('since', stamp) if old.get('status') == status else stamp
+        candidates[key] = {'status': status, 'count': count, 'since': since}
+        elapsed = (datetime.fromisoformat(stamp)-datetime.fromisoformat(since)).total_seconds()
+        if count >= confirmations and elapsed >= (recovery_seconds if status else down_seconds):
             (up if status else down).append(key)
             stable[key] = status
             candidates.pop(key, None)
@@ -61,8 +63,11 @@ def observe(view: dict, previous: dict) -> tuple[dict, dict | None]:
     if not down and not up:
         return updated, None
     # Only the devices confirmed in this observation are called simultaneous.
+    by_id = {a['id']: a for a in view['assets']}
+    important = any(by_id[key].get('type') in {'gateway','nvr','service'} for key in down)
     event = {'down': down, 'recovered': up, 'observed_at': stamp,
-             'critical': bool(down), 'site': view['site']}
+             'critical': bool(down) and (important or len(down)>=3), 'site': view['site'],
+             'confirmations_required': confirmations, 'minimum_down_seconds': down_seconds}
     return updated, event
 
 
@@ -93,7 +98,8 @@ def incident_message(view: dict, event: dict, *, english: bool = False) -> str:
     names = {a['id']: safe_name(a['name']) for a in view['assets']}
     parts = [f'Rafael, alert for {safe_name(view["site"])}.' if english else f'Rafael, alerta de {safe_name(view["site"])}.']
     if event['down']:
-        parts.append((f'{len(event["down"])} devices stopped responding in two distinct readings: ' if english else f'{len(event["down"])} equipos dejaron de responder en dos mediciones distintas: ') + ', '.join(names[k] for k in event['down'][:5]) + '.')
+        parts.append((f'Sustained failed reachability probes for {len(event["down"])} devices: ' if english else f'Fallos persistentes en las pruebas de acceso a {len(event["down"])} equipos: ') + ', '.join(names[k] for k in event['down'][:5]) + '.')
+        parts.append('This does not confirm a physical disconnection.' if english else 'Esto no confirma una desconexión física.')
         parts.extend(scenarios(view, event['down'],english=english))
     if event['recovered']:
         parts.append(('Responding again: ' if english else 'Vuelven a responder: ') + ', '.join(names[k] for k in event['recovered'][:5]) + '.')

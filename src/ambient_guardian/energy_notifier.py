@@ -285,7 +285,9 @@ def run_cycle(
         )
         if not dry_run:
             for target in _targets():
-                bridge.speak(target, message)
+                from .notification_context import critical_delivery
+                with critical_delivery(event in {'outage_started', 'critical_energy'}):
+                    bridge.speak(target, message)
                 delivered.append(target)
 
     previous.update(

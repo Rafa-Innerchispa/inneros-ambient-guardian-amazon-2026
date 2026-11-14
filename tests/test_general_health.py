@@ -25,11 +25,11 @@ def test_missing_telemetry_is_not_recovery():
     assert not speak and previous['issues']==['radio:same']
 
 
-def test_real_recovery_is_reported_once():
+def test_ordinary_recovery_updates_report_without_another_spoken_interruption():
     previous,_,_=g.voice_decision([source()],{},now=NOW,english=True)
     clear={**source(),'findings':[]}
     previous,speak,message=g.voice_decision([clear],previous,now=NOW+1200,english=True)
-    assert speak and 'Recovery' in message
+    assert not speak and 'Recovery' in message and previous['issues']==[]
     _,speak,_=g.voice_decision([clear],previous,now=NOW+2400,english=True)
     assert not speak
 

@@ -253,7 +253,9 @@ def voice_decision(sources, previous, *, now, english):
     new=[issues[k] for k in current if k not in old and k in issues]
     recovered=sorted(old-set(current)) if previous else []
     # Numeric variation in an unchanged incident is not a new voice alert.
-    speak=bool(new or recovered or now-previous.get('spoken_at',0)>=3600)
+    # Ordinary numeric/probe flapping belongs in the phone report, not in a
+    # fresh spoken warning every time it crosses a threshold.
+    speak=bool(any(i.get('severity')=='critical' for i in new) or now-previous.get('spoken_at',0)>=3600)
     language='en' if english else 'es'
     if new:
         issue=sorted(new,key=lambda i:i['severity']!='critical')[0]

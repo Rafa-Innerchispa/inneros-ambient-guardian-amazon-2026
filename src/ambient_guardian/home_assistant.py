@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import os
 import time
+from html import escape
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from datetime import datetime, timezone
@@ -996,10 +997,18 @@ class HomeAssistantBridge:
         if len(message) > 300:
             raise ValueError("message is too long")
 
+        from .notification_context import muted, preferences
+        if muted():
+            return {'status': 'suppressed', 'reason': 'ordinary_notifications_muted'}
+        prefs = preferences()
+        # Relative TTS attenuation only: never alter the device/music volume.
+        # Escape all supplied text; callers cannot inject markup or louder speech.
+        speech = ('<prosody volume="'+prefs['volume']+'">'+escape(message)+'</prosody>') if prefs['enabled'] else message
+
         response = httpx.post(
             f"{self.url}/api/services/notify/send_message",
             headers=self._headers(),
-            json={"entity_id": notify_entity, "message": message},
+            json={"entity_id": notify_entity, "message": speech},
             timeout=self.timeout,
         )
         response.raise_for_status()

@@ -122,7 +122,7 @@ def test_critical_transition_at_night_is_not_silenced(tmp_path,monkeypatch):
     monkeypatch.setattr(module,'_db',lambda: (_ for _ in ()).throw(RuntimeError()))
     monkeypatch.setattr(module,'load_inventory',lambda:{})
     monkeypatch.setattr(module,'deliver',lambda home,message,**kw:sent.append(kw) or {})
-    for t,online in [(0,(True,True,True)),(60,(True,False,False)),(120,(True,False,False))]:
+    for t,online in [(0,(True,True,True)),(60,(False,False,False)),(120,(False,False,False)),(240,(False,False,False))]:
         monkeypatch.setattr(module,'home_view',lambda online=online,**kw:view(kw['now'],online))
         run_problems(state,None,now=NOW+t)
     assert len(sent)==1 and sent[0]['critical']
