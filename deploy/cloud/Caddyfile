@@ -1,4 +1,6 @@
-{$ATLAS_DOMAIN} {
+{$ATLAS_DOMAIN} {$ATLAS_LEGACY_DOMAIN} {
+    @legacy not host {$ATLAS_DOMAIN}
+    redir @legacy https://{$ATLAS_DOMAIN}{uri} 308
     encode zstd gzip
     request_body {
         max_size 128KB
