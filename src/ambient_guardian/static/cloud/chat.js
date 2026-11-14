@@ -39,15 +39,16 @@ function bubble(role,text,meta){
   const body=document.createElement('div');body.className='message-body';formatMessage(body,text);article.append(heading,body);el('chat-messages').append(article);
 }
 function renderConversation(value){
-  el('chat-messages').replaceChildren();let latest='';
+  el('chat-messages').replaceChildren();let latest='',lastCompleted=null;
   for(const turn of value.turns||[]){
     bubble('user',turn.question,new Date(turn.created*1000).toLocaleString());
     const answer=turn.state==='pending'?'La respuesta está pendiente o no quedó confirmada. Actualiza el historial antes de reenviar.':turn.state==='failed'?(errors[turn.answer]||'La consulta no se completó. No hubo reintento automático.'):turn.answer;
     bubble('assistant',answer,turn.provider==='amd-local'?'AMD local':turn.provider==='vultr-serverless'?'Vultr · pago':turn.state==='pending'?'Pendiente':'Sin respuesta confirmada');
-    if(turn.state==='completed')latest=turn.answer;
+    if(turn.state==='completed'){latest=turn.answer;lastCompleted=turn;}
   }
   if(!(value.turns||[]).length){const p=document.createElement('p');p.className='caption';p.textContent='Esta conversación todavía no tiene mensajes.';el('chat-messages').append(p);}
   el('chat-messages').scrollTop=el('chat-messages').scrollHeight;
+  if(lastCompleted){el('provider').textContent=lastCompleted.provider==='amd-local'?'AMD local · sin tokens externos':lastCompleted.provider==='vultr-serverless'?'Vultr · consulta de pago':lastCompleted.provider;el('answer').textContent='Esta respuesta está guardada en tu historial. La evidencia corresponde a ese turno.';el('receipt').textContent=JSON.stringify({provider:lastCompleted.provider,...lastCompleted.usage,recorded_at:new Date(lastCompleted.created*1000).toISOString(),history_saved:true,physical_actions_available:false},null,2);el('receipt-details').hidden=false;}
   document.dispatchEvent(new CustomEvent('inneros-answer',{detail:{text:latest}}));
 }
 function resetChat(){activeConversation=null;el('conversation').value='';el('chat-messages').replaceChildren();const welcome=document.createElement('div');welcome.className='chat-welcome';const heading=document.createElement('h3');heading.textContent=el('chat-mode').value==='coding'?'¿Qué quieres construir?':'¿Qué quieres saber de tus sistemas?';const note=document.createElement('p');note.textContent='Escribe o dicta un mensaje. Tus conversaciones guardadas están en la lista superior.';welcome.append(heading,note);el('chat-messages').append(welcome);el('question').value='';clearAnswer();chatControls();document.dispatchEvent(new CustomEvent('inneros-answer',{detail:{text:''}}));}
