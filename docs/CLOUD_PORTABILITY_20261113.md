@@ -154,6 +154,26 @@ is part of this deployment.
 
 ## Client access and enrollment
 
+The owner-selected canonical URL is `https://os.innerchispa.us/`. Cloudflare
+manages this hostname's DNS A record; it is DNS-only, not Cloudflare HTTP proxy/WAF.
+Caddy terminates HTTPS with a publicly trusted certificate. No zone-wide SSL,
+security, email, apex or existing website settings need to change. Set
+`ATLAS_DOMAIN=os.innerchispa.us` and
+`ATLAS_LEGACY_DOMAIN=45.32.171.62.sslip.io` for this deployment: the legacy hostname
+redirects to the canonical host with HTTP 308. Both require valid TLS certificates.
+With no legacy hostname configured, the same Caddyfile serves only the primary.
+
+Update the protected edge/owner origin files to the canonical HTTPS origin before
+continuing inference tests. The connector intentionally refuses redirects and never
+forwards a bearer credential automatically across hosts. Existing accounts and
+password hashes remain in the same database. Host-only secure session cookies do
+not migrate between hostnames: sign in again on the official domain with the same
+password; do not copy cookies or embed credentials in a redirect URL.
+
+The password field includes a keyboard-accessible show/hide button with explicit
+state. Passwords remain concealed by default and are concealed again on form
+submission or when the page becomes hidden. Visibility is never persisted.
+
 The public page offers sign-in and account creation using an invitation, not open
 registration or an unverified placeholder form. Operators provision the customer's
 site and connector first, then issue an invitation bound to the customer's email
