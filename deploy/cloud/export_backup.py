@@ -1,7 +1,7 @@
 #!/usr/bin/python3
 """Forced SSH command: export only an encrypted cloud runtime backup.
 
-No provider secrets, plaintext passwords, source documents or arbitrary filenames.
+No operator provider-key files, bulk source documents or arbitrary filenames.
 The encrypted database includes account/invitation/session hashes and private chats.
 Private decryption key is kept by the owner, never on this host or Intel.
 """
