@@ -115,19 +115,30 @@ class CloudStore:
             db.execute("UPDATE requests SET state=?,usage=? WHERE id=?", (state, json.dumps(safe), request_id))
 
 
+class RelayTimeout(TimeoutError):
+    def __init__(self, delivered: bool):
+        self.delivered = delivered
+        super().__init__("edge_result_unknown" if delivered else "edge_unavailable")
+
+
 @dataclass
 class Relay:
     jobs: dict = field(default_factory=dict)
+    timeout_seconds: float = 7
 
     async def submit(self, site: str, headers: dict, body: bytes):
         if sum(x["site"] == site for x in self.jobs.values()) >= 4:
-            raise TimeoutError("edge_queue_full")
+            raise RelayTimeout(False)
         job_id = secrets.token_hex(24)
         future = asyncio.get_running_loop().create_future()
         self.jobs[job_id] = {"site": site, "future": future, "body": body,
-                             "headers": headers, "claimed": False, "expires": time.time()+7}
+                             "headers": headers, "claimed": False, "expires": time.time()+self.timeout_seconds}
         try:
-            return await asyncio.wait_for(future, timeout=7)
+            return await asyncio.wait_for(future, timeout=self.timeout_seconds)
+        except TimeoutError as exc:
+            # A delivered request may have consumed an authorization on premises.
+            # Never claim it did nothing or ask the owner to repeat it blindly.
+            raise RelayTimeout(self.jobs[job_id]["claimed"]) from exc
         finally:
             self.jobs.pop(job_id, None)
 
@@ -301,15 +312,17 @@ def create_app(*, config: dict | None = None, database: str | None = None, trans
         try:
             result = await relay.submit(site, headers, raw)
             return JSONResponse(result["response"], result["status_code"])
-        except TimeoutError:
+        except RelayTimeout as failure:
             locale = (payload.get("request") or {}).get("locale", "en-US")
             observations = store.snapshots(site, now=time.time())
             latest = min((x["age_seconds"] for x in observations), default=None)
             if locale.startswith("es"):
-                text = "No puedo contactar al conector de esta instalación. No se autorizó ni ejecutó ninguna acción."
+                text = ("La solicitud llegó a tu instalación, pero no pude confirmar el resultado. No repitas una autorización: consulta Telegram o el registro de la tarea."
+                        if failure.delivered else "No puedo contactar al conector de esta instalación. Esta solicitud no se entregó ni autorizó acciones.")
                 if latest is not None: text += f" La última lectura guardada tiene {latest} segundos. Puedes consultarla en el portal."
             else:
-                text = "I cannot reach this installation's connector. No action was authorized or executed."
+                text = ("Your installation received the request, but I could not confirm the result. Do not repeat an authorization; check Telegram or the task audit record."
+                        if failure.delivered else "I cannot reach this installation's connector. This request was not delivered and did not authorize an action.")
                 if latest is not None: text += f" The latest saved observation is {latest} seconds old and is available in the portal."
             return JSONResponse(_plain_response(text, end_session=True))
 

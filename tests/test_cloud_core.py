@@ -7,7 +7,7 @@ import httpx
 import pytest
 from starlette.testclient import TestClient
 
-from ambient_guardian.cloud_core import CloudStore, Relay, create_app, digest, utc
+from ambient_guardian.cloud_core import CloudStore, Relay, RelayTimeout, create_app, digest, utc
 from ambient_guardian.cloud_edge import validate_origin
 
 
@@ -124,6 +124,18 @@ def test_relay_consumes_once_and_cannot_cross_sites():
         assert relay.finish('a',job['id'],{'status_code':200,'response':{'ok':True}})
         assert not relay.finish('a',job['id'],{})
         assert (await task)['response']['ok'] and not relay.jobs
+    asyncio.run(scenario())
+
+
+@pytest.mark.parametrize('claimed',[False,True])
+def test_relay_timeout_distinguishes_unavailable_from_unknown_execution(claimed):
+    async def scenario():
+        relay=Relay(timeout_seconds=0.01)
+        task=asyncio.create_task(relay.submit('a',{},b'{}'))
+        await asyncio.sleep(0)
+        if claimed:assert relay.take('a')
+        with pytest.raises(RelayTimeout) as result:await task
+        assert result.value.delivered is claimed and not relay.jobs
     asyncio.run(scenario())
 
 
