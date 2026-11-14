@@ -2,18 +2,22 @@
   "manifest": {
     "manifestVersion": "1.0",
     "permissions": [
-      {"name": "alexa::person_id:read"},
-      {"name": "alexa::authenticate:2:mandatory"}
+      {
+        "name": "alexa::person_id:read"
+      },
+      {
+        "name": "alexa::authenticate:2:mandatory"
+      }
     ],
     "publishingInformation": {
-      "category": "KNOWLEDGE_AND_TRIVIA",
+      "category": "BUSINESS_AND_FINANCE",
       "distributionCountries": [],
       "isAvailableWorldwide": true,
       "locales": {
         "en-US": {
           "name": "Atlas Control",
-          "summary": "A governed voice interface for live InnerOS home and infrastructure telemetry.",
-          "description": "Atlas Control connects Alexa to InnerOS for read-only energy, UniFi, server, Raspberry Pi, camera, alarm, and VoiceOps status. Sensitive operations remain governed and require the configured approval path.",
+          "summary": "Monitor authorized infrastructure and review bounded InnerOS operations by voice.",
+          "description": "Atlas Control is the voice interface for authorized InnerOS infrastructure operators. A provisioned InnerOS service account and configured infrastructure are required; this is not a standalone monitoring service.\n\nAsk for current energy and outage information, network and access-point status, servers, cameras, recorders, alarms, and available VoiceOps services. Reports depend on the sources configured for your installation and identify missing or stale evidence. Probe failures do not by themselves establish a power outage or a physical disconnection.\n\nAsk about the last infrastructure alert, request a read-only follow-up using current measurements and documented topology, pause ordinary spoken notifications, or lower notification speech. Critical alerts remain separate.\n\nSensitive task approvals require the enrolled owner voice profile and Amazon profile PIN verification. An eligible request can be approved through Alexa or the configured owner approval channel; the first valid decision closes the shared request. Scope, expiry, budget limits and execution policies remain in force. Preparing a request does not itself execute work or restart equipment. Telephone callbacks and physical operations require their own authorization.\n\nApproved external services or telephone usage may incur charges in your existing accounts. Atlas does not collect payment card details or make purchases through Alexa Shopping Actions.\n\nAmazon account linking and Skills Personalization are used. PIN Confirmation is mandatory for this skill. Atlas does not receive your PIN digits. This skill is not an emergency response service, does not guarantee continuous monitoring, and does not replace on-site safety systems.",
           "examplePhrases": [
             "Alexa, open Atlas Control",
             "Alexa, ask Atlas Control for the energy status",
@@ -24,12 +28,14 @@
             "energy",
             "infrastructure",
             "automation"
-          ]
+          ],
+          "smallIconUri": "https://raw.githubusercontent.com/Rafa-Innerchispa/inneros-ambient-guardian-amazon-2026/main/docs/store/atlas-control-108.png",
+          "largeIconUri": "https://raw.githubusercontent.com/Rafa-Innerchispa/inneros-ambient-guardian-amazon-2026/main/docs/store/atlas-control-512.png"
         },
         "es-US": {
           "name": "Atlas Control",
-          "summary": "Interfaz de voz gobernada para la telemetría en vivo de InnerOS.",
-          "description": "Atlas Control conecta Alexa con InnerOS para consultar energía, UniFi, servidores, Raspberry Pi, cámaras, alarma y VoiceOps. Las operaciones sensibles conservan el flujo de autorización configurado.",
+          "summary": "Consulta infraestructura autorizada y revisa operaciones acotadas de InnerOS por voz.",
+          "description": "Atlas Control es la interfaz de voz para operadores autorizados de infraestructura InnerOS. Necesitas una cuenta de servicio InnerOS y una instalación previamente configurada; no es un servicio de monitoreo universal independiente.\n\nConsulta el estado actual de energía y el historial de apagones, la red y sus puntos de acceso, servidores, cámaras, grabadores, alarmas y los servicios VoiceOps disponibles. Los informes dependen de las fuentes de tu instalación e indican cuándo falta evidencia o una lectura es antigua. Una prueba de acceso fallida no demuestra por sí sola un apagón ni una desconexión física.\n\nPregunta por el último aviso de infraestructura, pide una revisión de solo lectura con las mediciones actuales y la topología documentada, pausa los avisos hablados ordinarios o baja su voz. Las alertas críticas mantienen su política independiente.\n\nLas aprobaciones de tareas sensibles requieren el perfil de voz del propietario vinculado y la verificación nativa del PIN de perfil de Amazon. Puedes decidir una solicitud válida mediante Alexa o el canal de aprobación configurado; la primera decisión válida cierra la solicitud compartida. Se mantienen los controles de alcance, caducidad, presupuesto y ejecución. Preparar una solicitud no ejecuta trabajo ni reinicia equipos. Las llamadas y las operaciones físicas requieren su propia autorización.\n\nEl uso autorizado de servicios externos o de telefonía puede generar cargos en tus cuentas existentes. Atlas no recoge datos de tarjeta ni realiza compras mediante Alexa Shopping Actions.\n\nSe utiliza vinculación de cuenta y personalización de skills de Amazon. La confirmación por PIN es obligatoria para esta skill; Atlas no recibe los dígitos del PIN. No es un servicio de emergencia, no garantiza monitoreo continuo y no reemplaza los sistemas de seguridad del sitio.",
           "examplePhrases": [
             "Alexa, abre Atlas Control",
             "Alexa, pide a Atlas Control el estado de energía",
@@ -40,12 +46,14 @@
             "energía",
             "infraestructura",
             "automatización"
-          ]
+          ],
+          "smallIconUri": "https://raw.githubusercontent.com/Rafa-Innerchispa/inneros-ambient-guardian-amazon-2026/main/docs/store/atlas-control-108.png",
+          "largeIconUri": "https://raw.githubusercontent.com/Rafa-Innerchispa/inneros-ambient-guardian-amazon-2026/main/docs/store/atlas-control-512.png"
         },
         "es-MX": {
           "name": "Atlas Control",
-          "summary": "Interfaz de voz gobernada para la telemetría en vivo de InnerOS.",
-          "description": "Atlas Control conecta Alexa con InnerOS para consultar energía, UniFi, servidores, Raspberry Pi, cámaras, alarma y VoiceOps. Las operaciones sensibles conservan el flujo de autorización configurado.",
+          "summary": "Consulta infraestructura autorizada y revisa operaciones acotadas de InnerOS por voz.",
+          "description": "Atlas Control es la interfaz de voz para operadores autorizados de infraestructura InnerOS. Necesitas una cuenta de servicio InnerOS y una instalación previamente configurada; no es un servicio de monitoreo universal independiente.\n\nConsulta el estado actual de energía y el historial de apagones, la red y sus puntos de acceso, servidores, cámaras, grabadores, alarmas y los servicios VoiceOps disponibles. Los informes dependen de las fuentes de tu instalación e indican cuándo falta evidencia o una lectura es antigua. Una prueba de acceso fallida no demuestra por sí sola un apagón ni una desconexión física.\n\nPregunta por el último aviso de infraestructura, pide una revisión de solo lectura con las mediciones actuales y la topología documentada, pausa los avisos hablados ordinarios o baja su voz. Las alertas críticas mantienen su política independiente.\n\nLas aprobaciones de tareas sensibles requieren el perfil de voz del propietario vinculado y la verificación nativa del PIN de perfil de Amazon. Puedes decidir una solicitud válida mediante Alexa o el canal de aprobación configurado; la primera decisión válida cierra la solicitud compartida. Se mantienen los controles de alcance, caducidad, presupuesto y ejecución. Preparar una solicitud no ejecuta trabajo ni reinicia equipos. Las llamadas y las operaciones físicas requieren su propia autorización.\n\nEl uso autorizado de servicios externos o de telefonía puede generar cargos en tus cuentas existentes. Atlas no recoge datos de tarjeta ni realiza compras mediante Alexa Shopping Actions.\n\nSe utiliza vinculación de cuenta y personalización de skills de Amazon. La confirmación por PIN es obligatoria para esta skill; Atlas no recibe los dígitos del PIN. No es un servicio de emergencia, no garantiza monitoreo continuo y no reemplaza los sistemas de seguridad del sitio.",
           "examplePhrases": [
             "Alexa, abre Atlas Control",
             "Alexa, pide a Atlas Control el estado de energía",
@@ -56,12 +64,14 @@
             "energía",
             "infraestructura",
             "automatización"
-          ]
+          ],
+          "smallIconUri": "https://raw.githubusercontent.com/Rafa-Innerchispa/inneros-ambient-guardian-amazon-2026/main/docs/store/atlas-control-108.png",
+          "largeIconUri": "https://raw.githubusercontent.com/Rafa-Innerchispa/inneros-ambient-guardian-amazon-2026/main/docs/store/atlas-control-512.png"
         },
         "es-ES": {
           "name": "Atlas Control",
-          "summary": "Interfaz de voz gobernada para la telemetría en vivo de InnerOS.",
-          "description": "Atlas Control conecta Alexa con InnerOS para consultar energía, UniFi, servidores, Raspberry Pi, cámaras, alarma y VoiceOps. Las operaciones sensibles conservan el flujo de autorización configurado.",
+          "summary": "Consulta infraestructura autorizada y revisa operaciones acotadas de InnerOS por voz.",
+          "description": "Atlas Control es la interfaz de voz para operadores autorizados de infraestructura InnerOS. Necesitas una cuenta de servicio InnerOS y una instalación previamente configurada; no es un servicio de monitoreo universal independiente.\n\nConsulta el estado actual de energía y el historial de apagones, la red y sus puntos de acceso, servidores, cámaras, grabadores, alarmas y los servicios VoiceOps disponibles. Los informes dependen de las fuentes de tu instalación e indican cuándo falta evidencia o una lectura es antigua. Una prueba de acceso fallida no demuestra por sí sola un apagón ni una desconexión física.\n\nPregunta por el último aviso de infraestructura, pide una revisión de solo lectura con las mediciones actuales y la topología documentada, pausa los avisos hablados ordinarios o baja su voz. Las alertas críticas mantienen su política independiente.\n\nLas aprobaciones de tareas sensibles requieren el perfil de voz del propietario vinculado y la verificación nativa del PIN de perfil de Amazon. Puedes decidir una solicitud válida mediante Alexa o el canal de aprobación configurado; la primera decisión válida cierra la solicitud compartida. Se mantienen los controles de alcance, caducidad, presupuesto y ejecución. Preparar una solicitud no ejecuta trabajo ni reinicia equipos. Las llamadas y las operaciones físicas requieren su propia autorización.\n\nEl uso autorizado de servicios externos o de telefonía puede generar cargos en tus cuentas existentes. Atlas no recoge datos de tarjeta ni realiza compras mediante Alexa Shopping Actions.\n\nSe utiliza vinculación de cuenta y personalización de skills de Amazon. La confirmación por PIN es obligatoria para esta skill; Atlas no recibe los dígitos del PIN. No es un servicio de emergencia, no garantiza monitoreo continuo y no reemplaza los sistemas de seguridad del sitio.",
           "examplePhrases": [
             "Alexa, abre Atlas Control",
             "Alexa, pide a Atlas Control el estado de energía",
@@ -72,10 +82,12 @@
             "energía",
             "infraestructura",
             "automatización"
-          ]
+          ],
+          "smallIconUri": "https://raw.githubusercontent.com/Rafa-Innerchispa/inneros-ambient-guardian-amazon-2026/main/docs/store/atlas-control-108.png",
+          "largeIconUri": "https://raw.githubusercontent.com/Rafa-Innerchispa/inneros-ambient-guardian-amazon-2026/main/docs/store/atlas-control-512.png"
         }
       },
-      "testingInstructions": "Use the development-stage skill. Open Atlas Control, then ask for energy, WiFi, server, Raspberry Pi, or camera status. Status queries are read-only. Do not execute phone calls or physical restart actions during review."
+      "testingInstructions": "PRE-SUBMISSION DRAFT. Do not submit until an isolated reviewer account and environment are provisioned. Never share production owner credentials, profile PIN, Telegram access or phone with reviewers.\nThe current deployment is owner-account-bound. Verify an unassigned Amazon account cannot query private sources, prepare actions or relink the owner voice. A general OAuth token does not assign an installation. Native owner enrollment has separately passed a physical Echo test (200 / ACHIEVED / confidence400); this is not a reviewer grant.\nThe isolated review must cover supported languages, account linking, native voice/PIN, read-only telemetry, stale-source reporting, last-alert follow-up, documented topology, ordinary mute/resume with critical bypass, stop/cancel, scope and budget checks, expiry and first-valid-decision closure across channels. Identify virtual test assets explicitly. No production calls, paid inference, physical restarts or network configuration changes are authorized by these instructions."
     },
     "apis": {
       "custom": {
@@ -86,6 +98,12 @@
         "interfaces": [],
         "locales": {}
       }
+    },
+    "privacyAndCompliance": {
+      "allowsPurchases": true,
+      "containsAds": false,
+      "isChildDirected": false,
+      "usesPersonalInfo": true
     }
   }
 }

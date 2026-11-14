@@ -766,7 +766,51 @@ def _guardian_query(
     return query
 
 
+def _deployment_owner_user_id() -> str:
+    """The provisioned deployment owner, not anyone with an OAuth token.
+
+    Amazon's signed userId binds read access to this installation's account.
+    Sensitive approvals independently require the enrolled person and PIN400.
+    An operator can explicitly pin a bootstrap account before voice enrollment;
+    an arbitrary first visitor never becomes the deployment owner.
+    """
+    from .ops_decisions import runtime_broker
+    from .ops_voice_approval import BINDINGS
+    binding = runtime_broker().db[BINDINGS].find_one({'_id': 'owner'}) or {}
+    return str(binding.get('user_id') or os.getenv('ATLAS_DEPLOYMENT_OWNER_USER_ID', '')).strip()
+
+
+def _deployment_owner_guard(payload: dict[str, Any]) -> dict[str, Any] | None:
+    if os.getenv('ATLAS_DEPLOYMENT_OWNER_GATE', '1') == '0':
+        # Explicit isolated-test compatibility only; never use on a public skill.
+        return None
+    request = payload.get('request') or {}
+    name = ((request.get('intent') or {}).get('name') or '')
+    if request.get('type') == 'SessionEndedRequest' or name in {
+        'AMAZON.StopIntent', 'AMAZON.CancelIntent', 'AMAZON.NavigateHomeIntent'}:
+        return None
+    spanish = _response_locale(payload, request).startswith('es')
+    user = str(((((payload.get('context') or {}).get('System') or {}).get('user') or {}).get('userId')) or '')
+    try:
+        expected = _deployment_owner_user_id()
+    except Exception:
+        return _plain_response(
+            'No puedo verificar el acceso a esta instalación. No consulté infraestructura ni autoricé acciones.' if spanish else
+            'I cannot verify access to this installation. No infrastructure was queried and no action was authorized.', end_session=True)
+    if user and expected and user == expected:
+        return None
+    response = _plain_response(
+        'Atlas Control requiere una cuenta InnerOS y una instalación autorizada. Esta cuenta Amazon no está asignada a esta instalación. No se compartió información privada ni se autorizó ninguna acción.' if spanish else
+        'Atlas Control requires an InnerOS service account and a provisioned installation. This Amazon account is not assigned to this installation. No private information was shared and no action was authorized.', end_session=True)
+    if os.getenv('ATLAS_OPS_ACCOUNT_LINKING_AVAILABLE', '0') == '1' and not _access_token(payload):
+        response['response']['card'] = {'type': 'LinkAccount'}
+    return response
+
+
 def _dispatch(payload: dict[str, Any]) -> dict[str, Any]:
+    deployment_response = _deployment_owner_guard(payload)
+    if deployment_response is not None:
+        return deployment_response
     _capture_speaker_candidate(payload)
     request_payload = payload.get("request") or {}
     request_type = str(request_payload.get("type") or "")
