@@ -98,10 +98,12 @@ Before adding a cloud Mongo secondary, establish all of the following:
 
 ## Verification and practical limits
 
-- 112 selected tests passed, including the new cloud tests and existing Alexa
+- 114 selected tests passed, including the new cloud tests and existing Alexa
   gateway tests: tenant/role isolation, staleness, replay rejection, concurrent
   request allowance, provider failure without retry/refund, expiry, unsigned ASK,
   absent physical execution route and single-consumption relay.
+- A delivered relay timeout reports an unknown outcome and directs the owner to
+  the existing audit/channel, never a false assertion that nothing happened.
 - Public health 200; unauthenticated private read 401; unsigned ASK POST 400.
 - Real authenticated observations arrived for house energy, Wi-Fi/radio occupancy,
   Intel services/resources, and Bellini network probes. A missing probe is not proof
@@ -125,9 +127,6 @@ cloud Compose project. This does not stop billing for the allocated Vultr VM.
 Deleting or resizing resources, moving the Amazon endpoint, enabling arbitrary
 agents, and changing Mongo membership are separate controlled operations.
 
-The historical $6 account is separate: registered mailbox `rlopez@innerspark.live`,
-case IFD-44QCQ. Existing July responses retained OAuth; owner follow-ups on Nov 7
-and Nov 10 corrected the unusable Google binding. No new support reply after those
-follow-ups was found in the connected Gmail search, including spam. This does not
-prove every message in the standalone company mailbox was inspected. No cancellation,
-refund, credit transfer or access recovery is claimed, and no support email was sent.
+Account-recovery correspondence is outside this public technical document and
+remains in the owner's private report. No refund, cancellation or account change
+is part of this deployment.
