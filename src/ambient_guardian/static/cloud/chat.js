@@ -50,7 +50,7 @@ function renderConversation(value){
   el('chat-messages').scrollTop=el('chat-messages').scrollHeight;
   document.dispatchEvent(new CustomEvent('inneros-answer',{detail:{text:latest}}));
 }
-function resetChat(){activeConversation=null;el('conversation').value='';el('chat-messages').replaceChildren();el('question').value='';clearAnswer();chatControls();document.dispatchEvent(new CustomEvent('inneros-answer',{detail:{text:''}}));}
+function resetChat(){activeConversation=null;el('conversation').value='';el('chat-messages').replaceChildren();const welcome=document.createElement('div');welcome.className='chat-welcome';const heading=document.createElement('h3');heading.textContent=el('chat-mode').value==='coding'?'¿Qué quieres construir?':'¿Qué quieres saber de tus sistemas?';const note=document.createElement('p');note.textContent='Escribe o dicta un mensaje. Tus conversaciones guardadas están en la lista superior.';welcome.append(heading,note);el('chat-messages').append(welcome);el('question').value='';clearAnswer();chatControls();document.dispatchEvent(new CustomEvent('inneros-answer',{detail:{text:''}}));}
 async function loadHistory(){
   if(!connected||!cookieSession){el('conversation').replaceChildren(new Option('Inicia sesión para guardar',''));el('history-status').textContent='Inicia sesión con tu cuenta para guardar conversaciones.';chatControls();return;}
   const epoch=session,selected=activeConversation?.id||'';
