@@ -164,7 +164,10 @@ def speech_chunks(message: str) -> list[str]:
     return chunks[:6]
 
 
-def deliver(home: HomeAssistantBridge, message: str, *, tag: str, now: float, voice: bool=True, critical: bool=False, voice_message: str | None=None):
+def deliver(home: HomeAssistantBridge, message: str, *, tag: str, now: float, voice: bool=True, critical: bool=False, voice_message: str | None=None, context: dict | None=None):
+    from . import notification_context as notices
+    if not notices.repeat_allowed(tag,message,now=now,critical=critical):
+        return {'repeat_suppressed':True,'echo_request_accepted_by_ha':False}
     service=os.getenv('AMBIENT_GUARDIAN_UNIFI_RF_MOBILE_SERVICE','mobile_app_infinix_x6873')
     if not re.fullmatch(r'mobile_app_[a-zA-Z0-9_]+',service):raise ValueError('Invalid mobile service')
     with httpx.Client(base_url=home.url,headers=home._headers(),timeout=5,trust_env=False) as client:
@@ -173,13 +176,22 @@ def deliver(home: HomeAssistantBridge, message: str, *, tag: str, now: float, vo
         response.raise_for_status()
     local=datetime.fromtimestamp(now,timezone.utc).astimezone(ZoneInfo('America/Guayaquil'))
     echo_accepted=False;chunks_accepted=0
-    if voice and (critical or 8<=local.hour<22):
+    if voice and (critical or 8<=local.hour<22) and (critical or not notices.muted(now=now)):
         target=os.getenv('AMBIENT_GUARDIAN_UNIFI_RF_ECHO_TARGET','notify.echo_cuarto_speak')
         try:
-            for chunk in speech_chunks(voice_message or message):
-                home.speak(target,chunk);chunks_accepted+=1
-            echo_accepted=True
+            with notices.critical_delivery(critical):
+                spoken_text=voice_message or message
+                if len(spoken_text)>280:
+                    english=os.getenv('AMBIENT_GUARDIAN_UNIFI_RF_ALERT_LOCALE','en-US').startswith('en')
+                    spoken_text=spoken_text[:190].rsplit(' ',1)[0]+('. Ask Atlas Control to investigate the last alert.' if english else '. Pide a Atlas Control investigar la última alerta.')
+                for chunk in speech_chunks(spoken_text):
+                    result=home.speak(target,chunk)
+                    if isinstance(result,dict) and result.get('status')=='suppressed':break
+                    chunks_accepted+=1
+            echo_accepted=chunks_accepted>0
         except (RuntimeError,PermissionError,ValueError,httpx.HTTPError):pass
+    try:notices.record(tag,message,now=now,critical=critical,context=context,spoken=echo_accepted)
+    except (OSError,sqlite3.Error,TypeError,ValueError):pass  # Evidence failure must not block critical delivery.
     return {'mobile_notification_accepted_by_ha':True,'echo_request_accepted_by_ha':echo_accepted,'speech_chunks_accepted':chunks_accepted}
 
 
@@ -300,21 +312,22 @@ def run_problems(state: NoticeState, home: HomeAssistantBridge, *, now: float, f
             since=source.get('missing_since') or now
             if now-since>=300 and not source.get('notified'):
                 message=(f'Rafael, monitoring is degraded for {view["site"]}. No recent readings for at least five minutes. Device and power status cannot be confirmed.' if english else f'Rafael, monitoreo degradado de {view["site"]}. Sin lecturas recientes durante al menos cinco minutos. No se puede confirmar el estado de los equipos ni de la energía.')
-                receipt=deliver(home,message,tag='monitor-unavailable-'+view['site'],now=now,critical=True)
+                receipt=deliver(home,message,tag='monitor-unavailable-'+view['site'],now=now,critical=False,voice=False)
                 source['notified']=True;events.append({'source_unavailable':view['site'],**receipt})
             state.put(source_key,{**source,'missing_since':since})
         else:state.put(source_key,{})
         key='incidents:'+view['site'];previous=state.get(key)
-        updated,event=observe(view,previous)
+        updated,event=observe(view,previous,confirmations=3,down_seconds=180,recovery_seconds=120)
         if event:
             fast=state.get('fast-bellini')
             if view['site']=='Bellini' and fast.get('stable')=='down' and now-fast.get('checked_at',0)<=15:
                 # The fast sentinel already owns these reachability alerts.
                 event['down']=[key for key in event['down'] if key not in {'bellini_nvr_dahua','bellini_gw_gcc6010'}]
-                event['critical']=bool(event['down'])
+                if not event['down']:event['critical']=False
             if not event['down'] and not event['recovered']:
                 state.put(key,updated);continue
-            receipt=deliver(home,incident_message(view,event,english=english),tag='incident-'+view['site'],now=now,critical=event['critical']) if event['critical'] or 8<=local.hour<22 else {'quiet_hours':True}
+            receipt=deliver(home,incident_message(view,event,english=english),tag='incident-'+view['site'],now=now,
+                critical=event['critical'],voice=event['critical'],context={'view':{k:v for k,v in view.items() if k!='snapshot'},'event':event}) if event['critical'] or 8<=local.hour<22 else {'quiet_hours':True}
             events.append({**event,**receipt})
         state.put(key,updated)
     bucket=str(int(now//1200))

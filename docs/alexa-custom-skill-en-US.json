@@ -564,6 +564,137 @@
         {
           "name": "AMAZON.NoIntent",
           "samples": []
+        },
+        {
+          "name": "LatestNoticeIntent",
+          "slots": [],
+          "samples": [
+            "what was that notification",
+            "tell me about the last alert",
+            "what was the last InnerOS alert",
+            "explain the last notification"
+          ]
+        },
+        {
+          "name": "InvestigateNoticeIntent",
+          "slots": [],
+          "samples": [
+            "investigate that alert",
+            "investigate the last event",
+            "tell me more about that alert",
+            "investigate further"
+          ]
+        },
+        {
+          "name": "NoticeDeviceIntent",
+          "slots": [
+            {
+              "name": "device",
+              "type": "AMAZON.SearchQuery"
+            }
+          ],
+          "samples": [
+            "investigate Bellini device {device}",
+            "check Bellini equipment {device}",
+            "tell me more about Bellini device {device}"
+          ]
+        },
+        {
+          "name": "MuteNoticesIntent",
+          "slots": [
+            {
+              "name": "duration",
+              "type": "AMAZON.DURATION"
+            }
+          ],
+          "samples": [
+            "mute InnerOS notifications",
+            "pause InnerOS notifications",
+            "mute InnerOS notifications for {duration}",
+            "silence InnerOS notifications for {duration}"
+          ]
+        },
+        {
+          "name": "ResumeNoticesIntent",
+          "slots": [],
+          "samples": [
+            "resume InnerOS notifications",
+            "turn InnerOS notifications back on"
+          ]
+        },
+        {
+          "name": "QuietNoticesIntent",
+          "slots": [],
+          "samples": [
+            "lower the notification voice",
+            "make InnerOS notifications quieter",
+            "lower InnerOS notification volume"
+          ]
+        },
+        {
+          "name": "LatestNoticeSpanishIntent",
+          "slots": [],
+          "samples": [
+            "qué fue esa notificación",
+            "explícame la última alerta",
+            "cuál fue el último aviso de InnerOS",
+            "dime la última notificación"
+          ]
+        },
+        {
+          "name": "InvestigateNoticeSpanishIntent",
+          "slots": [],
+          "samples": [
+            "investiga esa alerta",
+            "investiga el último evento",
+            "investiga más",
+            "dime más sobre ese aviso"
+          ]
+        },
+        {
+          "name": "NoticeDeviceSpanishIntent",
+          "slots": [
+            {
+              "name": "device",
+              "type": "AMAZON.SearchQuery"
+            }
+          ],
+          "samples": [
+            "investiga el equipo de Bellini {device}",
+            "revisa el equipo de Bellini {device}",
+            "dime más del equipo de Bellini {device}"
+          ]
+        },
+        {
+          "name": "MuteNoticesSpanishIntent",
+          "slots": [
+            {
+              "name": "duration",
+              "type": "AMAZON.DURATION"
+            }
+          ],
+          "samples": [
+            "silencia las notificaciones de InnerOS",
+            "pausa los avisos de InnerOS",
+            "silencia las notificaciones de InnerOS por {duration}",
+            "pausa los avisos de InnerOS durante {duration}"
+          ]
+        },
+        {
+          "name": "ResumeNoticesSpanishIntent",
+          "slots": [],
+          "samples": [
+            "reactiva las notificaciones de InnerOS",
+            "reanuda los avisos de InnerOS"
+          ]
+        },
+        {
+          "name": "QuietNoticesSpanishIntent",
+          "slots": [],
+          "samples": [
+            "baja la voz de las notificaciones",
+            "baja el volumen de los avisos de InnerOS"
+          ]
         }
       ],
       "types": [
@@ -573,61 +704,99 @@
             {
               "name": {
                 "value": "Grandstream",
-                "synonyms": ["central Grandstream", "la central", "telefonía", "VoiceOps"]
+                "synonyms": [
+                  "central Grandstream",
+                  "la central",
+                  "telefonía",
+                  "VoiceOps"
+                ]
               }
             },
             {
               "name": {
                 "value": "wifi",
-                "synonyms": ["red wifi", "wifi de la casa", "UniFi", "red UniFi"]
+                "synonyms": [
+                  "red wifi",
+                  "wifi de la casa",
+                  "UniFi",
+                  "red UniFi"
+                ]
               }
             },
             {
               "name": {
                 "value": "cámaras",
-                "synonyms": ["camaras", "grabadores", "NVR"]
+                "synonyms": [
+                  "camaras",
+                  "grabadores",
+                  "NVR"
+                ]
               }
             },
             {
               "name": {
                 "value": "servidores",
-                "synonyms": ["servidores de InnerOS", "flota de servidores", "Intel", "AMD"]
+                "synonyms": [
+                  "servidores de InnerOS",
+                  "flota de servidores",
+                  "Intel",
+                  "AMD"
+                ]
               }
             },
             {
               "name": {
                 "value": "energía",
-                "synonyms": ["energia", "electricidad", "panel solar", "inversor", "batería"]
+                "synonyms": [
+                  "energia",
+                  "electricidad",
+                  "panel solar",
+                  "inversor",
+                  "batería"
+                ]
               }
             },
             {
               "name": {
                 "value": "Raspberry Pi",
-                "synonyms": ["Raspberry", "las Raspberry Pi"]
+                "synonyms": [
+                  "Raspberry",
+                  "las Raspberry Pi"
+                ]
               }
             },
             {
               "name": {
                 "value": "alarma",
-                "synonyms": ["alarma Intebras", "seguridad"]
+                "synonyms": [
+                  "alarma Intebras",
+                  "seguridad"
+                ]
               }
             },
             {
               "name": {
                 "value": "DMX",
-                "synonyms": ["luces DMX", "Art Net"]
+                "synonyms": [
+                  "luces DMX",
+                  "Art Net"
+                ]
               }
             },
             {
               "name": {
                 "value": "Ring",
-                "synonyms": ["demo de Ring"]
+                "synonyms": [
+                  "demo de Ring"
+                ]
               }
             },
             {
               "name": {
                 "value": "Bellini",
-                "synonyms": ["red Bellini"]
+                "synonyms": [
+                  "red Bellini"
+                ]
               }
             }
           ]
@@ -638,31 +807,49 @@
             {
               "name": {
                 "value": "unifi 03",
-                "synonyms": ["UniFi zero three", "UniFi cero tres", "bedroom", "cuarto"]
+                "synonyms": [
+                  "UniFi zero three",
+                  "UniFi cero tres",
+                  "bedroom",
+                  "cuarto"
+                ]
               }
             },
             {
               "name": {
                 "value": "living",
-                "synonyms": ["U7 Living", "living access point"]
+                "synonyms": [
+                  "U7 Living",
+                  "living access point"
+                ]
               }
             },
             {
               "name": {
                 "value": "estudio",
-                "synonyms": ["study", "studio", "study access point"]
+                "synonyms": [
+                  "study",
+                  "studio",
+                  "study access point"
+                ]
               }
             },
             {
               "name": {
                 "value": "u6 plus",
-                "synonyms": ["U6 plus access point"]
+                "synonyms": [
+                  "U6 plus access point"
+                ]
               }
             },
             {
               "name": {
                 "value": "gateway",
-                "synonyms": ["Cloud Gateway", "Cloud Gateway Ultra", "router"]
+                "synonyms": [
+                  "Cloud Gateway",
+                  "Cloud Gateway Ultra",
+                  "router"
+                ]
               }
             }
           ]

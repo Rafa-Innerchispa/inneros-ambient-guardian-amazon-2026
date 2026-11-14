@@ -787,6 +787,10 @@ def _dispatch(payload: dict[str, Any]) -> dict[str, Any]:
     ops_response = handle_ops_approval(payload)
     if ops_response is not None:
         return ops_response
+    from .notification_voice import handle as handle_notification_voice
+    notice_response = handle_notification_voice(payload)
+    if notice_response is not None:
+        return notice_response
     if request_type == "LaunchRequest":
         # Alexa does not include the spoken invocation phrase in a LaunchRequest.
         # A device configured for en-US can therefore receive a Spanish invocation
