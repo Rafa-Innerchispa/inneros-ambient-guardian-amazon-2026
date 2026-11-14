@@ -9,12 +9,14 @@ from starlette.testclient import TestClient
 
 from ambient_guardian.cloud_core import CloudStore, Relay, RelayTimeout, create_app, digest, utc
 from ambient_guardian.cloud_edge import validate_origin
+from ambient_guardian.cloud_model import LOCAL_MODEL, LOCAL_URL, local_answer
 
 
-def setup(tmp_path, *, inference=None, transport=None):
+def setup(tmp_path, *, inference=None, transport=None, local=False):
     config={'sites':{'a':{'owner_sha256':digest('owner-a'),'connector_sha256':digest('node-a')},
                      'b':{'owner_sha256':digest('owner-b'),'connector_sha256':digest('node-b')}}}
     if inference:config['inference']=inference
+    config['local_model_enabled']=local
     return TestClient(create_app(config=config,database=str(tmp_path/'state.sqlite3'),transport=transport))
 
 
@@ -23,6 +25,9 @@ def observation(**changes):
 
 
 def auth(token):return {'Authorization':'Bearer '+token}
+
+
+def paid(question):return {'question':question,'engine':'vultr','confirm_paid':True}
 
 
 def test_roles_and_sites_are_isolated(tmp_path):
@@ -79,8 +84,8 @@ def test_provider_failure_is_not_retried_or_refunded(tmp_path):
         return httpx.Response(503,json={'error':'unavailable'})
     client=setup(tmp_path,inference=infer_config(tmp_path),transport=httpx.MockTransport(provider))
     client.post('/api/sites/a/snapshots',headers=auth('node-a'),json=observation())
-    assert client.post('/api/sites/a/ask',headers=auth('owner-a'),json={'question':'Status?'}).status_code==502
-    assert client.post('/api/sites/a/ask',headers=auth('owner-a'),json={'question':'Status?'}).status_code==429
+    assert client.post('/api/sites/a/ask',headers=auth('owner-a'),json=paid('Status?')).status_code==502
+    assert client.post('/api/sites/a/ask',headers=auth('owner-a'),json=paid('Status?')).status_code==429
     assert len(calls)==1
 
 
@@ -94,7 +99,7 @@ def test_real_provider_receipt_and_no_tools_or_addresses(tmp_path):
                                        'usage':{'prompt_tokens':100,'completion_tokens':8,'total_tokens':108}})
     client=setup(tmp_path,inference=infer_config(tmp_path),transport=httpx.MockTransport(provider))
     client.post('/api/sites/a/snapshots',headers=auth('node-a'),json=observation(facts=['192.168.1.1 responded']))
-    r=client.post('/api/sites/a/ask',headers=auth('owner-a'),json={'question':'What is happening?'})
+    r=client.post('/api/sites/a/ask',headers=auth('owner-a'),json=paid('What is happening?'))
     assert r.status_code==200 and r.json()['inference_performed']
     assert r.json()['usage']['total_tokens']==108 and not r.json()['physical_actions_available']
 
@@ -103,7 +108,7 @@ def test_expired_authorization_never_calls_provider(tmp_path):
     def forbidden(request):raise AssertionError('No inference authorized')
     client=setup(tmp_path,inference=infer_config(tmp_path,disable_on='2000-01-01'),transport=httpx.MockTransport(forbidden))
     client.post('/api/sites/a/snapshots',headers=auth('node-a'),json=observation())
-    assert client.post('/api/sites/a/ask',headers=auth('owner-a'),json={'question':'Status?'}).status_code==403
+    assert client.post('/api/sites/a/ask',headers=auth('owner-a'),json=paid('Status?')).status_code==403
 
 
 def test_no_data_no_model_and_unsigned_alexa_fails_closed(tmp_path, monkeypatch):
@@ -142,3 +147,66 @@ def test_relay_timeout_distinguishes_unavailable_from_unknown_execution(claimed)
 @pytest.mark.parametrize('url',['http://host','https://user:pass@host','https://host/path','https://host?token=secret','https://host/#fragment'])
 def test_edge_origin_cannot_redirect_local_credentials(url):
     with pytest.raises(ValueError):validate_origin(url)
+
+
+def test_local_unavailable_never_spends_paid_allowance(tmp_path):
+    def forbidden(request):raise AssertionError('Unexpected paid fallback')
+    with setup(tmp_path,local=True,inference=infer_config(tmp_path),transport=httpx.MockTransport(forbidden)) as client:
+        client.post('/api/sites/a/snapshots',headers=auth('node-a'),json=observation())
+        r=client.post('/api/sites/a/ask',headers=auth('owner-a'),json={'question':'Status?'})
+        assert r.status_code==503 and r.json()['paid_fallback_performed'] is False
+        assert client.post('/api/sites/a/ask',headers=auth('owner-a'),json={'question':'Status?','engine':'vultr'}).status_code==400
+        with client.app.state.store.connect() as db:
+            assert db.execute('select count(*) from requests').fetchone()[0]==0
+
+
+def test_local_model_round_trip_isolated_and_no_paid_spend(tmp_path):
+    def forbidden(request):raise AssertionError('Unexpected paid fallback')
+    with setup(tmp_path,local=True,inference=infer_config(tmp_path),transport=httpx.MockTransport(forbidden)) as client:
+        client.post('/api/sites/a/snapshots',headers=auth('node-a'),json=observation(facts=['192.168.1.1 responded']))
+        client.post('/api/sites/b/snapshots',headers=auth('node-b'),json=observation(facts=['Other customer private data']))
+        client.get('/api/sites/a/jobs',headers=auth('node-a'))
+        with ThreadPoolExecutor() as pool:
+            future=pool.submit(client.post,'/api/sites/a/ask',headers=auth('owner-a'),json={'question':'Status?'})
+            job=None
+            for _ in range(100):
+                job=client.get('/api/sites/a/jobs',headers=auth('node-a')).json()['job']
+                if job:break
+                time.sleep(.01)
+            assert job and job['kind']=='local_model'
+            assert 'Other customer' not in job['body'] and '192.168.1.1' not in job['body']
+            assert client.get('/api/sites/a/jobs',headers=auth('node-a')).json()['job'] is None
+            answer={'ok':True,'answer':'Only the measured site is available.','model':LOCAL_MODEL,'usage':{'total_tokens':52}}
+            path='/api/sites/a/model-jobs/'+job['id']
+            assert client.post(path,headers=auth('owner-a'),json=answer).status_code==401
+            assert client.post('/api/sites/b/model-jobs/'+job['id'],headers=auth('node-b'),json=answer).status_code==409
+            assert client.post(path,headers=auth('node-a'),json={**answer,'model':'not-the-AMD-model'}).status_code==400
+            assert client.post(path,headers=auth('node-a'),json=answer).status_code==200
+            assert client.post(path,headers=auth('node-a'),json=answer).status_code==409
+            result=future.result(timeout=3)
+        assert result.status_code==200 and result.json()['provider']=='amd-local'
+        assert result.json()['external_inference_charged'] is False
+        with client.app.state.store.connect() as db:
+            assert db.execute('select count(*) from requests').fetchone()[0]==0
+
+
+def test_local_timeout_rejects_late_result_without_paid_fallback(tmp_path):
+    with setup(tmp_path,local=True) as client:
+        client.post('/api/sites/a/snapshots',headers=auth('node-a'),json=observation())
+        client.get('/api/sites/a/jobs',headers=auth('node-a'))
+        client.app.state.local_model_relay.timeout_seconds=.01
+        r=client.post('/api/sites/a/ask',headers=auth('owner-a'),json={'question':'Status?'})
+        assert r.status_code==504 and r.json()['paid_fallback_performed'] is False
+        assert not client.app.state.local_model_relay.jobs
+
+
+def test_local_inference_uses_only_fixed_private_tunnel_and_no_tools():
+    def provider(request):
+        assert str(request.url)==LOCAL_URL
+        data=json.loads(request.content)
+        assert data['model']==LOCAL_MODEL and data['max_tokens']==384
+        assert not data['stream'] and 'tools' not in data
+        return httpx.Response(200,json={'model':LOCAL_MODEL,'choices':[{'message':{'content':'A local response.'}}],
+                                       'usage':{'total_tokens':12,'untrusted_extra':'ignored'}})
+    result=asyncio.run(local_answer([{'role':'system','content':'Read only'},{'role':'user','content':'Status?'}],transport=httpx.MockTransport(provider)))
+    assert result['answer']=='A local response.' and result['usage']=={'total_tokens':12}
