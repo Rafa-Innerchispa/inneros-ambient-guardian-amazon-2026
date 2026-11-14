@@ -27,6 +27,8 @@ def auth(token):return {'Authorization':'Bearer '+token}
 
 def test_roles_and_sites_are_isolated(tmp_path):
     client=setup(tmp_path)
+    assert client.get('/api/sites').status_code==401
+    assert client.get('/api/sites',headers=auth('owner-a')).json()['sites']==[{'id':'a','label':'a'}]
     for token in ('','owner-b','node-a','node-b'):
         assert client.get('/api/sites/a',headers=auth(token)).status_code==401
     for token in ('owner-a','owner-b','node-b'):
