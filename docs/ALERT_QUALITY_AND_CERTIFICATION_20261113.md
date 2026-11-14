@@ -56,6 +56,31 @@ con ajustes de volumen. **No es un límite absoluto de volumen tres** independie
 del amplificador/Echo. La aceptación HTTP no demuestra el volumen acústico: hace
 falta confirmarlo físicamente. La voz/idioma sigue dependiendo del Echo.
 
+### Destino y prueba física posterior: Echo Disco
+
+El propietario estaba escuchando música en Echo Disco, no en Echo Cuarto. Se
+comprobó `notify.echo_disco_speak` y se cambió el destino ordinario de los
+observadores de infraestructura, UniFi, tareas y del centinela a Echo Disco.
+El notificador de configuración también usa Disco. Energía conserva Cuarto y
+Disco como destinos; ambos están explícitamente allowlisted. Los overrides
+locales `96-echo-disco-notices.conf` persisten sobre los ejemplos base del repo.
+
+Home Assistant instalado es 2026.5.2: no expone un reproductor Echo Disco activo
+ni su volumen; el antiguo `media_player.disco` figura unavailable. Por eso no
+se intentó fijar un volumen desconocido ni restaurar un número inventado. Se
+envió una sola prueba nativa Speak con prosody soft, sin pausa, stop ni comandos
+de volumen. El propietario confirmó: **«Llegó y la música bajó y volvió»**.
+Esto verifica la atenuación/restauración nativa de Alexa en esa prueba física,
+no un control numérico independiente desde Home Assistant ni una garantía para
+todos los reproductores/grupos o servicios musicales.
+
+Respaldo de destino: `echo-disco-routing-20261114T021519Z` (fecha UTC; todavía
+13 de noviembre en Ecuador). Solo se reiniciaron los cuatro observadores; los
+notificadores oneshot no se forzaron. Se preservó el archivo local de Muse.
+La prueba física del seguimiento conversacional del aviso sigue pendiente;
+las simulaciones SMAPI en-US y es-US sí reconocieron `LatestNoticeIntent` y
+rechazaron correctamente el acceso del simulador sin identidad de propietario.
+
 ## Amazon Support
 
 Se respondió al seguimiento de William Dourado, Devices & Services Enterprise
