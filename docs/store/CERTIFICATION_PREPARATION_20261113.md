@@ -2,6 +2,36 @@
 
 Estado: Development. No enviado a certificación; no publicado ni certificado.
 
+## Evidencia posterior a la preparación
+
+PR #113 integrado, código `27a6fd73c6fe427dd6a58c18da83a4fb93462b3f`,
+466 pruebas aprobadas y una omitida en checkout aislado de Intel; CI
+`43547755248` y GitGuardian aprobados. Se desplegó reiniciando únicamente el
+gateway Alexa. La vinculación del propietario, el PIN y la ruta Echo Disco
+permanecieron sin cambios. HTTP local del gateway: 200; petición pública sin
+firma: 400. Preflight local: cuenta canónica permitida, cuenta ajena denegada.
+La prueba negativa de otra cuenta es un test/preflight, no una sesión real
+de otro titular de Amazon.
+
+La simulación oficial Amazon de apertura `0a4e4fea-c344-46c1-a010-0e3fc5db7e19`
+terminó `SUCCESSFUL` y recibió el saludo de Atlas después del despliegue,
+sin consultar el backend ni ejecutar acciones. No es una nueva prueba física
+del PIN; la prueba física de enrollment del 12 de noviembre sigue documentada
+por separado.
+
+SMAPI aceptó y terminó la actualización de metadatos en Development. Se
+guardaron iconos y textos en en-US, es-US, es-MX y es-ES, con imágenes públicas
+fijadas al commit de los assets. No se alteraron los permisos de PIN ni se
+marcó exportación. El borrador de instrucciones impide afirmar que ya exista
+un acceso de revisión aislado.
+
+Se pulsó Run de nuevo en Certification → Validation: **17 → 5 Fixes Required**.
+Quedan la declaración de exportación y la URL de privacidad, repetida por los
+cuatro idiomas. Esto no significa que el resto de la certificación funcional
+o de políticas esté aprobado: sigue pendiente el entorno de revisión y el
+texto de privacidad específico. No se enlazó la política corporativa del sitio
+web como si ya cubriera la skill.
+
 ## Cambios verificados
 
 - La ficha inglesa guardó categoría `BUSINESS_AND_FINANCE` y una descripción
