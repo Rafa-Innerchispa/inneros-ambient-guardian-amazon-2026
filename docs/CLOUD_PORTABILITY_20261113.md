@@ -75,9 +75,46 @@ The database had about 9.6 GB logical data and 2.49 GB allocated data/index stor
 There is no need to change database engine merely to host it on a VM. Its own data
 would consume VM disk and RAM; a managed database is a separate paid product.
 
-The cloud SQLite file is only a small observation cache and inference-request ledger.
+The cloud SQLite file holds observations, the inference-request ledger, scoped
+cloud accounts and private conversations.
 It does not replace, copy, migrate or replicate the authoritative Mongo database,
-coordination tasks, owner bindings, approvals or document archive.
+  coordination tasks, owner bindings, approvals or document archive.
+
+## Private conversation and speech scope
+
+Account sessions can create real cloud conversations scoped to both the account
+and selected installation. The SQLite runtime database stores questions, replies,
+provider/usage metadata, timestamps and pending/failed states. The encrypted Drive
+backup includes this private conversation content. This is not end-to-end encrypted
+messaging: runtime file permissions, account/site authorization, HTTPS and encrypted
+backups are distinct protections. Do not paste secrets into a chat.
+
+The initial allowance is 50 conversations per account and 100 turns per conversation;
+archiving is reversible and does not purge records or reset those limits. JSON export
+is available to the signed-in owner. There is no automatic deletion schedule or
+unlimited commercial storage promise. Only the last two completed turns, bounded
+in size, accompany the current prompt. Client turn IDs prevent accidental duplicate
+inference for the same saved request. A pending outcome is not a successful answer.
+
+Infrastructure mode receives selected-site observations. Coding mode uses only
+user-provided code/question and that conversation's limited history; it can explain,
+draft and review code, but has no shell, repository connection, file deployment,
+agent runner or physical-action permission. Generated code is untested unless the
+user verifies it elsewhere. Copy/download controls export drafts, not executions.
+
+Dictation requires an explicit microphone click and browser permission. A clip is
+limited to 12 seconds and 192 KiB, sent through the authenticated cloud channel to
+the existing local Whisper ASR on Intel. Local decoding uses a fixed command with
+pipe-only protocols, a 12-second output bound and an eight-second process timeout;
+there is no remote URL/file input. Cloud relay buffers expire and are not saved in
+the chat/database. ASR processing can use transient local buffers/files. The user
+reviews the transcript before sending it as a chat message. No automatic model call
+or paid transcription fallback follows dictation.
+
+Optional response reading uses only a matching language voice advertised by the
+browser as local (`localService`); if absent, the interface explains that limitation
+instead of selecting a network voice. It is not Piper and it is not Alexa's voice.
+No new voice service, GPU instance or inference subscription is created.
 
 Before adding a cloud Mongo secondary, establish all of the following:
 
@@ -98,8 +135,9 @@ Before adding a cloud Mongo secondary, establish all of the following:
 ## Small runtime backup to existing Drive
 
 - Cloud exports a transaction-consistent SQLite backup, integrity-checks it, records
-  a SHA-256 manifest and encrypts it with age. It excludes provider credentials and
-  source documents. Account/password/session hashes in the runtime database are
+  a SHA-256 manifest and encrypts it with age. It excludes operator provider-key files
+  and bulk source documents; it does not scan user chat content for pasted secrets.
+  Account/password/session hashes and conversations in the runtime database are
   included, so the encrypted archive remains sensitive. The owner keeps the private
   decryption key locally.
 - Intel uses a dedicated SSH key constrained on Vultr to that one export command:

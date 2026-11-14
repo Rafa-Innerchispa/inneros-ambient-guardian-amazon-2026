@@ -7,6 +7,7 @@ signature-verifying gateway. Cached observations always carry age/source.
 from __future__ import annotations
 
 import asyncio
+import base64
 import hashlib
 import hmac
 import json
@@ -30,6 +31,8 @@ from starlette.staticfiles import StaticFiles
 from starlette.routing import Mount
 from .cloud_model import LOCAL_MODEL, model_messages
 from .cloud_accounts import CloudAccounts, COOKIE, SESSION_SECONDS
+from .cloud_chat import Conversations
+from .cloud_speech import MAX_AUDIO, MIMES
 
 MAX_BODY = 65536
 SITE = re.compile(r"^[a-z0-9][a-z0-9_-]{0,47}$")
@@ -173,10 +176,12 @@ def create_app(*, config: dict | None = None, database: str | None = None, trans
                 raise ValueError("hashed_site_credentials_required")
     store = CloudStore(database or os.environ["ATLAS_CLOUD_DATABASE"])
     accounts = CloudAccounts(store)
+    conversations = Conversations(store)
     auth_attempts = {}
     auth_slots = asyncio.Semaphore(2)
     relay = Relay()
     local_relay = Relay(timeout_seconds=40)
+    speech_relay = Relay(timeout_seconds=40)
     last_poll = {}
 
     def authorize(request: Request, role: str):
@@ -246,11 +251,55 @@ def create_app(*, config: dict | None = None, database: str | None = None, trans
         response.delete_cookie(COOKIE, path='/', secure=True, httponly=True, samesite='strict')
         return response
 
-    async def body(request: Request):
+    def chat_owner(request, site):
+        account = accounts.session(request.cookies.get(COOKIE))
+        if not account or site not in account['sites']:
+            return None
+        if request.method not in {'GET','HEAD'} and not same_origin(request):
+            return None
+        return account['email']
+
+    async def chat_collection(request):
+        site = authorize(request, 'owner')
+        owner = chat_owner(request, site) if site else None
+        if not owner:
+            return JSONResponse({'error':'account_login_required'}, 401)
+        try:
+            if request.method == 'GET':
+                return JSONResponse({'conversations':conversations.list(owner, site,
+                    archived=request.query_params.get('archived') == 'true')})
+            value = json.loads(await body(request))
+            identifier = conversations.create(owner, site, value.get('title','Nueva conversación'),
+                                              value.get('mode','infrastructure'))
+            return JSONResponse({'conversation':conversations.read(owner, site, identifier)}, 201)
+        except (ValueError, AttributeError):
+            return JSONResponse({'error':'invalid_conversation_or_limit'}, 400)
+        except sqlite3.Error:
+            return JSONResponse({'error':'conversation_store_unavailable'},503)
+
+    async def chat_item(request):
+        site = authorize(request, 'owner')
+        owner = chat_owner(request, site) if site else None
+        if not owner:
+            return JSONResponse({'error':'account_login_required'}, 401)
+        identifier = request.path_params['conversation']
+        try:
+            if request.method == 'PATCH':
+                value = json.loads(await body(request))
+                conversations.archive(owner, site, identifier, value.get('archived'))
+            return JSONResponse({'conversation':conversations.read(owner, site, identifier)})
+        except LookupError:
+            return JSONResponse({'error':'conversation_not_found'}, 404)
+        except (ValueError, AttributeError):
+            return JSONResponse({'error':'invalid_conversation'}, 400)
+        except sqlite3.Error:
+            return JSONResponse({'error':'conversation_store_unavailable'},503)
+
+    async def body(request: Request, limit=MAX_BODY):
         value = bytearray()
         async for chunk in request.stream():
             value.extend(chunk)
-            if len(value) > MAX_BODY:
+            if len(value) > limit:
                 raise ValueError("body_too_large")
         return bytes(value)
 
@@ -301,7 +350,56 @@ def create_app(*, config: dict | None = None, database: str | None = None, trans
             job = local_relay.take(site)
             if job:
                 job["kind"] = "local_model"
+        if not job:
+            job = speech_relay.take(site)
+            if job:
+                job['kind'] = 'local_transcription'
         return JSONResponse({"job": job})
+
+    async def transcribe(request):
+        site = authorize(request, 'owner')
+        if not site:
+            return JSONResponse({'error':'unauthorized'},401)
+        mime=request.headers.get('content-type','').split(';')[0].strip().lower()
+        language=request.query_params.get('language','es')
+        if mime not in MIMES or language not in {'es','en'}:
+            return JSONResponse({'error':'unsupported_audio_format'},400)
+        try:
+            audio=await body(request,MAX_AUDIO)
+            if len(audio)<128:
+                raise ValueError()
+        except ValueError:
+            return JSONResponse({'error':'invalid_audio_size'},400)
+        if time.time()-last_poll.get(site,0)>=12:
+            return JSONResponse({'error':'local_connector_unavailable','paid_fallback_performed':False},503)
+        if speech_relay.jobs:
+            return JSONResponse({'error':'local_speech_busy'},429)
+        try:
+            result=await speech_relay.submit(site,{},json.dumps({'audio':base64.b64encode(audio).decode(),
+                'mime':mime,'language':language}).encode())
+        except RelayTimeout:
+            return JSONResponse({'error':'local_speech_timeout','audio_persisted':False},504)
+        if not result.get('ok'):
+            return JSONResponse({'error':'local_speech_failed','audio_persisted':False},503)
+        return JSONResponse({**result,'provider':'local-whisper','external_inference_charged':False,'audio_persisted':False})
+
+    async def speech_result(request):
+        site=authorize(request,'connector')
+        if not site:
+            return JSONResponse({'error':'unauthorized'},401)
+        try:
+            value=json.loads(await body(request))
+            if value.get('ok') is False:
+                result={'ok':False}
+            else:
+                text=value.get('text')
+                if not isinstance(text,str) or not 1<=len(text)<=4000 or value.get('language') not in {'es','en'}:
+                    raise ValueError()
+                result={'ok':True,'text':text,'language':value['language']}
+            won=speech_relay.finish(site,request.path_params['job'],result)
+        except (ValueError,TypeError,AttributeError):
+            return JSONResponse({'error':'invalid_transcription_result'},400)
+        return JSONResponse({'ok':won},200 if won else 409)
 
     async def model_result(request):
         site = authorize(request, "connector")
@@ -348,55 +446,90 @@ def create_app(*, config: dict | None = None, database: str | None = None, trans
         try:
             value = json.loads(await body(request))
             question = value.get("question", "")
-            if not isinstance(question, str) or not 1 <= len(question) <= 600:
+            if not isinstance(question, str) or not 1 <= len(question) <= 4000:
                 raise ValueError()
         except (ValueError, TypeError, AttributeError):
             return JSONResponse({"error": "invalid_question"}, 400)
-        observations = store.snapshots(site, now=time.time())
-        if not observations:
-            return JSONResponse({"error": "no_observations", "inference_performed": False}, 409)
+        mode = value.get('mode','infrastructure')
+        if mode not in {'infrastructure','coding'}:
+            return JSONResponse({'error':'invalid_query_mode'}, 400)
+        turn_id = None
+        history = []
+        conversation_id = value.get('conversation_id')
+        if conversation_id:
+            owner = chat_owner(request, site)
+            request_id = value.get('client_request_id','')
+            if not owner:
+                return JSONResponse({'error':'account_login_required'}, 401)
+            if not isinstance(conversation_id,str) or not re.fullmatch(r'[a-f0-9]{32}',conversation_id):
+                return JSONResponse({'error':'invalid_conversation'},400)
+            if not isinstance(request_id,str) or not re.fullmatch(r'[a-f0-9]{32}', request_id):
+                return JSONResponse({'error':'invalid_turn_id'}, 400)
+            try:
+                history = conversations.begin(owner, site, conversation_id, request_id, question, mode)
+                turn_id = request_id
+            except LookupError:
+                return JSONResponse({'error':'conversation_not_found'}, 404)
+            except ValueError as exc:
+                return JSONResponse({'error':str(exc)}, 409)
+            except sqlite3.Error:
+                return JSONResponse({'error':'conversation_store_unavailable'},503)
+
+        def respond(value, status=200):
+            if turn_id:
+                try:
+                    conversations.finish(turn_id, value, status)
+                    saved=True
+                except sqlite3.Error:
+                    saved=False
+                value = {**value, 'conversation_id':conversation_id, 'turn_id':turn_id,'history_saved':saved}
+            return JSONResponse(value, status)
+
+        observations = store.snapshots(site, now=time.time()) if mode == 'infrastructure' else []
+        if not observations and mode == 'infrastructure':
+            return respond({"error": "no_observations", "inference_performed": False}, 409)
         engine = value.get("engine", "local")
         if engine not in {"local", "vultr"}:
-            return JSONResponse({"error": "invalid_engine"}, 400)
+            return respond({"error": "invalid_engine"}, 400)
         if engine == "local":
             if not config.get("local_model_enabled") or time.time()-last_poll.get(site, 0) >= 12:
-                return JSONResponse({"error": "local_connector_unavailable", "paid_fallback_performed": False}, 503)
+                return respond({"error": "local_connector_unavailable", "paid_fallback_performed": False}, 503)
             if local_relay.jobs:
-                return JSONResponse({"error": "local_model_busy", "paid_fallback_performed": False}, 429)
+                return respond({"error": "local_model_busy", "paid_fallback_performed": False}, 429)
             started = time.monotonic()
             try:
                 result = await local_relay.submit(site, {}, json.dumps(
-                    {"messages": model_messages(question, observations)}, ensure_ascii=False).encode())
+                    {"messages": model_messages(question, observations, history=history, mode=mode)}, ensure_ascii=False).encode())
             except RelayTimeout:
-                return JSONResponse({"error": "local_model_timeout", "paid_fallback_performed": False}, 504)
+                return respond({"error": "local_model_timeout", "paid_fallback_performed": False}, 504)
             if not result.get("ok"):
-                return JSONResponse({"error": "local_model_unavailable", "paid_fallback_performed": False}, 503)
-            return JSONResponse({"answer": result["answer"], "inference_performed": True,
+                return respond({"error": "local_model_unavailable", "paid_fallback_performed": False}, 503)
+            return respond({"answer": result["answer"], "inference_performed": True,
                 "provider": "amd-local", "usage": {**result["usage"], "model": result["model"],
                     "latency_ms": round((time.monotonic()-started)*1000)},
                 "external_inference_charged": False, "physical_actions_available": False,
                 "observations": observations})
         if value.get("confirm_paid") is not True:
-            return JSONResponse({"error": "paid_confirmation_required", "inference_performed": False}, 400)
+            return respond({"error": "paid_confirmation_required", "inference_performed": False}, 400)
         inference = config.get("inference", {})
         if not inference.get("enabled"):
-            return JSONResponse({"observations": observations, "inference_performed": False,
+            return respond({"observations": observations, "inference_performed": False,
                                  "reason": "inference_not_enabled"})
         if datetime.now(timezone.utc).date().isoformat() >= inference.get("disable_on", "0000-00-00"):
-            return JSONResponse({"error": "inference_authorization_expired", "inference_performed": False}, 403)
+            return respond({"error": "inference_authorization_expired", "inference_performed": False}, 403)
         try:
             request_id = store.reserve(site, min(int(inference.get("request_limit", 0)), 100), now=time.time())
         except PermissionError:
-            return JSONResponse({"error": "inference_request_allowance_exhausted"}, 429)
+            return respond({"error": "inference_request_allowance_exhausted"}, 429)
         except (sqlite3.Error, ValueError):
-            return JSONResponse({"error": "inference_accounting_unavailable"}, 503)
+            return respond({"error": "inference_accounting_unavailable"}, 503)
         try:
             key = Path(inference["key_file"]).read_text().strip()
             # This API cannot select arbitrary models/URLs, use tools, or run agents.
             model = inference["model"]
             if model not in {"qwen3.8-flash-next", "qwen3.8-27b"} or not key:
                 raise ValueError("unconfigured_model")
-            messages = model_messages(question, observations)
+            messages = model_messages(question, observations, history=history, mode=mode)
             started = time.monotonic()
             async with httpx.AsyncClient(timeout=20, follow_redirects=False, trust_env=False, transport=transport) as client:
                 response = await client.post("https://api.vultrinference.com/v1/chat/completions",
@@ -411,12 +544,12 @@ def create_app(*, config: dict | None = None, database: str | None = None, trans
             receipt = {k:usage[k] for k in ("prompt_tokens", "completion_tokens", "total_tokens") if isinstance(usage.get(k), int)}
             receipt.update(model=str(data.get("model", model))[:100], latency_ms=round((time.monotonic()-started)*1000))
             store.receipt(request_id, "provider_response", receipt)
-            return JSONResponse({"answer": text[:5000], "inference_performed": True,
+            return respond({"answer": text[:5000], "inference_performed": True,
                                  "provider": "vultr-serverless", "receipt_id": request_id, "usage": receipt,
                                  "physical_actions_available": False, "observations": observations})
         except Exception:
             store.receipt(request_id, "failed_or_unknown", {})
-            return JSONResponse({"error": "inference_failed_or_unknown", "retry_performed": False,
+            return respond({"error": "inference_failed_or_unknown", "retry_performed": False,
                                  "receipt_id": request_id}, 502)
 
     async def alexa(request):
@@ -460,6 +593,10 @@ def create_app(*, config: dict | None = None, database: str | None = None, trans
         Route('/api/auth/login', account_action, methods=['POST']),
         Route('/api/auth/logout', account_logout, methods=['POST']),
         Route('/api/session', account_status),
+        Route('/api/sites/{site}/conversations', chat_collection, methods=['GET','POST']),
+        Route('/api/sites/{site}/conversations/{conversation}', chat_item, methods=['GET','PATCH']),
+        Route('/api/sites/{site}/transcribe', transcribe, methods=['POST']),
+        Route('/api/sites/{site}/speech-jobs/{job}', speech_result, methods=['POST']),
         Route("/api/sites", list_sites), Route("/api/sites/{site}/snapshots", ingest, methods=["POST"]),
         Route("/api/sites/{site}", status), Route("/api/sites/{site}/ask", ask, methods=["POST"]),
         Route("/api/sites/{site}/jobs", jobs),
@@ -470,6 +607,7 @@ def create_app(*, config: dict | None = None, database: str | None = None, trans
     app.state.store = store
     app.state.relay = relay
     app.state.local_model_relay = local_relay
+    app.state.speech_relay = speech_relay
     return app
 
 
