@@ -1,0 +1,44 @@
+services:
+  core:
+    image: inneros-atlas-cloud:${ATLAS_RELEASE:?release_required}
+    build:
+      context: ../..
+      dockerfile: deploy/cloud/Dockerfile
+    restart: unless-stopped
+    user: "10001:10001"
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    pids_limit: 100
+    mem_limit: 512m
+    cpus: 1.0
+    environment:
+      ATLAS_CLOUD_CONFIG: /run/secrets/config.json
+      ATLAS_CLOUD_DATABASE: /data/cloud.sqlite3
+      ALEXA_SKILL_ID: amzn1.ask.skill.4a096414-e312-49d1-b2f5-4e538d7fdb93
+    volumes:
+      - /srv/inneros-cloud/data:/data
+      - /srv/inneros-cloud/secrets:/run/secrets:ro
+    tmpfs: [/tmp:size=32m,noexec,nosuid]
+    ports: ["127.0.0.1:18080:8080"]
+    logging:
+      driver: json-file
+      options: {max-size: "5m", max-file: "2"}
+  ingress:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    cap_drop: [ALL]
+    cap_add: [NET_BIND_SERVICE]
+    security_opt: [no-new-privileges:true]
+    read_only: true
+    mem_limit: 128m
+    ports: ["80:80", "443:443"]
+    environment:
+      ATLAS_DOMAIN: ${ATLAS_DOMAIN:?domain_required}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - /srv/inneros-cloud/caddy-data:/data
+      - /srv/inneros-cloud/caddy-config:/config
+    logging:
+      driver: json-file
+      options: {max-size: "5m", max-file: "2"}

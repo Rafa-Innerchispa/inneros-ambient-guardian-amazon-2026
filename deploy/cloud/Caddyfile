@@ -1,0 +1,13 @@
+{$ATLAS_DOMAIN} {
+    encode zstd gzip
+    request_body {
+        max_size 128KB
+    }
+    header {
+        -Server
+        X-Content-Type-Options nosniff
+        Referrer-Policy no-referrer
+        Cache-Control no-store
+    }
+    reverse_proxy core:8080
+}
