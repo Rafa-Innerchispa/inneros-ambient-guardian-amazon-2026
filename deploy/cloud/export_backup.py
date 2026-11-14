@@ -1,7 +1,8 @@
 #!/usr/bin/python3
 """Forced SSH command: export only an encrypted cloud runtime backup.
 
-No credentials, source documents, arbitrary filenames or command arguments.
+No provider secrets, plaintext passwords, source documents or arbitrary filenames.
+The encrypted database includes cloud account/invitation/session hashes.
 Private decryption key is kept by the owner, never on this host or Intel.
 """
 import hashlib,json,os,sqlite3,subprocess,tarfile,tempfile
@@ -21,10 +22,12 @@ def main():
             source.backup(copy)
             assert copy.execute('PRAGMA integrity_check').fetchone()[0]=='ok'
             rows=copy.execute('SELECT COUNT(*) FROM snapshots').fetchone()[0]
+            auth_state=bool(copy.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='cloud_accounts'").fetchone())
         (folder/'manifest.json').write_text(json.dumps({
             'format':'inneros-cloud-runtime-v1','created_at':datetime.now(timezone.utc).isoformat(),
             'sha256':hashlib.sha256(target.read_bytes()).hexdigest(),'snapshot_count':rows,
             'contains_provider_secrets':False,'contains_source_documents':False,
+            'contains_cloud_authentication_state':auth_state,
             'mongo_backup_or_replica':False,
         },indent=2))
         archive=folder/'runtime.tar'

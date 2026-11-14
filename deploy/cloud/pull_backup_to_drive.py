@@ -42,7 +42,7 @@ def main():
         stored=json.loads(listing.stdout)
         if stored['Size']!=size:raise RuntimeError('Remote backup size mismatch')
         receipt={'ok':True,'created_at':stamp,'remote':destination,'bytes':size,'sha256':checksum.hexdigest(),
-                 'encrypted':True,'scope':'cloud runtime cache/receipts only; not Mongo replication or source documents',
+                 'encrypted':True,'scope':'cloud observations, receipts and account authentication state; not Mongo replication or source documents',
                  'depends_on_intel_for_drive_upload':True}
         target=config/'last-drive-backup.json';target.write_text(json.dumps(receipt,indent=2));target.chmod(0o600)
         print(json.dumps(receipt))
