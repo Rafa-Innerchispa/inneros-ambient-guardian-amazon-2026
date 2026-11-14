@@ -15,7 +15,14 @@ skill has not been republished or moved by this change.
 - Provisioned site/role credentials are separated and stored as hashes on the API.
   Site enumeration and observations require owner authentication. Public HTML does
   not disclose customer names. This bootstrap access is not a completed customer
-  registration/SSO flow.
+  registration/SSO flow. The portal additionally supports real invite-only accounts:
+  email-bound, expiring, single-use invitations assign provisioned sites; passwords
+  use salted scrypt hashes; opaque sessions use Secure/HttpOnly/SameSite=Strict
+  cookies, expire in eight hours and can be revoked. Mutation requests require a
+  matching HTTPS Origin. Login/registration attempts are throttled and expensive
+  password checks have bounded concurrency. Accounts have read-only site access,
+  not agent or physical execution rights. This is not central InnerOS SSO, email
+  verification, automatic customer enrollment, billing or a password-reset service.
 - The outbound edge process reads existing observation sources. It sends only
   bounded facts, timestamps and source information, without source device secrets.
   Measurements retain their own timestamp; upload/restart cannot make them fresh.
@@ -26,8 +33,17 @@ skill has not been republished or moved by this change.
 - **The configured Amazon endpoint remains on the existing installation.** Cloud
   relay transport is prepared and tested in isolation; physical Echo/PIN parity is
   still required before moving the live endpoint.
-- Read-only Qwen inference is available by explicit authenticated request, not by a
-  background timer. Initial deployment allowance: ten requests total, at most 384
+- Ralfi IA now defaults to the existing AMD Qwen model through Intel's existing
+  private loopback vLLM tunnel. Only explicit authenticated read-only queries are
+  relayed outbound through the connector. No AMD inference port is published.
+  Local queries do not consume the Vultr inference allowance. One local request
+  runs at a time, with 384 output tokens and a bounded timeout. The cloud receives
+  only the selected site's observation context. This is not unrestricted access
+  to all InnerOS knowledge, documents or actions.
+- A failed or unavailable local model never triggers a paid request automatically.
+  The owner must select Vultr and confirm that particular paid query. Read-only
+  Vultr Qwen inference is available by explicit authenticated request, not by a
+  background timer. Initial deployment allowance: ten paid requests total, at most 384
   output tokens each, disabled on 2026-12-09. Failed or uncertain requests consume
   their allowance. Accounting errors fail closed. This is a request/token limit,
   not a guarantee that Vultr will enforce a dollar cap across the whole account.
@@ -83,7 +99,9 @@ Before adding a cloud Mongo secondary, establish all of the following:
 
 - Cloud exports a transaction-consistent SQLite backup, integrity-checks it, records
   a SHA-256 manifest and encrypts it with age. It excludes provider credentials and
-  source documents. The owner keeps the private decryption key locally.
+  source documents. Account/password/session hashes in the runtime database are
+  included, so the encrypted archive remains sensitive. The owner keeps the private
+  decryption key locally.
 - Intel uses a dedicated SSH key constrained on Vultr to that one export command:
   no shell, forwarding or remote administration. Existing rclone uploads the encrypted
   archive to the owner's existing Drive backup area. No general Drive token is copied
@@ -98,12 +116,15 @@ Before adding a cloud Mongo secondary, establish all of the following:
 
 ## Verification and practical limits
 
-- 114 selected tests passed, including the new cloud tests and existing Alexa
+- 123 selected tests passed, including the new cloud/account tests and existing Alexa
   gateway tests: tenant/role isolation, staleness, replay rejection, concurrent
   request allowance, provider failure without retry/refund, expiry, unsigned ASK,
   absent physical execution route and single-consumption relay.
 - A delivered relay timeout reports an unknown outcome and directs the owner to
   the existing audit/channel, never a false assertion that nothing happened.
+- The AMD integration tests additionally check the fixed private destination and
+  model, selected-site isolation, result ownership, single consumption, explicit
+  paid confirmation, and no paid fallback on local unavailability or timeout.
 - Public health 200; unauthenticated private read 401; unsigned ASK POST 400.
 - Real authenticated observations arrived for house energy, Wi-Fi/radio occupancy,
   Intel services/resources, and Bellini network probes. A missing probe is not proof
@@ -130,3 +151,23 @@ agents, and changing Mongo membership are separate controlled operations.
 Account-recovery correspondence is outside this public technical document and
 remains in the owner's private report. No refund, cancellation or account change
 is part of this deployment.
+
+## Client access and enrollment
+
+The public page offers sign-in and account creation using an invitation, not open
+registration or an unverified placeholder form. Operators provision the customer's
+site and connector first, then issue an invitation bound to the customer's email
+and only that site's identifiers. The raw invitation is a private, one-time secret;
+never publish it in Git, URLs, logs or screenshots. The owner enters their own new
+password directly on the HTTPS page. No password is emailed or generated by a model.
+
+The operator-only helper is `python -m ambient_guardian.cloud_accounts --database
+<runtime-db> --email <customer> --sites <assigned-site> --hours 24`. Capture its
+stdout directly in protected owner storage; it contains the one-time invitation.
+There is no public administrative invitation endpoint. Existing maintenance bearer
+credentials remain available under the technical-access disclosure and must not
+be handed to customers. Each customer uses their own account.
+
+The visual reference was the existing CreatorCore Web Intelligence development:
+dark ink, muted mint, editorial hierarchy and clear operation states. Links lead
+to the group's principal sites. Those sites were inspected only, not modified.

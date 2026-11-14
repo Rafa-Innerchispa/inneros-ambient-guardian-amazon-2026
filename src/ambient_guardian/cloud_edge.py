@@ -14,6 +14,7 @@ import time
 from urllib.parse import urlsplit
 
 import httpx
+from .cloud_model import local_answer
 
 LOG = logging.getLogger("atlas.cloud.edge")
 
@@ -80,6 +81,20 @@ async def run(config: dict):
                 return
             raw = job.get("body", "")
             if not isinstance(raw, str) or len(raw.encode()) > 65536:
+                return
+            if job.get("kind") == "local_model":
+                try:
+                    result = await local_answer(json.loads(raw).get("messages"))
+                    result["ok"] = True
+                except Exception:
+                    result = {"ok": False}
+                try:
+                    await client.post(origin+f"/api/sites/{site}/model-jobs/{job['id']}",
+                        headers={"Authorization":"Bearer "+sites[site]}, json=result)
+                except httpx.HTTPError:
+                    LOG.warning("Local model result unavailable; no replay or paid fallback")
+                return
+            if job.get("kind"):
                 return
             allowed = {"signature-256", "signaturecertchainurl", "content-type"}
             headers = {k:v for k,v in job.get("headers", {}).items() if k.lower() in allowed and isinstance(v,str)}

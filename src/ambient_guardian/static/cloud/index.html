@@ -1,7 +1,38 @@
-<!doctype html><html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>InnerOS Cloud · Atlas Control</title><link rel="stylesheet" href="/assets/style.css"><script src="/assets/portal.js" defer></script></head>
-<body><main><header><span class="spark">✦</span><div><small>INNERCHISPA · INFRASTRUCTURE OPERATIONS</small><h1>InnerOS Cloud</h1></div><span class="badge">Atlas Control</span></header>
-<section class="intro"><p class="eyebrow">TU INFRAESTRUCTURA, CON CONTEXTO</p><h2>Lecturas reales.<br>Decisiones informadas.</h2><p>Consulta observaciones de tus instalaciones desde la nube. Cada lectura muestra su origen y antigüedad. Las acciones físicas conservan la autoridad y aprobación de la instalación.</p></section>
-<section class="panel"><h3>Acceso privado</h3><div class="fields"><label>Instalación<select id="site"><option value="">Accede para ver tus instalaciones</option></select></label><label>Credencial del propietario<input id="token" type="password" autocomplete="off" placeholder="Credencial de esta instalación"></label><button id="refresh">Consultar lecturas</button></div><p class="muted">La credencial se conserva solo en memoria mientras esta página está abierta. No se incluye en enlaces.</p><p id="status" role="status"></p></section>
-<section id="observations" class="cards" aria-label="Observaciones de infraestructura"></section>
-<section class="panel"><div class="title"><h3>Consulta a RalphyIA</h3><span class="badge">Vultr · solicitud explícita</span></div><p>La inferencia se ejecuta únicamente al pulsar el botón, con las lecturas de la instalación seleccionada. No puede reiniciar equipos ni autorizar acciones.</p><label>Tu pregunta<textarea id="question" maxlength="600" rows="3" placeholder="¿Qué observaciones requieren atención y qué evidencia falta?"></textarea></label><button id="ask">Analizar con el modelo</button><p id="answer" class="answer" aria-live="polite"></p><pre id="receipt"></pre></section>
-<footer>Las lecturas antiguas no prueban el estado actual. La ausencia de conexión no demuestra por sí sola un apagón. Plataforma inicial: la continuidad de acciones depende todavía del conector local.</footer></main></body></html>
+<!doctype html>
+<html lang="es"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#172d32"><title>Ralfi IA · InnerOS Cloud</title>
+<link rel="stylesheet" href="/assets/style.css"><script src="/assets/portal.js" defer></script>
+</head><body><div class="app-shell">
+<aside class="rail" aria-label="InnerOS Cloud">
+<a class="brand" href="/" aria-label="Ralfi IA, inicio"><span class="spark" aria-hidden="true">✳</span><span>Ralfi <b>IA</b><small>INNEROS CLOUD</small></span></a>
+<div class="rail-copy"><span class="rail-label">CENTRO DE OPERACIONES</span><h2>Cerca de tus sistemas.<br>Estés donde estés.</h2><p>Observa, comprende y decide con evidencia de tu infraestructura.</p></div>
+<div class="rail-note"><span class="small-dot"></span><div><strong>Tu modelo local, primero.</strong><p>AMD responde por conexión privada. El respaldo de pago se utiliza solo si lo eliges y confirmas.</p></div></div>
+<nav class="ecosystem" aria-label="Ecosistema InnerChispa"><a href="https://innerchispa.us/" target="_blank" rel="noopener noreferrer">InnerChispa ↗</a><a href="https://creatorcore.ai/" target="_blank" rel="noopener noreferrer">CreatorCore ↗</a><a href="https://pcdoctor.ai/" target="_blank" rel="noopener noreferrer">PC Doctor IA ↗</a></nav>
+<div class="rail-bottom">INNERCHISPA<span>Atlas Control · acceso privado</span></div></aside>
+<main>
+<header class="topbar"><div><span class="eyebrow">ESPACIO DE TRABAJO</span><h1>Infraestructura con contexto.</h1></div><span id="cloud-health" class="pill">Comprobando nube…</span></header>
+<details class="access" id="access" open><summary><span>01</span> Tu cuenta InnerOS Cloud <small id="access-label">Acceso privado</small></summary>
+<div class="access-body"><p id="auth-description">Inicia sesión para acceder a las instalaciones asignadas a tu cuenta. El alta de clientes es por invitación.</p>
+<form id="login-form"><div class="access-fields"><label for="email">Correo electrónico<input id="email" type="email" autocomplete="username" required placeholder="tu@empresa.com"></label><label for="password">Contraseña<input id="password" type="password" autocomplete="current-password" minlength="12" maxlength="128" required placeholder="Tu contraseña"></label></div><label id="invite-label" for="invite" hidden>Código de invitación<input id="invite" type="password" autocomplete="off" placeholder="Código privado de un solo uso"></label><p id="password-note" class="caption" hidden>Crea una contraseña de 12 a 128 caracteres. La invitación está vinculada a tu correo y a tus instalaciones.</p><div class="auth-actions"><button id="login" class="primary" type="submit">Iniciar sesión</button><button id="register-mode" class="subtle" type="button">Tengo una invitación</button><button id="logout" class="subtle" type="button" hidden>Cerrar sesión</button></div></form>
+<p id="auth-status" class="caption" role="status">Las cuentas no obtienen permisos de ejecución sobre equipos o agentes.</p>
+<details id="advanced-access"><summary>Acceso técnico provisional</summary><div class="access-fields"><label for="token">Credencial del propietario<input id="token" type="password" autocomplete="off" placeholder="Credencial privada"></label><button id="connect" class="subtle" type="button">Conectar credencial</button></div><p class="caption">La credencial permanece solo en memoria durante esta sesión.</p></details>
+</div></details>
+<p id="status" class="status" role="status">Conecta tu instalación para consultar sus lecturas.</p>
+<div class="workspace">
+<section class="readings-panel" aria-labelledby="readings-title">
+<div class="section-title"><div><span class="eyebrow">EVIDENCIA DE ORIGEN</span><h2 id="readings-title">Tus instalaciones</h2></div><button id="refresh" class="icon-button" aria-label="Actualizar lecturas" disabled>↻</button></div>
+<label for="site" class="site-label">Instalación<select id="site" disabled><option value="">Conecta para ver tus instalaciones</option></select></label>
+<div id="reading-summary" class="reading-summary">Cada lectura conserva la hora real de su medición.</div>
+<div id="observations" class="cards"><div class="empty"><span aria-hidden="true">◎</span><h3>Primero, los hechos.</h3><p>Aquí aparecerán las mediciones de tus instalaciones cuando te conectes. No se muestran datos de ejemplo.</p></div></div>
+</section>
+<section class="analyst" aria-labelledby="analyst-title">
+<div class="section-title"><div><span class="eyebrow">TU ASISTENTE DE INFRAESTRUCTURA</span><h2 id="analyst-title">Consulta a Ralfi IA</h2></div><span class="assistant-mark" aria-hidden="true">✳</span></div>
+<p class="lead">Convierte las lecturas en una explicación clara. Pregunta qué requiere atención y qué comprobar después.</p>
+<div class="model-selector"><label for="engine">¿Quién responde?<select id="engine"><option value="local">AMD · Qwen local</option><option value="vultr">Vultr · respaldo de pago</option></select></label><p id="model-note">Sin consumo de tokens externos. La disponibilidad del modelo se comprueba al consultar.</p><label id="paid-label" class="confirmation" hidden><input id="paid-confirm" type="checkbox">Autorizo esta consulta de pago dentro del límite disponible.</label></div>
+<div class="suggestions" aria-label="Preguntas sugeridas"><button data-question="¿Qué novedades muestran las últimas lecturas de energía y qué antigüedad tienen?">Energía</button><button data-question="Analiza la ocupación del Wi-Fi. ¿Qué conviene comprobar antes de proponer cambios?">Wi-Fi</button><button data-question="¿Qué servicios requieren atención según estas lecturas y qué evidencia falta?">Servicios</button></div>
+<form id="question-form"><label for="question">¿Qué necesitas saber?<textarea id="question" maxlength="600" rows="4" placeholder="Por ejemplo: ¿qué requiere atención en esta instalación?"></textarea></label><div class="ask-row"><span>Lectura y análisis · sin acciones sobre equipos</span><button id="ask" class="primary" disabled>Consultar AMD <span aria-hidden="true">↗</span></button></div></form>
+<div class="response" aria-live="polite" aria-busy="false" id="response"><div class="response-top"><span>RESPUESTA CON EVIDENCIA</span><span id="provider" class="pill neutral">Aún sin consulta</span></div><p id="answer">La respuesta indicará el modelo utilizado y la antigüedad de las lecturas. Consultar las mediciones no utiliza inferencia.</p><details id="receipt-details" hidden><summary>Ver evidencia de la respuesta</summary><pre id="receipt"></pre></details></div>
+</section></div>
+<footer><strong>Transparencia por diseño.</strong> Una lectura guardada no garantiza el estado actual. Si el conector local se desconecta, puedes consultar las últimas mediciones; las acciones y autorizaciones siguen dependiendo de la instalación.</footer>
+</main></div></body></html>
