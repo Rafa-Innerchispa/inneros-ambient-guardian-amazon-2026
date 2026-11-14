@@ -46,7 +46,8 @@ async def local_transcribe(payload: dict, *, transport=None, decoder=decode_clip
     wav=await asyncio.to_thread(decoder,audio)
     async with httpx.AsyncClient(timeout=25,trust_env=False,follow_redirects=False,transport=transport) as client:
         response=await client.post('http://127.0.0.1:9001/asr',
-            params={'task':'transcribe','output':'json','language':payload['language'],'vad_filter':'true'},
+            params={'task':'transcribe','output':'json','language':payload['language'],'vad_filter':'true',
+                    'initial_prompt':'Ralfi IA, InnerOS, Wi-Fi, UniFi, Bellini, AMD, Python, JavaScript.'},
             files={'audio_file':('browser-utterance.wav',wav,'audio/wav')})
         response.raise_for_status()
         if len(response.content)>65536:
