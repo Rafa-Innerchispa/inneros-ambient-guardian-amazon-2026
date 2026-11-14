@@ -30,7 +30,7 @@ ambient-guardian-alexa-skill = "ambient_guardian.alexa_skill_gateway:main"
 where = ["src"]
 
 [tool.setuptools.package-data]
-ambient_guardian = ["static/*.html"]
+ambient_guardian = ["static/*.html", "static/cloud/*"]
 
 [tool.pytest.ini_options]
 pythonpath = ["src"]

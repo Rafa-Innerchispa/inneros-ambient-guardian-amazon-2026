@@ -1,0 +1,11 @@
+[Unit]
+Description=Encrypted cloud runtime backup to existing Google Drive storage
+After=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/python3 /home/rlopez/.local/lib/atlas-cloud/pull_backup_to_drive.py
+UMask=0077
+NoNewPrivileges=yes
+TimeoutStartSec=180
+

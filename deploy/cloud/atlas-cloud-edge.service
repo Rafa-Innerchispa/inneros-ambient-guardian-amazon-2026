@@ -1,0 +1,20 @@
+[Unit]
+Description=Atlas outbound cloud connector; existing local authority preserved
+After=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=/home/rlopez/inneros/inneros_core/workspaces/inneros-ambient-guardian-amazon-2026
+Environment=PYTHONPATH=/home/rlopez/inneros/inneros_core/workspaces/inneros-ambient-guardian-amazon-2026/src:/home/rlopez/inneros/inneros_core/platform
+Environment=AMBIENT_GUARDIAN_SHARED_ENV_FILE=/home/rlopez/inneros/inneros_core/platform/.env
+Environment=AMBIENT_GUARDIAN_NOTICE_INVENTORY=/home/rlopez/.config/ambient-guardian/bellini-notice-inventory.json
+ExecStart=/home/rlopez/inneros/inneros_core/platform/venv/bin/python -m ambient_guardian.cloud_edge --config /home/rlopez/.config/ambient-guardian/cloud-core/edge.json
+Restart=on-failure
+RestartSec=10
+UMask=0077
+MemoryMax=180M
+CPUQuota=15%
+NoNewPrivileges=yes
+
+[Install]
+WantedBy=default.target
