@@ -128,7 +128,7 @@ def test_critical_transition_at_night_is_not_silenced(tmp_path,monkeypatch):
     assert len(sent)==1 and sent[0]['critical']
 
 
-def test_general_reports_include_energy_and_silence_unchanged_voice(tmp_path,monkeypatch):
+def test_general_reports_include_energy_and_rotate_twenty_minute_voice(tmp_path,monkeypatch):
     import ambient_guardian.notification_brief as module
     sent=[];published=[]
     monkeypatch.setenv('AMBIENT_GUARDIAN_GENERAL_HEALTH_ENABLED','1')
@@ -144,6 +144,9 @@ def test_general_reports_include_energy_and_silence_unchanged_voice(tmp_path,mon
     day=NOW+5*3600
     run_problems(state,home,now=day)
     run_problems(state,home,now=day+1200)
-    assert len(sent)==2 and sent[0][1]['voice'] and not sent[1][1]['voice']
+    assert len(sent)==2 and sent[0][1]['voice'] and sent[1][1]['voice']
+    assert sent[0][1]['context']['summary_category']=='home'
+    assert sent[1][1]['context']['summary_category']=='bellini'
+    assert 'unknown' in sent[1][1]['voice_message']
     assert 'Battery 100' in sent[0][0]
     assert published[0]['attributes']['paid_model_calls']==0
