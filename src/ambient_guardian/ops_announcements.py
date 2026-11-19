@@ -49,9 +49,11 @@ def announcement(task, status):
              'codex': 'Codex', 'cursor': 'Cursor', 'ralfia': 'local agent'}.get(agent, agent)
     host = str(task.get('claim_host') or '').lower()
     node = ' on AMD' if 'amd' in host else ' on Intel' if 'ralphi-ia-ver-10' in host or host == 'intel' else ''
-    short = str(task.get('task_id') or '')[-5:]
+    tid = str(task.get('task_id') or '')
+    short = tid[-5:]
     words = STATUSES.get(status, status)
-    text = f'{agent}{node}, task ending {short}: {topic(task)}, {words}.'
+    title = str(task.get('title') or '')[:80]
+    text = f'{agent}{node}, task {tid} (ending {short}): {title} — {topic(task)}, {words}.'
     if words == 'needs approval':
         text += ' Review Telegram, or ask Atlas Control for pending approvals.'
     return text[:280]
@@ -152,7 +154,12 @@ def tick(state, home, broker, *, now):
                 else:
                     continue  # Retry notification only, never an execution.
         if 8 <= local.hour < 22 and now-event['observed_at'] <= 300 and not state.seen(event['key']):
-            home.speak(os.getenv('AMBIENT_GUARDIAN_UNIFI_RF_ECHO_TARGET', 'notify.echo_cuarto_speak'), text)
+            targets = [t.strip() for t in os.getenv('AMBIENT_GUARDIAN_ALEXA_NOTIFY_ALLOWLIST', os.getenv('AMBIENT_GUARDIAN_UNIFI_RF_ECHO_TARGET', 'notify.echo_cuarto_speak')).replace(',', ' ').split() if t.strip()]
+            for target in targets or ['notify.echo_cuarto_speak']:
+                try:
+                    home.speak(target, text)
+                except Exception:
+                    pass
             state.delivered([event['key']], now=now)
             spoken += 1
         queue.pop(event['key'], None)
