@@ -218,7 +218,8 @@ def collect(home, now):
     if _cache is not None and time.monotonic()-_captured<60:return _cache
     path=os.getenv('AMBIENT_GUARDIAN_HEALTH_PROFILE','')
     profile=json.loads(Path(path).read_text()) if path else {'entities':[]}
-    jobs=[lambda:solar_view(now),lambda:services_view(now),lambda:resource_view(now),lambda:ha_view(home,profile,now),lambda:probes_view(now),lambda:fleet_view(now)]
+    from .notification_policy import mail_view
+    jobs=[lambda:mail_view(now),lambda:solar_view(now),lambda:services_view(now),lambda:resource_view(now),lambda:ha_view(home,profile,now),lambda:probes_view(now),lambda:fleet_view(now)]
     with ThreadPoolExecutor(max_workers=5) as pool:
         def fetch(job):
             try:return job()
@@ -245,9 +246,12 @@ def full_report(sources, *, english):
 
 
 def voice_decision(sources, previous, *, now, english):
-    issues={i['id']:i for s in sources if s['fresh'] for i in s.get('findings',[])}
+    from .notification_policy import _recent, rotating_voice
+    grouped = any(s['id'] in {'energy', 'services', 'Casa Rafael', 'Bellini'} for s in sources)
+    usable = [s for s in sources if s['fresh'] and (not grouped or _recent(s, now))]
+    issues={i['id']:i for s in usable for i in s.get('findings',[])}
     per_source=dict(previous.get('per_source',{}))
-    for source in sources:
+    for source in usable:
         if source['fresh']:per_source[source['id']]=[i['id'] for i in source.get('findings',[])]
     current=sorted({i for values in per_source.values() for i in values});old=set(previous.get('issues',[]))
     new=[issues[k] for k in current if k not in old and k in issues]
@@ -267,5 +271,13 @@ def voice_decision(sources, previous, *, now, english):
         offset=previous.get('rotation',0)%max(1,len(valid));ordered=valid[offset:]+valid[:offset]
         message=' '.join(s[language] for s in ordered[:2])
     if len(message)>260:message=message[:235].rsplit(' ',1)[0]+(' Details on your phone.' if english else ' Detalles en el celular.')
-    updated={'issues':current,'per_source':per_source,'spoken_at':now if speak else previous.get('spoken_at',0),'rotation':previous.get('rotation',0)+(1 if speak else 0)}
+    updated={**previous,'issues':current,'per_source':per_source,'spoken_at':now if speak else previous.get('spoken_at',0),'rotation':previous.get('rotation',0)+(1 if speak else 0)}
+    if grouped:
+        critical = [i for i in new if i.get('severity') == 'critical']
+        speak = bool(critical or now - previous.get('spoken_at', 0) >= 1200)
+        updated['spoken_at'] = now if speak else previous.get('spoken_at', 0)
+        if speak and not critical:
+            updated, message = rotating_voice(sources, updated, now=now, english=english)
+        elif critical:
+            updated['summary_category'] = 'critical'
     return updated,speak,message

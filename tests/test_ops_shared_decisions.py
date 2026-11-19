@@ -412,3 +412,44 @@ def test_pin_help_card_distinguishes_provider_error_from_missing_setup(setup,loc
     assert not calls and not db[voice.BINDINGS].rows
     for private in ['private-test-token','provider-private-detail','personId','atlas-ops:help']:
         assert private not in str(out)
+
+
+def test_routine_mail_transition_is_grouped_without_speech_or_execution(setup,tmp_path,monkeypatch):
+    from ambient_guardian.ops_announcements import tick
+    from ambient_guardian.notification_brief import NoticeState
+    db,broker,task,row,calls=setup
+    now=1762952400
+    taskrow=db[TASKS].rows[0]
+    taskrow.update(created_at='2025-11-12T12:00:00Z',status='in_progress',title='[Correo/AG-17] (sin asunto)')
+    class Home:
+        def speak(self,*args): raise AssertionError('Routine mail must be grouped')
+    state=NoticeState(str(tmp_path/'ops.sqlite'))
+    tick(state,Home(),broker,now=now)
+    taskrow['status']='completed'
+    result=tick(state,Home(),broker,now=now+10)
+    assert result['mail_events_batched']==1 and result['echo_requests_accepted']==0
+    assert state.get('mail-rollup-v1')[taskrow['task_id']]['status']=='completed'
+    assert taskrow['status']=='completed' and not calls
+
+
+def test_muse_multiple_echo_targets_survive_partial_provider_failure(setup,tmp_path,monkeypatch):
+    from ambient_guardian.ops_announcements import tick
+    from ambient_guardian.notification_brief import NoticeState
+    monkeypatch.setenv('ATLAS_NOTIFICATION_DB',str(tmp_path/'context.sqlite'))
+    monkeypatch.setenv('AMBIENT_GUARDIAN_ALEXA_NOTIFY_ALLOWLIST','notify.echo_cuarto_speak notify.echo_disco_speak')
+    db,broker,task,row,calls=setup
+    now=1762952400
+    taskrow=db[TASKS].rows[0]
+    taskrow.update(created_at='2025-11-12T12:00:00Z',status='in_progress')
+    targets=[]
+    class Home:
+        def speak(self,target,text):
+            targets.append(target)
+            if 'cuarto' in target:raise RuntimeError('one speaker unavailable')
+            return {'status':'sent'}
+    state=NoticeState(str(tmp_path/'ops.sqlite'))
+    tick(state,Home(),broker,now=now)
+    taskrow['status']='failed'
+    result=tick(state,Home(),broker,now=now+10)
+    assert targets==['notify.echo_cuarto_speak','notify.echo_disco_speak']
+    assert result['echo_requests_accepted']==1 and not calls

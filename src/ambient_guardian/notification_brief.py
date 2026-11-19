@@ -190,7 +190,7 @@ def deliver(home: HomeAssistantBridge, message: str, *, tag: str, now: float, vo
                     chunks_accepted+=1
             echo_accepted=chunks_accepted>0
         except (RuntimeError,PermissionError,ValueError,httpx.HTTPError):pass
-    try:notices.record(tag,message,now=now,critical=critical,context=context,spoken=echo_accepted)
+    try:notices.record(tag,message,now=now,critical=critical,context={**(context or {}), '_spoken_text': spoken_text if echo_accepted else None},spoken=echo_accepted)
     except (OSError,sqlite3.Error,TypeError,ValueError):pass  # Evidence failure must not block critical delivery.
     return {'mobile_notification_accepted_by_ha':True,'echo_request_accepted_by_ha':echo_accepted,'speech_chunks_accepted':chunks_accepted}
 
@@ -343,7 +343,8 @@ def run_problems(state: NoticeState, home: HomeAssistantBridge, *, now: float, f
             report_views=[views[0],{**bellini,'assets':[{**a,'online':statuses.get(a['id'],a['online'])} for a in bellini['assets']]},*views[2:]]
         if rich:
             sources=health+general_health.network_sources(report_views[:2])
-            voice_state,speak,message=general_health.voice_decision(sources,state.get('general-voice'),now=now,english=english)
+            previous_voice=state.get('general-voice')
+            voice_state,speak,message=general_health.voice_decision(sources,previous_voice,now=now,english=english)
             measured=datetime.fromtimestamp(now,timezone.utc).astimezone(ZoneInfo('America/Guayaquil'))
             body=(f'Atlas infrastructure report, {measured:%Y-%m-%d %H:%M}.\n' if english else f'Informe de infraestructura Atlas, {measured:%Y-%m-%d %H:%M}.\n')+general_health.full_report(sources,english=english)
             for source in sources:
@@ -353,9 +354,13 @@ def run_problems(state: NoticeState, home: HomeAssistantBridge, *, now: float, f
                     'attributes':{'friendly_name':'Atlas · infrastructure report','icon':'mdi:home-heart','observed_at':datetime.fromtimestamp(now,timezone.utc).isoformat(),
                                   'report':body,'source_count':len(sources),'fresh_source_count':sum(s['fresh'] for s in sources),'paid_model_calls':0}})
                 response.raise_for_status()
-            receipt=deliver(home,body,tag='infrastructure-20-min',now=now,voice=speak,voice_message=message)
+            receipt=deliver(home,body,tag='infrastructure-20-min',now=now,voice=speak,voice_message=message,
+                context={'summary_category':voice_state.get('summary_category'), 'source_measurements':[
+                    {k:s.get(k) for k in ('id','fresh','observed_at')} for s in sources]})
             if speak and receipt.get('echo_request_accepted_by_ha'):state.put('general-voice',voice_state)
-            else:state.put('general-voice',{**voice_state,'spoken_at':state.get('general-voice').get('spoken_at',0)})
+            else:
+                retry_keys=('spoken_at','summary_rotation','summary_category','mail_announced_at','mail_spoken_at')
+                state.put('general-voice',{**voice_state,**{k:previous_voice.get(k,0) for k in retry_keys}})
         else:
             receipt=deliver(home,periodic_message(report_views,now=now,english=english),tag='infrastructure-20-min',now=now,voice_message=periodic_voice(report_views,now=now,english=english))
         state.put('last_periodic_receipt',{'at':now,**receipt})

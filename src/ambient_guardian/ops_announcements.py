@@ -5,6 +5,7 @@ from datetime import datetime, timezone
 import json
 import os
 import re
+import sqlite3
 import time
 from zoneinfo import ZoneInfo
 
@@ -49,8 +50,12 @@ def announcement(task, status):
              'codex': 'Codex', 'cursor': 'Cursor', 'ralfia': 'local agent'}.get(agent, agent)
     host = str(task.get('claim_host') or '').lower()
     node = ' on AMD' if 'amd' in host else ' on Intel' if 'ralphi-ia-ver-10' in host or host == 'intel' else ''
-    short = str(task.get('task_id') or '')[-5:]
+    tid = str(task.get('task_id') or '')
+    short = tid[-5:]
     words = STATUSES.get(status, status)
+    title = str(task.get('title') or '')[:80]
+    # Titles may contain private addresses, secrets or mixed-language prose.
+    # Keep Muse's multi-Echo routing; speak only the safe English topic and suffix.
     text = f'{agent}{node}, task ending {short}: {topic(task)}, {words}.'
     if words == 'needs approval':
         text += ' Review Telegram, or ask Atlas Control for pending approvals.'
@@ -129,6 +134,9 @@ def tick(state, home, broker, *, now):
     state.put('ops-outbox-v1', queue)
     state.put('ops-lifecycle-v1', updated)
     local = datetime.fromtimestamp(now, timezone.utc).astimezone(ZoneInfo('America/Guayaquil'))
+    from .notification_policy import absorb_mail_events
+    mail_batched = absorb_mail_events(queue, state, now=now)
+    state.put('ops-outbox-v1', queue)
     # No credit-consuming inference. Nighttime house/emergency paths are separate.
     spoken = 0
     for event in list(queue.values())[:20]:
@@ -152,7 +160,27 @@ def tick(state, home, broker, *, now):
                 else:
                     continue  # Retry notification only, never an execution.
         if 8 <= local.hour < 22 and now-event['observed_at'] <= 300 and not state.seen(event['key']):
-            home.speak(os.getenv('AMBIENT_GUARDIAN_UNIFI_RF_ECHO_TARGET', 'notify.echo_cuarto_speak'), text)
+            targets = [t.strip() for t in os.getenv('AMBIENT_GUARDIAN_ALEXA_NOTIFY_ALLOWLIST', os.getenv('AMBIENT_GUARDIAN_UNIFI_RF_ECHO_TARGET', 'notify.echo_cuarto_speak')).replace(',', ' ').split() if t.strip()]
+            accepted = []
+            last_error = None
+            for target in targets or ['notify.echo_cuarto_speak']:
+                try:
+                    result = home.speak(target, text)
+                    if result is None or result.get('status') == 'sent':
+                        accepted.append(target)
+                except Exception as exc:
+                    last_error = exc
+            if not accepted:
+                if last_error is not None:
+                    raise last_error  # Keep the persisted outbox for retry.
+                continue  # Muted/suppressed is not a delivered announcement.
+            from . import notification_context as notices
+            try:
+                notices.record('ops-lifecycle', text, now=now, spoken=True,
+                    context={'_spoken_text': text, 'targets': accepted,
+                             'task_suffix': task['task_id'][-5:], 'status': event['status']})
+            except (OSError, ValueError, sqlite3.Error):
+                pass
             state.delivered([event['key']], now=now)
             spoken += 1
         queue.pop(event['key'], None)
@@ -169,7 +197,7 @@ def tick(state, home, broker, *, now):
         except Exception:
             pass
     return {'observed_tasks': len(rows), 'new_transitions': len(events),
-            'echo_requests_accepted': spoken, 'paid_model_calls': 0}
+            'echo_requests_accepted': spoken, 'mail_events_batched': mail_batched, 'paid_model_calls': 0}
 
 
 def main():
