@@ -63,7 +63,7 @@ def _recent(source, now):
     try:
         stamp = datetime.fromisoformat(source.get('observed_at', '').replace('Z', '+00:00'))
         at = stamp.replace(tzinfo=stamp.tzinfo or timezone.utc).timestamp()
-        return 0 <= now - at <= 300
+        return -5 <= now - at <= 300  # ISO microsecond rounding and bounded clock skew.
     except (ValueError, TypeError, AttributeError):
         return False
 
@@ -98,7 +98,7 @@ def rotating_voice(sources, previous, *, now, english):
         if category == 'bellini':
             issues = current[0].get('findings', [])
             if issues:
-                parts.append(issues[0][language])
+                parts.append(issues[(int(previous.get('summary_rotation', 0)) // 3) % len(issues)][language])
                 parts.append('Failed probes do not establish the cause.' if english
                              else 'Las pruebas fallidas no determinan la causa.')
         elif category == 'home':

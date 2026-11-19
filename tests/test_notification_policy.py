@@ -133,3 +133,23 @@ def test_home_rotation_includes_entity_coverage_without_inventing_alarm_state():
     rows=sources()+[source('house_entities','Seven entities inspected; five have no recent source report.')]
     _,text=p.rotating_voice(rows,{'summary_rotation':3},now=NOW,english=True)
     assert 'five have no recent' in text and 'Four home access points' not in text
+
+
+@pytest.mark.parametrize('delta',[0.0000007,0.1234567])
+def test_new_server_measurement_microsecond_rounding_is_not_unknown(delta):
+    now=NOW+delta
+    state,speak,text=g.voice_decision(sources(now),{'summary_rotation':2},now=now,english=True)
+    assert speak and 'Eight of eight' in text and 'unknown' not in text
+
+
+def test_future_measurement_outside_clock_tolerance_is_not_current():
+    assert not p._recent(source('services','All active',at=NOW+60),NOW)
+
+
+def test_bellini_rotates_documented_findings_instead_of_repeating_first_device():
+    a=g.finding('a','Switch A did not respond.','Equipo A.','Check source.','Revisar.')
+    b=g.finding('b','Access point B did not respond.','Equipo B.','Check source.','Revisar.')
+    row=source('Bellini','Eight of ten devices respond.',findings=[a,b])
+    _,first=p.rotating_voice([row],{'summary_rotation':1},now=NOW,english=True)
+    _,second=p.rotating_voice([row],{'summary_rotation':4},now=NOW,english=True)
+    assert 'Switch A' in first and 'Access point B' in second
