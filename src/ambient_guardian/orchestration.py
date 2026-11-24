@@ -506,9 +506,13 @@ def parse_dmx_command(utterance: str, state: GuardianState) -> dict[str, Any] | 
     if not text:
         return None
 
+    # Requests for instructions must not become physical lighting commands.
+    if re.search(r"\b(?:c[oó]mo puedo|c[oó]mo se|qu[eé] puedo|how (?:can|do) i|what can i)\b", text):
+        return None
+
     explicit_verb = bool(
         re.search(
-            r"\b(?:pon|poner|activa|activar|enciende|encender|apaga|apagar|set|turn on|turn off|activate|start)\b",
+            r"\b(?:pon|poner|cambia|cambiar|change|activa|activar|enciende|encender|apaga|apagar|set|turn on|turn off|activate|start)\b",
             text,
         )
     )

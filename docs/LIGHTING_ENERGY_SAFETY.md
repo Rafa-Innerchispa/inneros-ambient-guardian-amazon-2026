@@ -1,6 +1,6 @@
 # Lighting availability and authorized energy saving
 
-Energy load shedding remains opt-in, with both the enabled flag and the owner's preauthorization required. The installation uses an explicit list of nonessential fixtures: desk LED strip, umbrella light and decorative RGB controller. A new fixture is not automatically added. Core network, servers, cameras, alarm, stair lighting, candelabras and the protected mural strip are excluded.
+Energy load shedding remains opt-in, with both the enabled flag and the owner's preauthorization required. The active installation list contains the desk LED strip. The umbrella is intentionally disconnected and is excluded until it is returned to service, avoiding an expected offline fixture being reported as a new shedding failure. A new fixture is not automatically added. Core network, servers, cameras, alarm, stair lighting, candelabras and the protected mural strip are excluded. Apply `deploy/systemd/99-lighting-safety.conf` to the energy notifier's drop-in directory; it replaces the old target list, not the notification channels.
 
 On a confirmed power-loss transition from fresh inverter readings, the notifier reads each approved fixture, turns it off only if its observed state is `on`, and checks the result. A provider failure on one fixture does not skip the others. Unknown/unavailable fixtures are failures to verify, never counted as already off. Uncertain commands are not replayed. There is no automatic turn-on after grid restoration.
 
@@ -10,7 +10,9 @@ On a confirmed power-loss transition from fresh inverter readings, the notifier 
 
 Restored Home Assistant entities are not proof that the device is reachable. During the November 24 inspection, Tuya reported authentication failure and eight lights had only restored unavailable state. The existing integration subsequently recovered and returned live states; remaining unavailable fixtures need provider/device connectivity diagnosis. Reauthentication should use Home Assistant's existing Tuya flow and the owner's Tuya/Smart Life confirmation, preserving entity identifiers and automations. Do not delete and recreate the integration or expose its credentials.
 
-The decorative controller is registered under `flux_led` (Zengge RGB). Its historical energy-target alias is `dmx_rgb`; this is not evidence of a DMX protocol connection. If it is absent from the current network and its configured TCP endpoint is unreachable, report it unavailable rather than claim that it was switched off. Do not replace it with an unidentified outlet.
+The unavailable decorative controller is registered under `flux_led` (Zengge RGB). Its historical energy-target alias was `dmx_rgb`; this is not a DMX protocol connection. The owner confirmed that Bodega, Entrada and Sombrilla were intentionally disconnected. Remove the unidentified Zengge from automatic shedding rather than treating it as the professional DMX controller.
+
+Professional DMX uses the existing Pknight CR011R Art-Net node and its separate local engine, with nine fixture profiles. The Kasa HS300 strip supplies fixture power, while DMX commands select color/effects. Home Assistant did not yet have a TP-Link entry at inspection and direct Kasa discovery required the account's authentication. Keep the engine's API acceptance separate from physical output verification, and do not enable automatic Kasa shedding until each outlet is mapped and nonessential status is confirmed. In particular, protect the stair fixture rather than turning off the whole strip.
 
 ## Verification
 
