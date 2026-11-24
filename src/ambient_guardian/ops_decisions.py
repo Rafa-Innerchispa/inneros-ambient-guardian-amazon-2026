@@ -18,7 +18,10 @@ from .notification_brief import timestamp
 COLLECTION = 'atlas_ops_owner_decisions'
 TASKS = 'ralfia_ops_tasks'
 PENDING = frozenset({'awaiting_owner_auth', 'awaiting_owner_authorization',
-                     'awaiting_owner_approval', 'awaiting_authorization'})
+                     'awaiting_owner_approval', 'awaiting_authorization',
+                     'awaiting_codex_claim', 'awaiting_cursor_claim',
+                     'awaiting_antigravity_claim', 'awaiting_gemini_claim',
+                     'awaiting_chatgpt_claim', 'awaiting_ide_claim'})
 EXTERNAL = frozenset({'codex', 'cursor', 'antigravity', 'gemini'})
 
 

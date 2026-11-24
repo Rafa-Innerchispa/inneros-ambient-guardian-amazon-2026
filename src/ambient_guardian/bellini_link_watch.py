@@ -101,7 +101,7 @@ def main():
         started=time.monotonic()
         try:print(json.dumps(run_cycle(state,home,targets,now=time.time())),flush=True)
         except Exception as exc:print(json.dumps({'error_type':type(exc).__name__,'provider_calls':0}),flush=True)
-        time.sleep(max(.1,2-(time.monotonic()-started)))
+        time.sleep(max(.1,30-(time.monotonic()-started)))
 
 
 if __name__=='__main__':main()
