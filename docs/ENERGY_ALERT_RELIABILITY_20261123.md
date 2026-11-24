@@ -17,6 +17,8 @@ HA history records utility loss on 2026-11-23 at 21:04:31 Ecuador and restoratio
 
 Install deploy/atlas-energy-all-echo.conf as a user-service drop-in for ambient-guardian-energy-notifier.service, and deploy/atlas-notice-delivery.conf for atlas-infrastructure-notices.service. Retain other drop-ins, including Muse's primary-speaker selection. Back up the affected source files, SQLite notification databases and energy state before installing a main-integrated release. Restart only the infrastructure reporter; pause/resume only the energy timer around its isolated file replacement. Do not restart gateways, approval workers, coordination, or Bellini services.
 
+On the real host, use names `99-energy-coverage.conf` and `99-energy-delivery.conf` so the explicit emergency target lists take precedence over the existing `96-echo-disco-notices.conf`. The earlier file remains intact, preserving Muse's ordinary primary-speaker preference. Verify `systemctl --user show UNIT -p Environment` after daemon-reload: both effective emergency targets and the speech allowlist must contain all five Echo entities. A copy on disk alone is not deployment evidence.
+
 ## Fire TV
 
 Home Assistant registers Fire Sala and Fire Cuarto, but the current Alexa Devices integration exposes no Speak/Announce notify entity for either. Do not invent an entity or report successful delivery. The supported local visual route is the Notifications for Fire TV receiver app plus HA's Notifications for Android TV / Fire TV integration. The owner must connect the disconnected TV and enable the receiver permissions. Once each actual notify entity exists it can be explicitly registered as a display target. An unplugged TV cannot receive an alert.
