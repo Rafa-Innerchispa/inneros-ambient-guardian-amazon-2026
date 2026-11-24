@@ -2,10 +2,14 @@ from __future__ import annotations
 
 import json
 import os
+import re
+import sqlite3
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 from zoneinfo import ZoneInfo
+
+import httpx
 
 from .energy_resilience import estimate_energy_resilience, spoken_duration
 from .home_assistant import HomeAssistantBridge
@@ -49,7 +53,14 @@ def _targets() -> list[str]:
     raw = os.getenv(
         "AMBIENT_GUARDIAN_ENERGY_ALERT_TARGETS", "notify.echo_cuarto_speak"
     )
-    return [item.strip() for item in raw.split(",") if item.strip()]
+    return list(dict.fromkeys(item.strip() for item in raw.split(",") if item.strip()))
+
+
+def _mobile_service():
+    value = os.getenv('AMBIENT_GUARDIAN_ENERGY_MOBILE_SERVICE', '').strip()
+    if value and not re.fullmatch(r'mobile_app_[A-Za-z0-9_]+', value):
+        raise ValueError('Energy mobile target must be an existing Companion service')
+    return value
 
 
 def _local_now(now: datetime) -> datetime:
@@ -71,7 +82,7 @@ def _daytime(local_now: datetime) -> bool:
 
 def _periodic_bucket(local_now: datetime) -> str | None:
     interval_minutes = max(
-        5, int(os.getenv("AMBIENT_GUARDIAN_ENERGY_DAY_INTERVAL_MINUTES", "30"))
+        5, int(os.getenv("AMBIENT_GUARDIAN_ENERGY_DAY_INTERVAL_MINUTES", "20"))
     )
     minute = (local_now.minute // interval_minutes) * interval_minutes
     bucket = local_now.replace(minute=minute, second=0, microsecond=0)
@@ -107,11 +118,10 @@ def _message(
     if event == "utility_restored":
         return (
             "Utility power has returned. InnerOS confirms that battery backup is no longer "
-            "active. Critical systems remain protected while normal loads recover gradually."
+            "active. No loads have been switched on automatically."
             if english
             else "Regresó la energía eléctrica. InnerOS confirma que el respaldo por batería "
-            "ya no está activo. Los sistemas críticos siguen protegidos mientras las cargas "
-            "normales se recuperan gradualmente."
+            "ya no está activo. No se encendieron cargas automáticamente."
         )
     runtime = spoken_duration(estimate.get("remaining_hours"), english=english)
     output = estimate.get("output_power_w")
@@ -129,8 +139,7 @@ def _message(
             return (
                 "InnerOS energy update. "
                 + suffix
-                + ". To extend runtime, keep the AMD server and core network protected, "
-                "and shut down the noncritical Intel server only after owner approval."
+                + ". Estimates depend on current load. Keep essential circuits protected."
             )
         if event == "critical_energy":
             return (
@@ -140,8 +149,7 @@ def _message(
                 "owner approval."
             )
         message = (
-            "Power outage detected. InnerOS is entering energy-saving mode. Servers, the "
-            "core network, security, Home Assistant, and inverter monitoring stay protected. "
+            "Power outage detected. InnerOS energy monitoring is active. "
             + suffix
             + "."
         )
@@ -169,8 +177,7 @@ def _message(
         return (
             "Actualización energética de InnerOS. "
             + suffix
-            + ". Para extender la autonomía, mantén protegido el servidor AMD y la red "
-            "principal, y apaga el servidor Intel no crítico sólo con autorización del dueño."
+            + ". La estimación depende de la carga actual. Mantén protegidos los circuitos esenciales."
         )
     if event == "critical_energy":
         return (
@@ -180,9 +187,7 @@ def _message(
             "autorización del dueño."
         )
     message = (
-        "Apagón detectado. InnerOS entra en modo de ahorro energético. Los servidores, la "
-        "red principal, la seguridad, Home Assistant y el monitoreo del inversor permanecen "
-        "protegidos. "
+        "Apagón detectado. Monitoreo energético de InnerOS activo. "
         + suffix
         + "."
     )
@@ -215,11 +220,33 @@ def run_cycle(
         dry_run = os.getenv("AMBIENT_GUARDIAN_ENERGY_NOTIFIER_DRY_RUN", "0") == "1"
 
     current: dict[str, Any] = {}
+    observations: dict[str, Any] = {}
     for entity_id in ENERGY_ENTITIES:
         observed = bridge.get_entity_state(entity_id)
+        observations[entity_id] = observed
         current[entity_id] = observed.get("state")
 
     previous = _load_state(state_path)
+    # Never interpret absent/stale telemetry as restoration. Stable test bridges
+    # without timestamps remain usable; real HA includes last_updated.
+    valid = []
+    for entity_id in ENERGY_ENTITIES:
+        observed = observations[entity_id]
+        stamp = observed.get('last_updated')
+        recent = True
+        if stamp:
+            try:
+                at = datetime.fromisoformat(stamp.replace('Z', '+00:00'))
+                recent = -5 <= (now - at).total_seconds() <= 180
+            except (ValueError, TypeError):
+                recent = False
+        valid.append(recent and current[entity_id] not in {None, 'unknown', 'unavailable'})
+    if not all(valid[:3]):
+        return {'ok': False, 'event': None, 'delivered_to': [],
+                'reason': 'energy_telemetry_unavailable_or_stale', 'dry_run': dry_run}
+    for entity_id, usable in zip(ENERGY_ENTITIES[3:], valid[3:]):
+        if not usable:
+            current[entity_id] = None
     outage_started_at = previous.get("outage_started_at")
     synthetic_events = []
     if outage_started_at:
@@ -245,13 +272,14 @@ def run_cycle(
         estimate["outage_started_at"] = previous["outage_started_at"]
         previous["last_critical_key"] = _critical_key(estimate)
         try:
-            load_shed = bridge.shed_noncritical_energy_loads()
-        except (AttributeError, PermissionError, RuntimeError, ValueError) as exc:
+            # A diagnostic preview must never operate relays or lights.
+            load_shed = bridge.shed_noncritical_energy_loads() if not dry_run else None
+        except (AttributeError, PermissionError, RuntimeError, ValueError, httpx.HTTPError) as exc:
             load_shed = {
                 "enabled": False,
                 "targets": 0,
                 "turned_off": 0,
-                "verification_failed": False,
+                "verification_failed": isinstance(exc, httpx.HTTPError),
                 "reason": type(exc).__name__,
             }
     elif not outage_now and outage_before:
@@ -262,16 +290,20 @@ def run_cycle(
 
     if outage_now and event is None:
         local_now = _local_now(now)
-        if _daytime(local_now):
-            bucket = _periodic_bucket(local_now)
-            if bucket and previous.get("last_periodic_bucket") != bucket:
-                event = "energy_update"
-                previous["last_periodic_bucket"] = bucket
-        else:
-            critical_key = _critical_key(estimate)
-            if critical_key and previous.get("last_critical_key") != critical_key:
-                event = "critical_energy"
-                previous["last_critical_key"] = critical_key
+        critical_key = _critical_key(estimate)
+        if critical_key and previous.get('last_critical_key') != critical_key:
+            event = 'critical_energy'
+            previous['last_critical_key'] = critical_key
+        elif _daytime(local_now):
+            # Elapsed time survives polling gaps and restarts; a minute-boundary
+            # test could miss a whole update during a busy or disconnected host.
+            interval = max(5, int(os.getenv('AMBIENT_GUARDIAN_ENERGY_DAY_INTERVAL_MINUTES', '20'))) * 60
+            since = previous.get('last_energy_announcement_at')
+            if since is None:
+                try: since = datetime.fromisoformat(previous['outage_started_at']).timestamp()
+                except (KeyError, ValueError, TypeError): since = now.timestamp()
+            if now.timestamp() - since >= interval:
+                event = 'energy_update'
 
     if event:
         english = os.getenv(
@@ -283,12 +315,77 @@ def run_cycle(
             english=english,
             load_shed=load_shed,
         )
+        measured = _local_now(now)
+        prefix = f'Measured at {measured:%H:%M}. ' if english else f'Medición de las {measured:%H:%M}. '
+        message = prefix + message
+        if len(message) > 300:
+            message = message[:296].rsplit(' ', 1)[0] + '.'
         if not dry_run:
-            for target in _targets():
-                from .notification_context import critical_delivery
-                with critical_delivery(event in {'outage_started', 'critical_energy'}):
-                    bridge.speak(target, message)
-                delivered.append(target)
+            previous.update(outage_active=outage_now, last_event=event,
+                            last_checked_at=now.isoformat())
+            previous['last_energy_announcement_at'] = now.timestamp()
+            previous['pending_delivery'] = {
+                'event': event, 'message': message, 'created_at': now.timestamp(),
+                'remaining': _targets(), 'receipts': {}, 'next_attempt_at': now.timestamp(),
+                'mobile_pending': bool(_mobile_service()),
+            }
+
+    receipt = None
+    pending = previous.get('pending_delivery') if not dry_run else None
+    if pending and now.timestamp() >= pending.get('next_attempt_at', 0):
+        # Expire stale speech rather than replaying a resolved outage later.
+        age = now.timestamp() - pending['created_at']
+        if age > 300 or (not outage_now and pending['event'] != 'utility_restored'):
+            previous['last_expired_delivery'] = pending
+            previous.pop('pending_delivery', None)
+        else:
+            from .notification_context import critical_delivery
+            pending['next_attempt_at'] = now.timestamp() + 30
+            previous['pending_delivery'] = pending
+            # Persist before I/O; success receipts are stored per target below.
+            _save_state(state_path, previous)
+            if pending.get('mobile_pending'):
+                try:
+                    response = httpx.post(bridge.url + '/api/services/notify/' + _mobile_service(),
+                        headers=bridge._headers(), timeout=5,
+                        json={'title':'Atlas · energy monitoring', 'message':pending['message'],
+                              'data':{'tag':'atlas-energy-event','channel':'InnerOS Critical' if pending['event'] in {'outage_started','critical_energy'} else 'InnerOS Reports',
+                                      'importance':'high','priority':'high','ttl':0,
+                                      'url':'/atlas-network/general'}})
+                    response.raise_for_status()
+                    pending['mobile_pending'] = False
+                    pending['mobile_receipt'] = {'accepted_by_ha':True,'at':now.isoformat()}
+                except httpx.HTTPError as exc:
+                    pending['mobile_receipt'] = {'accepted_by_ha':False,'error_type':type(exc).__name__}
+            for target in list(pending['remaining']):
+                try:
+                    status = bridge.get_entity_state(target)
+                    if status.get('state') in {'unavailable', None}:
+                        raise RuntimeError('notification_target_unavailable')
+                    with critical_delivery(pending['event'] in {'outage_started', 'critical_energy'}):
+                        sent = bridge.speak(target, pending['message'])
+                    if isinstance(sent, dict) and sent.get('status') == 'suppressed':
+                        pending['receipts'][target] = {'accepted_by_ha': False, 'reason': sent.get('reason', 'suppressed')}
+                        continue
+                    pending['remaining'].remove(target)
+                    pending['receipts'][target] = {'accepted_by_ha': True, 'at': now.isoformat(), 'audible_verified': False}
+                    delivered.append(target)
+                except (RuntimeError, PermissionError, ValueError, httpx.HTTPError) as exc:
+                    pending['receipts'][target] = {'accepted_by_ha': False, 'error_type': type(exc).__name__}
+                previous['pending_delivery'] = pending
+                _save_state(state_path, previous)
+            receipt = dict(pending)
+            previous['last_delivery'] = receipt
+            if not pending['remaining'] and not pending.get('mobile_pending'):
+                previous.pop('pending_delivery', None)
+            try:
+                from .notification_context import record
+                record('energy-' + pending['event'], pending['message'], now=now.timestamp(),
+                       critical=pending['event'] in {'outage_started', 'critical_energy'},
+                       context={'event': pending['event'], 'estimate': estimate, 'delivery': receipt},
+                       spoken=bool(delivered))
+            except (OSError, ValueError, TypeError, sqlite3.Error):
+                pass
 
     previous.update(
         {
@@ -297,7 +394,8 @@ def run_cycle(
             "last_checked_at": now.astimezone(timezone.utc).isoformat(),
         }
     )
-    _save_state(state_path, previous)
+    if not dry_run:
+        _save_state(state_path, previous)
     return {
         "ok": True,
         "event": event,
@@ -305,6 +403,8 @@ def run_cycle(
         "delivered_to": delivered,
         "energy_resilience": estimate,
         "load_shed": load_shed,
+        "delivery": receipt,
+        "observed_at": {key: value.get('last_updated') for key, value in observations.items()},
     }
 
 

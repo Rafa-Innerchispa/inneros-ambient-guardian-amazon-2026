@@ -9,6 +9,22 @@ from ambient_guardian.notification_brief import NoticeState
 NOW = datetime(2026, 11, 19, 18, tzinfo=timezone.utc).timestamp()
 
 
+def test_unchanged_bellini_finding_is_not_reread_every_hour():
+    def sources(at,ident='nvr'):
+        return [{'id':'Bellini','fresh':True,'observed_at':datetime.fromtimestamp(at,timezone.utc).isoformat(),
+                 'en':'7 of 10 monitored devices respond.','es':'Responden 7 de 10 equipos.',
+                 'findings':[{'id':ident,'en':'Administration recorder probe failed.','es':'Falló la sonda del grabador.'}]}]
+    state,message=p.rotating_voice(sources(NOW),{'summary_rotation':1},now=NOW,english=True)
+    assert 'Administration recorder' in message
+    state['summary_rotation']=4
+    state,message=p.rotating_voice(sources(NOW+3600),state,now=NOW+3600,english=True)
+    assert 'Administration recorder' not in message
+    assert 'No new confirmed finding' in message
+    state['summary_rotation']=7
+    _,message=p.rotating_voice(sources(NOW+7200,'new-device'),state,now=NOW+7200,english=True)
+    assert 'Administration recorder' in message
+
+
 def event(ident, status, title='[Correo/AG-17] (sin asunto)', at=NOW):
     return {'task': {'task_id': ident, 'title': title}, 'status': status, 'observed_at': at}
 
@@ -121,7 +137,7 @@ def test_notice_history_records_actual_submitted_voice_not_full_mobile_report(mo
     monkeypatch.setattr(notices,'record',lambda *a,**kw:captured.append(kw))
     original=httpx.Client
     monkeypatch.setattr(httpx,'Client',lambda **kw:original(**kw,transport=httpx.MockTransport(lambda req:httpx.Response(200,json={}))))
-    home=SimpleNamespace(url='http://ha.test',_headers=lambda:{},speak=lambda *args:{'status':status})
+    home=SimpleNamespace(url='http://ha.test',_headers=lambda:{},get_entity_state=lambda target:{'state':'unknown'},speak=lambda *args:{'status':status})
     b.deliver(home,'Longer mobile report.',tag='infrastructure-20-min',now=NOW,
               voice_message='Exact spoken summary.',context={'summary_category':'servers'})
     assert captured[0]['context']['_spoken_text']==expected

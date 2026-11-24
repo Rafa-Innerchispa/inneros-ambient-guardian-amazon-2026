@@ -499,7 +499,7 @@ class HomeAssistantBridge:
                         "entity_id": entity_id,
                         "before": before_state,
                         "after": before_state,
-                        "status": "already_off",
+                        "status": "already_off" if before_state == "off" else "verification_failed",
                     }
                 )
                 continue

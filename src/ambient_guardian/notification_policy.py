@@ -81,6 +81,7 @@ def rotating_voice(sources, previous, *, now, english):
     label = ({'home': 'Home', 'bellini': 'Bellini', 'servers': 'Servers'} if english
              else {'home': 'Casa', 'bellini': 'Bellini', 'servers': 'Servidores'})[category]
     parts = [f'{label}, {local:%H:%M}.']
+    finding_history = dict(previous.get('summary_finding_history', {}))
     if not current:
         parts.append('No recent source measurement; current status is unknown.' if english
                      else 'Sin medición reciente de origen; estado actual desconocido.')
@@ -98,14 +99,28 @@ def rotating_voice(sources, previous, *, now, english):
         if category == 'bellini':
             issues = current[0].get('findings', [])
             if issues:
-                parts.append(issues[(int(previous.get('summary_rotation', 0)) // 3) % len(issues)][language])
-                parts.append('Failed probes do not establish the cause.' if english
-                             else 'Las pruebas fallidas no determinan la causa.')
+                signature = '|'.join(sorted(str(i.get('id', i.get(language,''))) for i in issues))
+                old = finding_history.get(category, {})
+                if old.get('signature') != signature or now-old.get('at',0) >= 21600:
+                    parts.append(issues[(int(previous.get('summary_rotation', 0)) // 3) % len(issues)][language])
+                    parts.append('Failed probes do not establish the cause.' if english
+                                 else 'Las pruebas fallidas no determinan la causa.')
+                    finding_history[category] = {'signature':signature,'at':now}
+                else:
+                    parts.append('No new confirmed finding; ongoing details remain in the phone report.' if english
+                                 else 'Sin hallazgos nuevos confirmados; los detalles pendientes siguen en el informe del celular.')
         elif category == 'home':
             warnings = [i for s in current for i in s.get('findings', [])]
             if warnings:
-                parts.append(warnings[0][language])
-    updated = dict(previous)
+                signature = '|'.join(sorted(str(i.get('id', i.get(language,''))) for i in warnings))
+                old = finding_history.get(category,{})
+                if old.get('signature') != signature or now-old.get('at',0) >= 21600:
+                    parts.append(warnings[0][language])
+                    finding_history[category] = {'signature':signature,'at':now}
+                else:
+                    parts.append('Ongoing findings unchanged; review the proposed correction on your phone.' if english
+                                 else 'Hallazgos pendientes sin cambios; revisa la corrección propuesta en el celular.')
+    updated = {**previous,'summary_finding_history':finding_history}
     mail = by_id.get('mail_tasks', {})
     if (category == 'servers' and _recent(mail, now)
             and mail.get('latest_event_at', 0) > previous.get('mail_announced_at', 0)

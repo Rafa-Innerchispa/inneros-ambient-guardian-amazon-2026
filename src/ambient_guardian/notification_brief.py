@@ -170,29 +170,40 @@ def deliver(home: HomeAssistantBridge, message: str, *, tag: str, now: float, vo
         return {'repeat_suppressed':True,'echo_request_accepted_by_ha':False}
     service=os.getenv('AMBIENT_GUARDIAN_UNIFI_RF_MOBILE_SERVICE','mobile_app_infinix_x6873')
     if not re.fullmatch(r'mobile_app_[a-zA-Z0-9_]+',service):raise ValueError('Invalid mobile service')
-    with httpx.Client(base_url=home.url,headers=home._headers(),timeout=5,trust_env=False) as client:
-        data={'tag':tag,'url':'/atlas-network/general' if tag=='infrastructure-20-min' else '/atlas-network/overview','channel':'InnerOS Critical' if critical else 'InnerOS Reports','importance':'high' if critical else 'default','priority':'high' if critical else 'normal','ttl':0 if critical else 1200}
-        response=client.post('/api/services/notify/'+service,json={'title':'Atlas · '+tag,'message':message,'data':data})
-        response.raise_for_status()
+    mobile_accepted=False;mobile_error=None
+    try:
+        with httpx.Client(base_url=home.url,headers=home._headers(),timeout=5,trust_env=False) as client:
+            data={'tag':tag,'url':'/atlas-network/general' if tag=='infrastructure-20-min' else '/atlas-network/overview','channel':'InnerOS Critical' if critical else 'InnerOS Reports','importance':'high' if critical else 'default','priority':'high' if critical else 'normal','ttl':0 if critical else 1200}
+            response=client.post('/api/services/notify/'+service,json={'title':'Atlas · '+tag,'message':message,'data':data})
+            response.raise_for_status();mobile_accepted=True
+    except httpx.HTTPError as exc:mobile_error=type(exc).__name__
     local=datetime.fromtimestamp(now,timezone.utc).astimezone(ZoneInfo('America/Guayaquil'))
-    echo_accepted=False;chunks_accepted=0
+    echo_accepted=False;chunks_accepted=0;target_receipts={};spoken_text=voice_message or message
     if voice and (critical or 8<=local.hour<22) and (critical or not notices.muted(now=now)):
-        target=os.getenv('AMBIENT_GUARDIAN_UNIFI_RF_ECHO_TARGET','notify.echo_cuarto_speak')
-        try:
-            with notices.critical_delivery(critical):
-                spoken_text=voice_message or message
-                if len(spoken_text)>280:
-                    english=os.getenv('AMBIENT_GUARDIAN_UNIFI_RF_ALERT_LOCALE','en-US').startswith('en')
-                    spoken_text=spoken_text[:190].rsplit(' ',1)[0]+('. Ask Atlas Control to investigate the last alert.' if english else '. Pide a Atlas Control investigar la última alerta.')
-                for chunk in speech_chunks(spoken_text):
-                    result=home.speak(target,chunk)
-                    if isinstance(result,dict) and result.get('status')=='suppressed':break
-                    chunks_accepted+=1
-            echo_accepted=chunks_accepted>0
-        except (RuntimeError,PermissionError,ValueError,httpx.HTTPError):pass
-    try:notices.record(tag,message,now=now,critical=critical,context={**(context or {}), '_spoken_text': spoken_text if echo_accepted else None},spoken=echo_accepted)
+        primary=os.getenv('AMBIENT_GUARDIAN_UNIFI_RF_ECHO_TARGET','notify.echo_cuarto_speak')
+        configured=os.getenv('AMBIENT_GUARDIAN_CRITICAL_ECHO_TARGETS','') if critical else ''
+        targets=[t.strip() for t in (configured or primary).split(',') if t.strip()]
+        if not critical:
+            targets.extend(t.strip() for t in os.getenv('AMBIENT_GUARDIAN_NOTICE_ECHO_FALLBACK_TARGETS','').split(',') if t.strip())
+        for target in dict.fromkeys(targets):
+            try:
+                if home.get_entity_state(target).get('state') in {'unavailable',None}:
+                    raise RuntimeError('notification_target_unavailable')
+                with notices.critical_delivery(critical):
+                    if len(spoken_text)>280:
+                        english=os.getenv('AMBIENT_GUARDIAN_UNIFI_RF_ALERT_LOCALE','en-US').startswith('en')
+                        spoken_text=spoken_text[:190].rsplit(' ',1)[0]+('. Ask Atlas Control to investigate the last alert.' if english else '. Pide a Atlas Control investigar la última alerta.')
+                    result=home.speak(target,spoken_text)
+                    accepted=not (isinstance(result,dict) and result.get('status')=='suppressed')
+                    target_receipts[target]={'accepted_by_ha':accepted,'audible_verified':False}
+                    chunks_accepted+=int(accepted)
+                    echo_accepted=echo_accepted or accepted
+                if accepted and not critical:break  # Ordinary reports never echo around the house.
+            except (RuntimeError,PermissionError,ValueError,httpx.HTTPError) as exc:
+                target_receipts[target]={'accepted_by_ha':False,'error_type':type(exc).__name__}
+    try:notices.record(tag,message,now=now,critical=critical,context={**(context or {}), '_spoken_text': spoken_text if echo_accepted else None,'delivery':target_receipts,'mobile_accepted_by_ha':mobile_accepted},spoken=echo_accepted)
     except (OSError,sqlite3.Error,TypeError,ValueError):pass  # Evidence failure must not block critical delivery.
-    return {'mobile_notification_accepted_by_ha':True,'echo_request_accepted_by_ha':echo_accepted,'speech_chunks_accepted':chunks_accepted}
+    return {'mobile_notification_accepted_by_ha':mobile_accepted,'mobile_error_type':mobile_error,'echo_request_accepted_by_ha':echo_accepted,'speech_chunks_accepted':chunks_accepted,'target_receipts':target_receipts}
 
 
 def _db():
@@ -345,6 +356,9 @@ def run_problems(state: NoticeState, home: HomeAssistantBridge, *, now: float, f
             sources=health+general_health.network_sources(report_views[:2])
             previous_voice=state.get('general-voice')
             voice_state,speak,message=general_health.voice_decision(sources,previous_voice,now=now,english=english)
+            if os.getenv('AMBIENT_GUARDIAN_ENERGY_NOTIFIER_OWNS_OUTAGES','0')=='1' and any(
+                s.get('id')=='energy' and s.get('fresh') and any(i.get('id')=='battery-mode' for i in s.get('findings',[])) for s in sources):
+                speak=False  # The dedicated 20-minute energy notifier owns outage speech.
             measured=datetime.fromtimestamp(now,timezone.utc).astimezone(ZoneInfo('America/Guayaquil'))
             body=(f'Atlas infrastructure report, {measured:%Y-%m-%d %H:%M}.\n' if english else f'Informe de infraestructura Atlas, {measured:%Y-%m-%d %H:%M}.\n')+general_health.full_report(sources,english=english)
             for source in sources:
@@ -361,6 +375,8 @@ def run_problems(state: NoticeState, home: HomeAssistantBridge, *, now: float, f
             else:
                 retry_keys=('spoken_at','summary_rotation','summary_category','mail_announced_at','mail_spoken_at')
                 state.put('general-voice',{**voice_state,**{k:previous_voice.get(k,0) for k in retry_keys}})
+                if 'summary_finding_history' in voice_state:
+                    state.put('general-voice',{**state.get('general-voice'),'summary_finding_history':previous_voice.get('summary_finding_history',{})})
         else:
             receipt=deliver(home,periodic_message(report_views,now=now,english=english),tag='infrastructure-20-min',now=now,voice_message=periodic_voice(report_views,now=now,english=english))
         state.put('last_periodic_receipt',{'at':now,**receipt})
