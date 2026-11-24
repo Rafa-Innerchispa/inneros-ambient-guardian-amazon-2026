@@ -80,11 +80,39 @@ def test_only_critical_can_speak_at_three_am(monkeypatch):
     original=httpx.Client
     def handle(req):requests.append(json.loads(req.content));return httpx.Response(200,json=[])
     monkeypatch.setattr(httpx,'Client',lambda **kw:original(**kw,transport=httpx.MockTransport(handle)))
-    home=SimpleNamespace(url='http://ha.local',_headers=lambda:{},speak=lambda *args:spoken.append(args))
+    home=SimpleNamespace(url='http://ha.local',_headers=lambda:{},get_entity_state=lambda target:{'state':'unknown'},speak=lambda *args:spoken.append(args))
     deliver(home,'Critical test',tag='test',now=NOW,critical=True)
     assert len(spoken)==1 and requests[-1]['data']['priority']=='high'
     deliver(home,'Ordinary test',tag='test',now=NOW)
     assert len(spoken)==1
+
+
+def test_critical_fanout_continues_when_mobile_or_one_echo_fails(tmp_path,monkeypatch):
+    monkeypatch.setenv('ATLAS_NOTIFICATION_DB',str(tmp_path/'notices.sqlite'))
+    monkeypatch.setenv('AMBIENT_GUARDIAN_CRITICAL_ECHO_TARGETS','notify.echo_disco_speak,notify.echo_cuarto_speak,notify.echo_sala_speak')
+    spoken=[];original=httpx.Client
+    monkeypatch.setattr(httpx,'Client',lambda **kw:original(**kw,transport=httpx.MockTransport(lambda req:httpx.Response(503))))
+    home=SimpleNamespace(url='http://ha.local',_headers=lambda:{},
+        get_entity_state=lambda target:{'state':'unavailable' if 'disco' in target else 'unknown'},
+        speak=lambda *args:spoken.append(args) or {'status':'sent'})
+    receipt=deliver(home,'Real critical observation',tag='test-critical',now=NOW,critical=True)
+    assert not receipt['mobile_notification_accepted_by_ha']
+    assert receipt['echo_request_accepted_by_ha'] and len(spoken)==2
+    assert not receipt['target_receipts']['notify.echo_disco_speak']['accepted_by_ha']
+
+
+def test_ordinary_report_falls_back_without_broadcasting(tmp_path,monkeypatch):
+    monkeypatch.setenv('ATLAS_NOTIFICATION_DB',str(tmp_path/'notices.sqlite'))
+    monkeypatch.setenv('AMBIENT_GUARDIAN_UNIFI_RF_ECHO_TARGET','notify.echo_disco_speak')
+    monkeypatch.setenv('AMBIENT_GUARDIAN_NOTICE_ECHO_FALLBACK_TARGETS','notify.echo_cuarto_speak,notify.echo_sala_speak')
+    original=httpx.Client;spoken=[]
+    monkeypatch.setattr(httpx,'Client',lambda **kw:original(**kw,transport=httpx.MockTransport(lambda req:httpx.Response(200))))
+    home=SimpleNamespace(url='http://ha.local',_headers=lambda:{},
+        get_entity_state=lambda target:{'state':'unavailable' if 'disco' in target else 'unknown'},
+        speak=lambda *args:spoken.append(args) or {'status':'sent'})
+    receipt=deliver(home,'Current report',tag='test',now=NOW+5*3600)
+    assert receipt['echo_request_accepted_by_ha']
+    assert [t for t,m in spoken]==['notify.echo_cuarto_speak']
 
 
 def test_long_reports_fit_existing_ha_speech_guard():

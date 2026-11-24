@@ -177,6 +177,20 @@ def test_energy_load_shed_turns_off_only_explicit_noncritical_target(monkeypatch
     ]
 
 
+def test_unavailable_load_is_not_reported_as_already_off(monkeypatch):
+    clear_bridge_env(monkeypatch)
+    monkeypatch.setenv('HOME_ASSISTANT_URL','http://ha.local:8123')
+    monkeypatch.setenv('HOME_ASSISTANT_TOKEN','test-token')
+    monkeypatch.setenv('AMBIENT_GUARDIAN_ENERGY_LOAD_SHED_ENABLED','1')
+    monkeypatch.setenv('AMBIENT_GUARDIAN_ENERGY_LOAD_SHED_OWNER_PREAUTHORIZED','1')
+    monkeypatch.setenv('AMBIENT_GUARDIAN_ENERGY_LOAD_SHED_TARGETS','{"desk":{"entity_id":"light.cinta_escritorio","label":"Desk LED strip"}}')
+    monkeypatch.setattr(HomeAssistantBridge,'get_entity_state',lambda self,target:{'state':'unavailable'})
+    result=HomeAssistantBridge().shed_noncritical_energy_loads()
+    assert result['verification_failed'] is True
+    assert result['results'][0]['status']=='verification_failed'
+    assert result['turned_off']==0
+
+
 def test_energy_load_shed_rejects_protected_targets(monkeypatch):
     clear_bridge_env(monkeypatch)
     monkeypatch.setenv("HOME_ASSISTANT_URL", "http://ha.local:8123")
