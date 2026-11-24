@@ -63,6 +63,14 @@ def _mobile_service():
     return value
 
 
+def _display_services():
+    raw = os.getenv('AMBIENT_GUARDIAN_ENERGY_DISPLAY_SERVICES', '')
+    services = list(dict.fromkeys(v.strip() for v in raw.split(',') if v.strip()))
+    if len(services) > 8 or any(not re.fullmatch(r'[a-z][a-z0-9_]{0,120}', v) for v in services):
+        raise ValueError('Invalid configured Home Assistant display notify service')
+    return services
+
+
 def _local_now(now: datetime) -> datetime:
     timezone_name = os.getenv(
         "AMBIENT_GUARDIAN_HOME_TIMEZONE", "America/Guayaquil"
@@ -328,6 +336,7 @@ def run_cycle(
                 'event': event, 'message': message, 'created_at': now.timestamp(),
                 'remaining': _targets(), 'receipts': {}, 'next_attempt_at': now.timestamp(),
                 'mobile_pending': bool(_mobile_service()),
+                'display_pending': _display_services(), 'display_receipts': {},
             }
 
     receipt = None
@@ -374,9 +383,23 @@ def run_cycle(
                     pending['receipts'][target] = {'accepted_by_ha': False, 'error_type': type(exc).__name__}
                 previous['pending_delivery'] = pending
                 _save_state(state_path, previous)
+            for service in list(pending.get('display_pending', [])):
+                try:
+                    response = httpx.post(bridge.url + '/api/services/notify/' + service,
+                        headers=bridge._headers(), timeout=5,
+                        json={'title':'Atlas · Energy', 'message':pending['message'],
+                              'data':{'duration':20,'position':'top-right','fontsize':'large',
+                                      'transparency':'25%','interrupt':False}})
+                    response.raise_for_status()
+                    pending['display_pending'].remove(service)
+                    pending['display_receipts'][service] = {'accepted_by_ha':True,'at':now.isoformat(),'visual_verified':False}
+                except httpx.HTTPError as exc:
+                    pending['display_receipts'][service] = {'accepted_by_ha':False,'error_type':type(exc).__name__}
+                previous['pending_delivery'] = pending
+                _save_state(state_path, previous)
             receipt = dict(pending)
             previous['last_delivery'] = receipt
-            if not pending['remaining'] and not pending.get('mobile_pending'):
+            if not pending['remaining'] and not pending.get('mobile_pending') and not pending.get('display_pending'):
                 previous.pop('pending_delivery', None)
             try:
                 from .notification_context import record
