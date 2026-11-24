@@ -11,6 +11,7 @@ def isolated_notifications(tmp_path, monkeypatch):
     monkeypatch.setenv('AMBIENT_GUARDIAN_ENERGY_ALERT_TARGETS', 'notify.echo_cuarto_speak')
     monkeypatch.setenv('AMBIENT_GUARDIAN_ENERGY_DAY_INTERVAL_MINUTES', '20')
     monkeypatch.delenv('AMBIENT_GUARDIAN_ENERGY_MOBILE_SERVICE', raising=False)
+    monkeypatch.delenv('AMBIENT_GUARDIAN_ENERGY_DISPLAY_SERVICES', raising=False)
 
 
 class StubBridge:
@@ -240,6 +241,59 @@ def test_failed_approved_light_request_cannot_block_outage_warning(tmp_path):
     result=run_cycle(bridge,state_path=tmp_path/'state.json')
     assert result['event']=='outage_started' and result['delivered_to']
     assert result['load_shed']['verification_failed'] is True
+
+
+def test_fire_tv_overlay_is_noninterrupting_and_recorded_separately(tmp_path,monkeypatch):
+    import httpx
+    from ambient_guardian.energy_notifier import _display_services
+    monkeypatch.setenv('AMBIENT_GUARDIAN_ENERGY_DISPLAY_SERVICES','fire_sala,fire_sala')
+    requests=[]
+    def post(url,**kwargs):
+        requests.append((url,kwargs['json']))
+        return httpx.Response(200,json=[],request=httpx.Request('POST',url))
+    monkeypatch.setattr(httpx,'post',post)
+    bridge=StubBridge();bridge.url='http://ha.test';bridge._headers=lambda:{}
+    result=run_cycle(bridge,state_path=tmp_path/'state.json')
+    assert _display_services()==['fire_sala']
+    assert result['delivered_to']==['notify.echo_cuarto_speak']
+    assert len(requests)==1 and requests[0][0]=='http://ha.test/api/services/notify/fire_sala'
+    assert requests[0][1]['data']['interrupt'] is False
+    assert requests[0][1]['data']['duration']==20
+    assert result['delivery']['display_receipts']['fire_sala']['accepted_by_ha'] is True
+    assert result['delivery']['display_receipts']['fire_sala']['visual_verified'] is False
+    assert not result['delivery']['display_pending']
+
+
+def test_failed_fire_tv_retries_only_display_without_repeating_echo(tmp_path,monkeypatch):
+    import httpx
+    monkeypatch.setenv('AMBIENT_GUARDIAN_ENERGY_DISPLAY_SERVICES','fire_sala')
+    attempts=[]
+    def post(url,**kwargs):
+        attempts.append(url)
+        return httpx.Response(503 if len(attempts)==1 else 200,request=httpx.Request('POST',url))
+    monkeypatch.setattr(httpx,'post',post)
+    bridge=StubBridge();bridge.url='http://ha.test';bridge._headers=lambda:{}
+    now=datetime(2026,11,23,21,tzinfo=timezone.utc);path=tmp_path/'state.json'
+    first=run_cycle(bridge,now=now,state_path=path)
+    assert first['delivery']['display_pending']==['fire_sala']
+    second=run_cycle(bridge,now=now+timedelta(seconds=31),state_path=path)
+    assert second['delivery']['display_pending']==[]
+    assert len(bridge.messages)==1
+
+
+def test_dry_run_never_notifies_fire_tv(tmp_path,monkeypatch):
+    import httpx
+    monkeypatch.setenv('AMBIENT_GUARDIAN_ENERGY_DISPLAY_SERVICES','fire_sala')
+    def prohibited(*args,**kwargs):raise AssertionError('No display I/O in dry run')
+    monkeypatch.setattr(httpx,'post',prohibited)
+    result=run_cycle(StubBridge(),state_path=tmp_path/'state.json',dry_run=True)
+    assert result['dry_run'] and result['delivery'] is None
+
+
+def test_display_service_configuration_cannot_supply_a_url(monkeypatch):
+    from ambient_guardian.energy_notifier import _display_services
+    monkeypatch.setenv('AMBIENT_GUARDIAN_ENERGY_DISPLAY_SERVICES','https://outside.test/path')
+    with pytest.raises(ValueError):_display_services()
 
 
 def test_nighttime_outage_stays_quiet_without_critical_threshold(tmp_path):
