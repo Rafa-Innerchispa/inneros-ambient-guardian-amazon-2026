@@ -233,6 +233,7 @@ class HomeAssistantBridge:
             "battery",
             "breaker",
             "camera",
+            "candelabr",
             "cinta_mural",
             "escalera",
             "gateway",
@@ -243,7 +244,11 @@ class HomeAssistantBridge:
             "router",
             "server",
             "solar",
-            "stairs",
+            "stair",
+            "security",
+            "seguridad",
+            "emergency",
+            "emergencia",
             "unifi",
             "wifi",
         }
@@ -489,7 +494,14 @@ class HomeAssistantBridge:
         results: list[dict[str, Any]] = []
         for alias, target in sorted(self.energy_load_shed_targets.items()):
             entity_id = target["entity_id"]
-            before = self.get_entity_state(entity_id)
+            try:
+                before = self.get_entity_state(entity_id)
+            except httpx.HTTPError:
+                results.append({"alias": alias, "label": target["label"],
+                                "entity_id": entity_id, "before": "unknown",
+                                "after": "unknown", "status": "verification_failed",
+                                "reason": "state_read_failed"})
+                continue
             before_state = str(before.get("state") or "unknown")
             if before_state != "on":
                 results.append(
@@ -504,15 +516,24 @@ class HomeAssistantBridge:
                 )
                 continue
             domain = entity_id.split(".", 1)[0]
-            response = httpx.post(
-                f"{self.url}/api/services/{domain}/turn_off",
-                headers=self._headers(),
-                json={"entity_id": entity_id},
-                timeout=self.timeout,
-            )
-            response.raise_for_status()
-            time.sleep(0.25)
-            after = self.get_entity_state(entity_id)
+            try:
+                response = httpx.post(
+                    f"{self.url}/api/services/{domain}/turn_off",
+                    headers=self._headers(),
+                    json={"entity_id": entity_id},
+                    timeout=self.timeout,
+                )
+                response.raise_for_status()
+                time.sleep(0.25)
+                after = self.get_entity_state(entity_id)
+            except httpx.HTTPError:
+                # Do not replay an uncertain command or prevent other approved
+                # lights from being processed. Never persist credential-bearing URLs.
+                results.append({"alias": alias, "label": target["label"],
+                                "entity_id": entity_id, "before": before_state,
+                                "after": "unknown", "status": "verification_failed",
+                                "reason": "command_or_verification_failed"})
+                continue
             after_state = str(after.get("state") or "unknown")
             results.append(
                 {

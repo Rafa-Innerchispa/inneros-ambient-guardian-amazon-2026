@@ -290,6 +290,12 @@ def run_cycle(
                 "verification_failed": isinstance(exc, httpx.HTTPError),
                 "reason": type(exc).__name__,
             }
+        if not dry_run:
+            previous["last_load_shed"] = {
+                "observed_at": now.astimezone(timezone.utc).isoformat(),
+                "outage_started_at": previous["outage_started_at"],
+                "result": load_shed,
+            }
     elif not outage_now and outage_before:
         event = "utility_restored"
         previous["outage_started_at"] = None
