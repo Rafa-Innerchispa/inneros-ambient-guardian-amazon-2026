@@ -36,7 +36,8 @@ def preserve(repo, destination, ref):
     if missing:raise RuntimeError('Repository has missing objects; hydrate through its normal authorized Git remote first')
     destination.mkdir(parents=True,mode=0o700)
     manifest={'schema':'atlas-preservation-v1','at':dt.datetime.now(dt.timezone.utc).isoformat(),
-              'source_repo':str(repo),'main_sha':revision,'secrets_included':False,
+              'source_repo':str(repo),'main_sha':revision,'credential_files_included':False,
+              'notification_state_private':True,
               'services_restarted':False,'replica_activated':False,
               'credential_recovery':'Use the existing protected credential store; no env/token files are in this snapshot.',
               'working_tree_status':run('git','status','--short',cwd=repo),
