@@ -85,7 +85,7 @@ def test_outage_executes_owner_preauthorized_noncritical_shed_once(
     )
     second = run_cycle(
         bridge,
-        now=datetime(2026, 10, 15, 14, 1, tzinfo=timezone.utc),
+        now=datetime(2026, 10, 15, 14, 0, 31, tzinfo=timezone.utc),
         state_path=path,
         dry_run=False,
     )

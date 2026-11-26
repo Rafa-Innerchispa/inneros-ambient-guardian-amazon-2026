@@ -156,23 +156,19 @@ def _message(
                 + ". Review noncritical loads now. Any server shutdown still requires "
                 "owner approval."
             )
-        message = (
-            "Power outage detected. InnerOS energy monitoring is active. "
-            + suffix
-            + "."
-        )
+        active = bool(load_shed and load_shed.get("enabled") and load_shed.get("owner_preauthorized"))
+        message = "Power outage confirmed. " if event == "outage_followup" else "Power outage detected. "
+        message += "Energy saving mode is active. " if active else "Energy monitoring is active. "
         if load_shed and load_shed.get("turned_off"):
-            message += (
-                f" I turned off {int(load_shed['turned_off'])} owner-preauthorized "
-                "noncritical loads."
-            )
+            message += f"I turned off {int(load_shed['turned_off'])} approved loads. "
         elif load_shed and load_shed.get("targets") and not load_shed.get(
             "verification_failed"
         ):
-            message += " The approved noncritical loads were already off."
+            message += "Approved loads were already off. "
         if load_shed and load_shed.get("verification_failed"):
-            message += " One approved load did not confirm shutdown and needs review."
-        return message[:300]
+            failed = len(_failed_shed_entities(load_shed))
+            message += f"{failed} approved loads need shutdown verification. " if failed else "Load shutdown needs verification. "
+        return (message + suffix + ".")[:300]
     detail = []
     if output is not None:
         detail.append(f"La carga protegida actual es de {output:.0f} vatios")
@@ -194,23 +190,52 @@ def _message(
             + ". Revisa ahora las cargas no críticas. Apagar un servidor todavía requiere "
             "autorización del dueño."
         )
-    message = (
-        "Apagón detectado. Monitoreo energético de InnerOS activo. "
-        + suffix
-        + "."
-    )
+    active = bool(load_shed and load_shed.get("enabled") and load_shed.get("owner_preauthorized"))
+    message = "Apagón confirmado. " if event == "outage_followup" else "Apagón detectado. "
+    message += "Modo ahorro energético activo. " if active else "Monitoreo energético activo. "
     if load_shed and load_shed.get("turned_off"):
-        message += (
-            f" Apagué {int(load_shed['turned_off'])} cargas no críticas "
-            "preautorizadas por el dueño."
-        )
+        message += f"Apagué {int(load_shed['turned_off'])} cargas preautorizadas. "
     elif load_shed and load_shed.get("targets") and not load_shed.get(
         "verification_failed"
     ):
-        message += " Las cargas no críticas aprobadas ya estaban apagadas."
+        message += "Las cargas aprobadas ya estaban apagadas. "
     if load_shed and load_shed.get("verification_failed"):
-        message += " Una carga aprobada no confirmó el apagado y requiere revisión."
-    return message[:300]
+        failed = len(_failed_shed_entities(load_shed))
+        message += f"{failed} cargas requieren verificar el apagado. " if failed else "Se debe verificar el apagado de cargas. "
+    return (message + suffix + ".")[:300]
+
+
+def _failed_shed_entities(result: dict[str, Any] | None) -> list[str]:
+    return sorted({row["entity_id"] for row in (result or {}).get("results", [])
+                   if row.get("status") == "verification_failed" and isinstance(row.get("entity_id"), str)})
+
+
+def _retry_shed(bridge: HomeAssistantBridge, previous: dict[str, Any], *, now: datetime,
+                state_path: Path, outage_now: bool, dry_run: bool) -> dict[str, Any] | None:
+    """Retry failed approved lights only, never replay successful or historical loads."""
+    retry = previous.get("pending_load_shed")
+    if dry_run or not retry:
+        return None
+    if not outage_now or now.timestamp() > retry["expires_at"] or retry["attempts"] >= 3:
+        previous["last_load_shed_retry"] = {**retry, "status": "expired_or_finished"}
+        previous.pop("pending_load_shed", None)
+        return None
+    if now.timestamp() < retry["next_attempt_at"]:
+        return None
+    retry["attempts"] += 1
+    retry["next_attempt_at"] = now.timestamp() + 30
+    _save_state(state_path, previous)  # Bound retries even after a process failure.
+    try:
+        result = bridge.shed_noncritical_energy_loads(only_entities=set(retry["remaining"]))
+    except (AttributeError, PermissionError, RuntimeError, ValueError, httpx.HTTPError) as exc:
+        retry["history"].append({"at": now.isoformat(), "error_type": type(exc).__name__})
+        return None
+    retry["history"].append({"at": now.isoformat(), "result": result})
+    retry["remaining"] = _failed_shed_entities(result)
+    previous["last_load_shed_retry"] = dict(retry)
+    if not retry["remaining"]:
+        previous.pop("pending_load_shed", None)
+    return result
 
 
 def run_cycle(
@@ -279,6 +304,9 @@ def run_cycle(
         previous["outage_started_at"] = now.astimezone(timezone.utc).isoformat()
         estimate["outage_started_at"] = previous["outage_started_at"]
         previous["last_critical_key"] = _critical_key(estimate)
+        previous["outage_followup_due_at"] = now.timestamp() + 60
+        previous["outage_followup_expires_at"] = now.timestamp() + 300
+        previous.pop("pending_load_shed", None)
         try:
             # A diagnostic preview must never operate relays or lights.
             load_shed = bridge.shed_noncritical_energy_loads() if not dry_run else None
@@ -296,11 +324,25 @@ def run_cycle(
                 "outage_started_at": previous["outage_started_at"],
                 "result": load_shed,
             }
+            failed = _failed_shed_entities(load_shed)
+            if failed:
+                previous["pending_load_shed"] = {
+                    "remaining": failed, "attempts": 0, "history": [],
+                    "next_attempt_at": now.timestamp() + 30, "expires_at": now.timestamp() + 300,
+                    "outage_started_at": previous["outage_started_at"],
+                }
     elif not outage_now and outage_before:
         event = "utility_restored"
         previous["outage_started_at"] = None
         previous["last_periodic_bucket"] = None
         previous["last_critical_key"] = None
+        previous.pop("outage_followup_due_at", None)
+        previous.pop("outage_followup_expires_at", None)
+
+    retried = _retry_shed(bridge, previous, now=now, state_path=state_path,
+                         outage_now=outage_now, dry_run=bool(dry_run))
+    if retried is not None:
+        load_shed = retried
 
     if outage_now and event is None:
         local_now = _local_now(now)
@@ -308,7 +350,18 @@ def run_cycle(
         if critical_key and previous.get('last_critical_key') != critical_key:
             event = 'critical_energy'
             previous['last_critical_key'] = critical_key
-        elif _daytime(local_now):
+        due = previous.get('outage_followup_due_at')
+        if due and now.timestamp() > previous.get('outage_followup_expires_at', 0):
+            previous.pop('outage_followup_due_at', None)
+        elif event == 'critical_energy' and due and now.timestamp() >= due:
+            # A fresh critical warning also satisfies the boot confirmation.
+            previous.pop('outage_followup_due_at', None)
+        elif event is None and due and now.timestamp() >= due:
+            event = 'outage_followup'
+            previous.pop('outage_followup_due_at', None)
+            load_shed = load_shed or ((previous.get('last_load_shed_retry') or {}).get('history') or [{}])[-1].get('result')
+            load_shed = load_shed or (previous.get('last_load_shed') or {}).get('result')
+        if event is None and _daytime(local_now):
             # Elapsed time survives polling gaps and restarts; a minute-boundary
             # test could miss a whole update during a busy or disconnected host.
             interval = max(5, int(os.getenv('AMBIENT_GUARDIAN_ENERGY_DAY_INTERVAL_MINUTES', '20'))) * 60
@@ -337,7 +390,8 @@ def run_cycle(
         if not dry_run:
             previous.update(outage_active=outage_now, last_event=event,
                             last_checked_at=now.isoformat())
-            previous['last_energy_announcement_at'] = now.timestamp()
+            if event != 'outage_followup':
+                previous['last_energy_announcement_at'] = now.timestamp()
             previous['pending_delivery'] = {
                 'event': event, 'message': message, 'created_at': now.timestamp(),
                 'remaining': _targets(), 'receipts': {}, 'next_attempt_at': now.timestamp(),
@@ -364,7 +418,7 @@ def run_cycle(
                     response = httpx.post(bridge.url + '/api/services/notify/' + _mobile_service(),
                         headers=bridge._headers(), timeout=5,
                         json={'title':'Atlas · energy monitoring', 'message':pending['message'],
-                              'data':{'tag':'atlas-energy-event','channel':'InnerOS Critical' if pending['event'] in {'outage_started','critical_energy'} else 'InnerOS Reports',
+                              'data':{'tag':'atlas-energy-event','channel':'InnerOS Critical' if pending['event'] in {'outage_started','outage_followup','critical_energy'} else 'InnerOS Reports',
                                       'importance':'high','priority':'high','ttl':0,
                                       'url':'/atlas-network/general'}})
                     response.raise_for_status()
@@ -377,7 +431,7 @@ def run_cycle(
                     status = bridge.get_entity_state(target)
                     if status.get('state') in {'unavailable', None}:
                         raise RuntimeError('notification_target_unavailable')
-                    with critical_delivery(pending['event'] in {'outage_started', 'critical_energy'}):
+                    with critical_delivery(pending['event'] in {'outage_started', 'outage_followup', 'critical_energy'}):
                         sent = bridge.speak(target, pending['message'])
                     if isinstance(sent, dict) and sent.get('status') == 'suppressed':
                         pending['receipts'][target] = {'accepted_by_ha': False, 'reason': sent.get('reason', 'suppressed')}
@@ -410,7 +464,7 @@ def run_cycle(
             try:
                 from .notification_context import record
                 record('energy-' + pending['event'], pending['message'], now=now.timestamp(),
-                       critical=pending['event'] in {'outage_started', 'critical_energy'},
+                       critical=pending['event'] in {'outage_started', 'outage_followup', 'critical_energy'},
                        context={'event': pending['event'], 'estimate': estimate, 'delivery': receipt},
                        spoken=bool(delivered))
             except (OSError, ValueError, TypeError, sqlite3.Error):

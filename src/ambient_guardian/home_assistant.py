@@ -482,7 +482,7 @@ class HomeAssistantBridge:
             "devices": sorted(devices, key=lambda item: item["entity_id"])[:512],
         }
 
-    def shed_noncritical_energy_loads(self) -> dict[str, Any]:
+    def shed_noncritical_energy_loads(self, *, only_entities: set[str] | None = None) -> dict[str, Any]:
         """Turn off only owner-preauthorized, explicitly allowlisted noncritical loads."""
         if not self.configured:
             raise RuntimeError("Home Assistant bridge is not configured")
@@ -491,8 +491,16 @@ class HomeAssistantBridge:
         if not self.energy_load_shed_owner_preauthorized:
             raise PermissionError("automatic energy load shedding is not owner preauthorized")
 
+        targets = self.energy_load_shed_targets
+        if only_entities is not None:
+            allowed = {target["entity_id"] for target in targets.values()}
+            if not isinstance(only_entities, set) or not only_entities <= allowed:
+                raise PermissionError("retry targets are not in the current approved lighting policy")
+            targets = {alias: target for alias, target in targets.items()
+                       if target["entity_id"] in only_entities}
+
         results: list[dict[str, Any]] = []
-        for alias, target in sorted(self.energy_load_shed_targets.items()):
+        for alias, target in sorted(targets.items()):
             entity_id = target["entity_id"]
             try:
                 before = self.get_entity_state(entity_id)
@@ -550,7 +558,7 @@ class HomeAssistantBridge:
         return {
             "enabled": True,
             "owner_preauthorized": True,
-            "targets": len(self.energy_load_shed_targets),
+            "targets": len(targets),
             "turned_off": sum(item["status"] == "completed" for item in results),
             "verification_failed": any(
                 item["status"] == "verification_failed" for item in results
