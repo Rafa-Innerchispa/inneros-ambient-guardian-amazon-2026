@@ -57,7 +57,10 @@ def _peer_call(url, authorization, capability_id, parameters):
         record=result.get('structuredContent')
         if record is None:
             record=json.loads(next(c['text'] for c in result.get('content',[]) if c.get('type')=='text'))
-        if not record.get('ok'):return {'ok':False,'error':record.get('error','lighting_peer_failed')}
+        if not record.get('ok'):
+            detail=record.get('result') if isinstance(record.get('result'),dict) else {}
+            return {**detail,'ok':False,'error':detail.get('error') or detail.get('reason') or record.get('error','lighting_peer_failed'),
+                    'forwarded_via':'intel_owner_mcp','peer_execution_id':record.get('execution_id')}
         return {**record['result'],'forwarded_via':'intel_owner_mcp','peer_execution_id':record.get('execution_id')}
 
 
@@ -88,7 +91,7 @@ def register_lighting_capabilities(register):
     for cid,operation,mode,description,properties in specs:
         manifest={'capability_id':cid,'version':'1.0.0','title':description,'description':description,
                   'domain':'lighting','risk_class':'low' if mode=='read_only' else 'medium','mode':mode,
-                  'keywords':['lighting','luces','switch','interruptor','dmx','artnet','kasa','tachos','pulpos'],
+                  'keywords':['lighting','lights','luces','iluminacion','control','encender','apagar','turn on','turn off','power','color','efectos','switch','interruptor','dmx','artnet','kasa','tachos','pulpos'],
                   'required_scopes':['ralfia:write'],'owner_identity_required':True,
                   'parameters_schema':{'type':'object','properties':properties,'required':list(properties),'additionalProperties':False}}
         def handler(parameters,context,operation=operation,properties=properties,capability_id=cid):

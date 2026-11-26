@@ -8,7 +8,8 @@ def adapter():
     module=importlib.util.module_from_spec(spec);spec.loader.exec_module(module)
     return module
 
-def test_peer_carries_current_owner_oauth_without_reading_intel_bridge_secret(monkeypatch):
+@pytest.mark.parametrize('failed',[False,True])
+def test_peer_carries_current_owner_oauth_without_reading_intel_bridge_secret(monkeypatch,failed):
     module=adapter();calls=[]
     monkeypatch.setattr(module,'_authorize',lambda:'Bearer synthetic-owner')
     monkeypatch.setattr(module,'_bridge_token',lambda:pytest.fail('AMD must not read/copy the Intel bridge secret'))
@@ -27,14 +28,16 @@ def test_peer_carries_current_owner_oauth_without_reading_intel_bridge_secret(mo
             if json['method']=='initialize':return Response({'result':{'protocolVersion':'2025-03-26'}},{'Mcp-Session-Id':'own-test-session'})
             assert headers['Mcp-Session-Id']=='own-test-session'
             if json['method']=='notifications/initialized':return Response({})
-            return Response({'result':{'structuredContent':{'ok':True,'execution_id':'intel-exec',
-                'result':{'ok':True,'verified':True,'control_plane':'mains_power'}}}})
+            return Response({'result':{'structuredContent':{'ok':not failed,'execution_id':'intel-exec',
+                'result':{'ok':not failed,'verified':not failed,'control_plane':'mains_power',
+                          'reason':'no verified power-switch mapping' if failed else 'verified'}}}})
     monkeypatch.setattr(module.httpx,'Client',Client)
     registered={}
     module.register_lighting_capabilities(lambda manifest,handler:registered.__setitem__(manifest['capability_id'],handler))
     parameters={'target':'tachos','turn_on':False,'request_id':'peer-power-test'}
     result=registered['lighting.power.v1'](parameters,{})
-    assert result['verified'] and result['forwarded_via']=='intel_owner_mcp'
+    assert result['verified'] is not failed and result['forwarded_via']=='intel_owner_mcp'
+    if failed:assert result['error']=='no verified power-switch mapping'
     assert calls[-1]['params']['arguments']=={'capability_id':'lighting.power.v1','parameters':parameters}
     assert 'synthetic-owner' not in str(result)
 
