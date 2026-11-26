@@ -1,0 +1,17 @@
+[Unit]
+Description=Atlas Home Assistant integration health and bounded recovery
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+WorkingDirectory=%h/inneros/inneros_core/workspaces/inneros-ambient-guardian-amazon-2026
+Environment=AMBIENT_GUARDIAN_SHARED_ENV_FILE=%h/inneros/inneros_core/platform/.env
+Environment=PYTHONDONTWRITEBYTECODE=1
+ExecStart=%h/inneros/inneros_core/workspaces/inneros-ambient-guardian-amazon-2026/.venv/bin/python %h/inneros/inneros_core/var/atlas-ha-integration-guard/current/ha_integration_guard.py --runtime %h/inneros/inneros_core/workspaces/inneros-ambient-guardian-amazon-2026 --policy %h/.config/ambient-guardian/ha-integration-policy.json --state %h/inneros/inneros_core/var/atlas-ha-integration-guard/state.json --apply
+UMask=0077
+NoNewPrivileges=true
+RestrictSUIDSGID=true
+TimeoutStartSec=75
+StandardOutput=journal
+StandardError=journal

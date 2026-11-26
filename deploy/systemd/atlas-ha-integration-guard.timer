@@ -1,0 +1,11 @@
+[Unit]
+Description=Check approved Home Assistant integrations once per minute
+
+[Timer]
+OnBootSec=2min
+OnUnitInactiveSec=60s
+AccuracySec=5s
+Unit=atlas-ha-integration-guard.service
+
+[Install]
+WantedBy=timers.target
