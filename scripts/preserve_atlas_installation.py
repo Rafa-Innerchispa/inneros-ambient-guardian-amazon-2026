@@ -79,11 +79,24 @@ def preserve(repo, destination, ref):
             relative=path.relative_to(base);target=units/relative
             target.parent.mkdir(parents=True,exist_ok=True);shutil.copy2(path,target)
 
+    # Only Atlas-owned compact-profile drop-ins, never token/env file contents.
+    profile_dir=base/'ralfia-mcp-profile@chatgpt_compact.service.d'
+    for name in ['99-atlas-lighting-owner.conf','99-atlas-lighting-peer.conf','99-atlas-lighting-runtime.conf']:
+        path=profile_dir/name
+        if not path.is_file() or path.is_symlink():continue
+        text=path.read_text()
+        import re
+        if re.search(r'(?im)^Environment=.*(?:TOKEN|SECRET|PASSWORD|API_KEY|AUTHORIZATION)\s*=',text):
+            raise RuntimeError('Refusing an inline secret in '+path.name)
+        target=units/path.relative_to(base);target.parent.mkdir(parents=True,exist_ok=True)
+        shutil.copy2(path,target)
+
     state=Path.home()/'.local/state/ambient-guardian/energy-notifier.json'
     if state.exists():shutil.copy2(state,stage/'energy-notifier.json')
     state_dir=Path.home()/'data/atlas-offline-voice/notifications'
-    for name in ['context.sqlite3','state.sqlite3','ops.sqlite3']:
-        source=state_dir/name
+    databases={name:state_dir/name for name in ['context.sqlite3','state.sqlite3','ops.sqlite3']}
+    databases['lighting-actions.sqlite3']=Path.home()/'.local/state/ambient-guardian/lighting-actions.sqlite3'
+    for name,source in databases.items():
         if not source.exists():continue
         with sqlite3.connect(source.as_uri()+'?mode=ro',uri=True) as src:
             with sqlite3.connect(stage/name) as dst:
@@ -110,6 +123,7 @@ def preserve(repo, destination, ref):
         '2. Clone repository.bundle into a new isolated directory, then check out the pinned main SHA.\n'
         '3. Inspect runtime-state.tar.gz privately: installed source, notification units, energy state and consistent SQLite snapshots.\n'
         '4. Recover credentials through the existing protected store. This snapshot deliberately excludes credential files.\n'
+        '   Restore lighting-actions.sqlite3 to its original private state path before accepting repeated requests; reinstall the pinned MCP extension using scripts/install_mcp_lighting_adapter.py.\n'
         '5. Fence the old controller before enabling any standby notification/control worker. Do not run two active controllers.\n'
         '6. Validate endpoints, actual entity availability and notification delivery before declaring recovery.\n\n'
         'Backups and an isolated source checkout do not establish automatic HA failover.\n')
