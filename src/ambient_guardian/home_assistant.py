@@ -1250,59 +1250,56 @@ class HomeAssistantBridge:
         }
 
 
-    def ensure_dmx_power(self, target: str) -> dict[str, Any]:
-        """Verify and, when needed, energize mapped DMX fixture power before Art-Net."""
-        target = (target or "").strip()
-        if not self.dmx_power_preflight_enabled:
-            return {
-                "ok": True,
-                "enabled": False,
-                "target": target,
-                "status": "preflight_disabled",
-                "entities": [],
-            }
-
-        entities = list(self.dmx_power_map.get(target) or [])
-        if not entities and target != "todas":
-            entities = list(self.dmx_power_map.get("todas") or [])
+    def inspect_fixture_power(self, target: str) -> dict[str, Any]:
+        """Read only the exact mapped switch group; never fall back to all outlets."""
+        entities = self.dmx_power_map.get(target) or []
+        if not self.configured or not self.dmx_power_preflight_enabled:
+            return {"ok": False, "verified": False, "target": target,
+                    "reason": "fixture power control is not configured", "entities": []}
         if not entities:
-            raise PermissionError(f"DMX power mapping missing for target: {target}")
+            return {"ok": False, "verified": False, "target": target,
+                    "reason": "no verified power-switch mapping", "entities": []}
+        rows = [{"entity_id": entity, "state": self.get_entity_state(entity).get("state")}
+                for entity in entities]
+        return {"ok": True, "verified": all(row["state"] == "on" for row in rows),
+                "target": target, "reason": "read-only power observation", "entities": rows,
+                "control_plane": "mains_power", "physical_light_verified": False}
 
+    def control_fixture_power(self, target: str, *, turn_on: bool) -> dict[str, Any]:
+        """Explicit mains action, independent of color/effects and restricted to exact mappings."""
+        if type(turn_on) is not bool:
+            raise ValueError("turn_on must be boolean")
+        observation = self.inspect_fixture_power(target)
+        if not observation["ok"]:
+            return observation
+        # Preflight the entire group before changing any outlet.
+        if any(row["state"] not in {"on", "off"} for row in observation["entities"]):
+            return {**observation, "ok": False, "verified": False,
+                    "reason": "one or more mapped switches are unavailable", "changed": False}
+        wanted = "on" if turn_on else "off"
         results = []
-        for entity_id in entities:
-            before = self.get_entity_state(entity_id)
-            before_state = str(before.get("state") or "")
-            if before_state in {"unavailable", "unknown", ""}:
-                raise RuntimeError(f"DMX power entity unavailable: {entity_id}")
-            changed = False
-            if before_state != "on":
-                response = httpx.post(
-                    f"{self.url}/api/services/switch/turn_on",
-                    headers=self._headers(),
-                    json={"entity_id": entity_id},
-                    timeout=self.timeout,
-                )
+        for row in observation["entities"]:
+            changed = row["state"] != wanted
+            if changed:
+                response = httpx.post(f"{self.url}/api/services/switch/turn_{wanted}",
+                                      headers=self._headers(), json={"entity_id": row["entity_id"]},
+                                      timeout=self.timeout)
                 response.raise_for_status()
-                changed = True
-            after = self.get_entity_state(entity_id)
-            if str(after.get("state") or "") != "on":
-                raise RuntimeError(f"DMX power could not be verified on: {entity_id}")
-            results.append(
-                {
-                    "entity_id": entity_id,
-                    "before": before_state,
-                    "changed": changed,
-                    "after": "on",
-                    "verified": True,
-                }
-            )
-        return {
-            "ok": True,
-            "enabled": True,
-            "target": target,
-            "status": "power_verified",
-            "entities": results,
-        }
+                time.sleep(0.25)
+            after = self.get_entity_state(row["entity_id"]).get("state")
+            results.append({"entity_id": row["entity_id"], "before": row["state"],
+                            "after": after, "changed": changed, "verified": after == wanted})
+        verified = all(row["verified"] for row in results)
+        return {"ok": verified, "verified": verified, "target": target,
+                "state": wanted, "entities": results,
+                "reason": "switch state verified" if verified else "switch state could not be verified",
+                "control_plane": "mains_power", "physical_light_verified": False,
+                "dmx_changed": False}
+
+
+    def ensure_dmx_power(self, target: str) -> dict[str, Any]:
+        """Read-only compatibility wrapper: color requests cannot energize outlets."""
+        return self.inspect_fixture_power(target)
 
 
     def _press_button(self, entity_id: str) -> None:

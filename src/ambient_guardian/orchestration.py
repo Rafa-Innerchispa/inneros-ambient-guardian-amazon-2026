@@ -5,6 +5,7 @@ import os
 import re
 import secrets
 import sqlite3
+import httpx
 from collections import Counter
 from datetime import datetime, time as clock_time, timedelta, timezone
 from typing import Any
@@ -460,6 +461,16 @@ _DMX_COLORS: dict[str, str] = {
 }
 
 _DMX_TARGETS: dict[str, str] = {
+    "tacho mural": "tacho_mural",
+    "wall stage light": "tacho_mural",
+    "tacho peces": "tacho_peces",
+    "fish light": "tacho_peces",
+    "tacho plantas": "tacho_plantas",
+    "plant light": "tacho_plantas",
+    "tacho central": "tacho_central",
+    "central stage light": "tacho_central",
+    "stage lights": "tachos",
+    "spiders": "pulpos",
     "dmx": "todas",
     "all dmx": "todas",
     "todas": "todas",
@@ -503,7 +514,7 @@ def parse_dmx_command(utterance: str, state: GuardianState) -> dict[str, Any] | 
         return None
 
     text = " ".join(utterance.lower().strip().split())
-    if not text:
+    if not text or re.search(r"\b(?:no|not|never|don\x27t)\b", text):
         return None
 
     # Requests for instructions must not become physical lighting commands.
@@ -512,7 +523,7 @@ def parse_dmx_command(utterance: str, state: GuardianState) -> dict[str, Any] | 
 
     explicit_verb = bool(
         re.search(
-            r"\b(?:pon|poner|cambia|cambiar|change|activa|activar|enciende|encender|apaga|apagar|set|turn on|turn off|activate|start)\b",
+            r"\b(?:pon|poner|cambia|cambiar|change|activa|activar|set|activate|start)\b",
             text,
         )
     )
@@ -525,7 +536,9 @@ def parse_dmx_command(utterance: str, state: GuardianState) -> dict[str, Any] | 
 
     target = None
     for alias, candidate in sorted(_DMX_TARGETS.items(), key=lambda item: len(item[0]), reverse=True):
-        if re.search(rf"\b{re.escape(alias)}\b", text) and candidate in bridge.target_allowlist:
+        if re.search(rf"\b{re.escape(alias)}\b", text):
+            if candidate not in bridge.target_allowlist:
+                return {"kind": "unavailable_target", "target": candidate}
             target = candidate
             break
     if target is None:
@@ -537,12 +550,10 @@ def parse_dmx_command(utterance: str, state: GuardianState) -> dict[str, Any] | 
             color = candidate
             break
     if color is None:
-        if re.search(r"\b(?:apaga|apagar|turn off|blackout)\b", text) and "blackout" in bridge.scene_allowlist:
-            return {"kind": "scene", "scene": "blackout"}
         return None
 
     brightness = 255
-    match = re.search(r"\b(\d{1,3})\s*(?:%|percent|por ciento)\b", text)
+    match = re.search(r"(?<![\w.-])(\d{1,3})\s*(?:%(?!\w)|percent\b|por ciento\b)", text)
     if match:
         pct = int(match.group(1))
         if not 1 <= pct <= 100:
@@ -2679,19 +2690,36 @@ def simulated_alexa_turn(
                 "evidence_count": len(state.evidence_snapshot()),
             }
 
+    from .fixture_control import parse_fixture_power, fixture_power_turn, inspect_power_safely
+    fixture_request = parse_fixture_power(utterance)
+    if fixture_request is not None:
+        try:
+            result = fixture_power_turn(state.home_assistant, fixture_request,
+                                        english=_english_answer(utterance, speaker_context))
+        except (RuntimeError, ValueError, PermissionError, httpx.HTTPError) as exc:
+            result = {"response": {"answer": "Could not safely control fixture power. No DMX command was sent.",
+                                   "status": "attention_required", "reasoning_mode": "deterministic-fixture-power"},
+                      "fixture_power": {"ok": False, "verified": False, "error_type": type(exc).__name__},
+                      "dmx": None, "prepared_action": None}
+        return {"utterance": utterance, **result, "evidence_count": len(state.evidence_snapshot())}
+
     dmx_request = parse_dmx_command(utterance, state)
     if dmx_request is not None:
+        if dmx_request["kind"] == "unavailable_target":
+            return {"utterance": utterance, "prepared_action": None, "dmx": None,
+                    "response": {"answer": "No verified DMX profile is available for that fixture. No power switch or DMX output was changed.",
+                                 "status": "attention_required", "reasoning_mode": "deterministic-local-dmx"}}
         power_result = None
         try:
             if dmx_request["kind"] == "scene":
                 scene_name = str(dmx_request["scene"])
                 if scene_name != "blackout":
-                    power_result = state.home_assistant.ensure_dmx_power("todas")
+                    power_result = inspect_power_safely(state.home_assistant, "todas")
                 dmx_result = state.dmx.apply_scene(scene_name)
                 subject = scene_name.replace("_", " ")
             else:
                 target = str(dmx_request["target"])
-                power_result = state.home_assistant.ensure_dmx_power(target)
+                power_result = inspect_power_safely(state.home_assistant, target)
                 dmx_result = state.dmx.apply_color(
                     str(dmx_request["color"]),
                     target=target,
@@ -2702,10 +2730,11 @@ def simulated_alexa_turn(
                 "utterance": utterance,
                 "response": {
                     "answer": (
-                        f"El motor DMX profesional aceptó {subject} después de verificar la "
-                        "alimentación de los fixtures. Envié la orden en tiempo real por protocolo "
-                        "Art-Net. El motor confirmó la orden, aunque la luz física no tiene sensor "
-                        "de retorno independiente."
+                        (f"The DMX engine accepted {subject} over Art-Net. I did not switch any power outlet. Physical light output is not sensor-verified. "
+                         if _english_answer(utterance, speaker_context) else
+                         f"El motor DMX aceptó {subject} por Art-Net. No cambié ningún interruptor. La luz física no tiene verificación independiente. ")
+                        + (("Fixture power is not confirmed on." if _english_answer(utterance, speaker_context) else "La alimentación no está confirmada encendida.")
+                           if power_result and not power_result.get("verified") else "")
                     ),
                     "status": "all_clear",
                     "reasoning_mode": "deterministic-local-dmx",
@@ -2720,8 +2749,7 @@ def simulated_alexa_turn(
                 "utterance": utterance,
                 "response": {
                     "answer": (
-                        "No pude verificar de forma segura la alimentación de los fixtures, "
-                        "así que no envié la orden DMX por Art-Net."
+                        "No pude completar la orden DMX. No cambié ningún interruptor de alimentación."
                     ),
                     "status": "attention_required",
                     "reasoning_mode": "deterministic-local-dmx",
