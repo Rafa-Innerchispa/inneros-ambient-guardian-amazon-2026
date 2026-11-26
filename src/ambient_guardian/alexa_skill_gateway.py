@@ -586,6 +586,24 @@ def _guardian_query(
         return "check the live InnerOS server fleet status" if english else "revisa el estado en vivo de los servidores de InnerOS"
     if intent_name == "RingDemoStatusIntent":
         return "what did Ring detect in the demo" if english else "qué detectó Ring en el demo"
+    if intent_name in {"FixturePowerOnIntent", "FixturePowerOffIntent"}:
+        target = _slot_value(request_payload, "fixtureTarget")
+        if not target:
+            raise ValueError("fixture target is required")
+        verb = ("turn on" if intent_name == "FixturePowerOnIntent" else "turn off") if english else ("enciende" if intent_name == "FixturePowerOnIntent" else "apaga")
+        return f"{verb} {target}"
+    if intent_name == "DMXColorIntent":
+        target = _slot_value(request_payload, "fixtureTarget")
+        color = _slot_value(request_payload, "dmxColor")
+        if not target or not color:
+            raise ValueError("DMX target and color are required")
+        return f"change {target} to {color}" if english else f"cambia {target} a {color}"
+    if intent_name == "DMXSceneIntent":
+        scene = _slot_value(request_payload, "dmxScene")
+        if not scene:
+            raise ValueError("DMX scene is required")
+        return f"activate {scene}" if english else f"activa {scene}"
+
     if intent_name == "DMXStatusIntent":
         return (
             "what can the DMX system do over Art-Net"
@@ -911,6 +929,10 @@ def _dispatch(payload: dict[str, Any]) -> dict[str, Any]:
         "ServerStatusIntent",
         "RingDemoStatusIntent",
         "DMXStatusIntent",
+        "FixturePowerOnIntent",
+        "FixturePowerOffIntent",
+        "DMXColorIntent",
+        "DMXSceneIntent",
         "MusicStatusIntent",
         "PlayMusicIntent",
         "UnifiRestartIntent",

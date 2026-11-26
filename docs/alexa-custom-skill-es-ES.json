@@ -526,9 +526,302 @@
             "baja la voz de las notificaciones",
             "baja el volumen de los avisos de InnerOS"
           ]
+        },
+        {
+          "name": "FixturePowerOnIntent",
+          "slots": [
+            {
+              "name": "fixtureTarget",
+              "type": "FIXTURE_TARGET"
+            }
+          ],
+          "samples": [
+            "enciende {fixtureTarget}",
+            "enciende los {fixtureTarget}",
+            "prende {fixtureTarget}",
+            "prende los {fixtureTarget}"
+          ]
+        },
+        {
+          "name": "FixturePowerOffIntent",
+          "slots": [
+            {
+              "name": "fixtureTarget",
+              "type": "FIXTURE_TARGET"
+            }
+          ],
+          "samples": [
+            "apaga {fixtureTarget}",
+            "apaga los {fixtureTarget}",
+            "apagar {fixtureTarget}"
+          ]
+        },
+        {
+          "name": "DMXColorIntent",
+          "slots": [
+            {
+              "name": "fixtureTarget",
+              "type": "FIXTURE_TARGET"
+            },
+            {
+              "name": "dmxColor",
+              "type": "DMX_COLOR"
+            }
+          ],
+          "samples": [
+            "cambia {fixtureTarget} a {dmxColor}",
+            "cambia los {fixtureTarget} a {dmxColor}",
+            "pon {fixtureTarget} en {dmxColor}",
+            "pon los {fixtureTarget} en {dmxColor}"
+          ]
+        },
+        {
+          "name": "DMXSceneIntent",
+          "slots": [
+            {
+              "name": "dmxScene",
+              "type": "DMX_SCENE"
+            }
+          ],
+          "samples": [
+            "activa la escena {dmxScene}",
+            "activa {dmxScene}",
+            "pon el efecto {dmxScene}"
+          ]
         }
       ],
-      "types": []
+      "types": [
+        {
+          "name": "FIXTURE_TARGET",
+          "values": [
+            {
+              "name": {
+                "value": "tachos"
+              }
+            },
+            {
+              "name": {
+                "value": "tacho peces"
+              }
+            },
+            {
+              "name": {
+                "value": "tacho plantas"
+              }
+            },
+            {
+              "name": {
+                "value": "tacho central"
+              }
+            },
+            {
+              "name": {
+                "value": "tacho mural"
+              }
+            },
+            {
+              "name": {
+                "value": "pulpos"
+              }
+            },
+            {
+              "name": {
+                "value": "esfera led"
+              }
+            },
+            {
+              "name": {
+                "value": "esfera disco"
+              }
+            },
+            {
+              "name": {
+                "value": "stage lights"
+              }
+            },
+            {
+              "name": {
+                "value": "fish light"
+              }
+            },
+            {
+              "name": {
+                "value": "plant light"
+              }
+            },
+            {
+              "name": {
+                "value": "central stage light"
+              }
+            },
+            {
+              "name": {
+                "value": "wall stage light"
+              }
+            },
+            {
+              "name": {
+                "value": "spiders"
+              }
+            },
+            {
+              "name": {
+                "value": "beams"
+              }
+            },
+            {
+              "name": {
+                "value": "bola disco"
+              }
+            },
+            {
+              "name": {
+                "value": "disco ball"
+              }
+            }
+          ]
+        },
+        {
+          "name": "DMX_COLOR",
+          "values": [
+            {
+              "name": {
+                "value": "verde"
+              }
+            },
+            {
+              "name": {
+                "value": "rojo"
+              }
+            },
+            {
+              "name": {
+                "value": "azul"
+              }
+            },
+            {
+              "name": {
+                "value": "morado"
+              }
+            },
+            {
+              "name": {
+                "value": "blanco"
+              }
+            },
+            {
+              "name": {
+                "value": "amarillo"
+              }
+            },
+            {
+              "name": {
+                "value": "naranja"
+              }
+            },
+            {
+              "name": {
+                "value": "rosa"
+              }
+            },
+            {
+              "name": {
+                "value": "cian"
+              }
+            },
+            {
+              "name": {
+                "value": "turquesa"
+              }
+            },
+            {
+              "name": {
+                "value": "green"
+              }
+            },
+            {
+              "name": {
+                "value": "red"
+              }
+            },
+            {
+              "name": {
+                "value": "blue"
+              }
+            },
+            {
+              "name": {
+                "value": "purple"
+              }
+            },
+            {
+              "name": {
+                "value": "white"
+              }
+            },
+            {
+              "name": {
+                "value": "yellow"
+              }
+            },
+            {
+              "name": {
+                "value": "orange"
+              }
+            },
+            {
+              "name": {
+                "value": "pink"
+              }
+            },
+            {
+              "name": {
+                "value": "cyan"
+              }
+            },
+            {
+              "name": {
+                "value": "turquoise"
+              }
+            }
+          ]
+        },
+        {
+          "name": "DMX_SCENE",
+          "values": [
+            {
+              "name": {
+                "value": "rainbow"
+              }
+            },
+            {
+              "name": {
+                "value": "arcoiris"
+              }
+            },
+            {
+              "name": {
+                "value": "chill lounge"
+              }
+            },
+            {
+              "name": {
+                "value": "morado uv"
+              }
+            },
+            {
+              "name": {
+                "value": "rojo sangre"
+              }
+            },
+            {
+              "name": {
+                "value": "blackout"
+              }
+            }
+          ]
+        }
+      ]
     }
   }
 }

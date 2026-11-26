@@ -24,7 +24,7 @@ def test_power_map_requires_switch_entities(monkeypatch):
         raise AssertionError("non-switch DMX power entity accepted")
 
 
-def test_power_preflight_turns_on_and_verifies(monkeypatch):
+def test_explicit_power_action_turns_on_and_verifies(monkeypatch):
     monkeypatch.setenv("HOME_ASSISTANT_URL", "http://ha.local")
     monkeypatch.setenv("HOME_ASSISTANT_TOKEN", "test")
     monkeypatch.setenv("AMBIENT_GUARDIAN_DMX_POWER_PREFLIGHT_ENABLED", "1")
@@ -52,8 +52,8 @@ def test_power_preflight_turns_on_and_verifies(monkeypatch):
     monkeypatch.setattr("ambient_guardian.home_assistant.httpx.get", fake_get)
     monkeypatch.setattr("ambient_guardian.home_assistant.httpx.post", fake_post)
 
-    result = bridge.ensure_dmx_power("tachos")
-    assert result["status"] == "power_verified"
+    result = bridge.control_fixture_power("tachos", turn_on=True)
+    assert result["verified"] is True
     assert result["entities"][0]["changed"] is True
     assert result["entities"][1]["changed"] is False
     assert calls == [
@@ -68,9 +68,6 @@ def test_power_preflight_fails_closed_without_mapping(monkeypatch):
     monkeypatch.delenv("AMBIENT_GUARDIAN_DMX_POWER_MAP", raising=False)
     bridge = HomeAssistantBridge()
 
-    try:
-        bridge.ensure_dmx_power("pulpos")
-    except PermissionError as exc:
-        assert "mapping missing" in str(exc)
-    else:
-        raise AssertionError("missing power mapping did not fail closed")
+    result = bridge.ensure_dmx_power("pulpos")
+    assert result["ok"] is False
+    assert "mapping" in result["reason"]

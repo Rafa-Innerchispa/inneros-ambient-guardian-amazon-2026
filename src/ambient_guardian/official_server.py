@@ -466,6 +466,10 @@ async def simulated_alexa(request: Request) -> Response:
     except ValueError as exc:
         return JSONResponse({"detail": str(exc)}, status_code=400)
     skill_bridge = _skill_bridge_authorized(request)
+    from .fixture_control import parse_fixture_power
+    from .orchestration import parse_dmx_command
+    if (parse_fixture_power(utterance) or parse_dmx_command(utterance, STATE)) and not (skill_bridge or _owner_authorized(request)):
+        return JSONResponse({"ok": False, "error": "trusted lighting channel required"}, status_code=401)
     speaker_context = payload.get("speaker_context") if skill_bridge else {}
     if not isinstance(speaker_context, dict):
         speaker_context = {}
@@ -798,6 +802,27 @@ def _skill_bridge_authorized(request: Request) -> bool:
     expected = os.getenv("AMBIENT_GUARDIAN_SKILL_BRIDGE_TOKEN", "")
     supplied = request.headers.get("x-ambient-skill-bridge", "")
     return bool(expected and supplied and secrets.compare_digest(expected, supplied))
+
+
+@mcp.custom_route("/api/lighting/status", methods=["GET"])
+async def fixture_status_api(request: Request) -> Response:
+    if not (_skill_bridge_authorized(request) or _owner_authorized(request)):
+        return JSONResponse({"ok": False, "error": "owner authorization required"}, status_code=401)
+    from .lighting_api import lighting_status
+    return JSONResponse(await run_in_threadpool(lighting_status, STATE))
+
+
+@mcp.custom_route("/api/lighting/{plane}", methods=["POST"])
+async def fixture_command_api(request: Request) -> Response:
+    if not (_skill_bridge_authorized(request) or _owner_authorized(request)):
+        return JSONResponse({"ok": False, "error": "owner authorization required"}, status_code=401)
+    from .lighting_api import lighting_command
+    try:
+        payload = await _read_object(request)
+        result = await run_in_threadpool(lighting_command, STATE, request.path_params["plane"], payload)
+        return JSONResponse(result)
+    except ValueError as error:
+        return JSONResponse({"ok": False, "error": str(error)}, status_code=400)
 
 
 @mcp.custom_route("/api/home/context", methods=["GET"])
