@@ -1,6 +1,6 @@
 """Atlas-owned MCP adapter: exact owner, fixed local API, separate control planes."""
 from pathlib import Path
-import os, shlex
+import json, os, shlex
 import httpx
 
 URL='http://127.0.0.1:8794/api/lighting/'
@@ -19,6 +19,7 @@ def _authorize():
     owners={x.strip().lower() for x in os.getenv('ATLAS_LIGHTING_OWNER_USERNAMES','').split(',') if x.strip()}
     if not doc or not owners or str(doc.get('username') or '').strip().lower() not in owners:
         raise PermissionError('lighting is restricted to the configured owner identity')
+    return authorization
 
 
 def _bridge_token():
@@ -32,8 +33,39 @@ def _bridge_token():
     raise RuntimeError('trusted lighting bridge is not configured')
 
 
-def _call(operation, parameters):
-    _authorize()  # Ignore caller-supplied approval/user context completely.
+def _peer_call(url, authorization, capability_id, parameters):
+    if url!='http://100.94.99.12:8112/mcp':
+        raise PermissionError('unapproved lighting peer')
+    def decode(response):
+        response.raise_for_status()
+        raw=response.text
+        data=[line[5:].strip() for line in raw.splitlines() if line.startswith('data:')]
+        return json.loads('\n'.join(data) if data else raw)
+    headers={'Authorization':authorization,'Content-Type':'application/json','Accept':'application/json, text/event-stream'}
+    with httpx.Client(timeout=15,trust_env=False,follow_redirects=False) as client:
+        initialized=client.post(url,headers=headers,json={'jsonrpc':'2.0','id':1,'method':'initialize',
+            'params':{'protocolVersion':'2025-03-26','capabilities':{},'clientInfo':{'name':'atlas-lighting-peer','version':'1.0'}}})
+        init=decode(initialized)
+        if initialized.headers.get('Mcp-Session-Id'):headers['Mcp-Session-Id']=initialized.headers['Mcp-Session-Id']
+        headers['MCP-Protocol-Version']=init.get('result',{}).get('protocolVersion','2025-03-26')
+        client.post(url,headers=headers,json={'jsonrpc':'2.0','method':'notifications/initialized'}).raise_for_status()
+        reply=decode(client.post(url,headers=headers,json={'jsonrpc':'2.0','id':2,'method':'tools/call',
+            'params':{'name':'capability_invoke','arguments':{'capability_id':capability_id,'parameters':parameters}}}))
+        result=reply.get('result') or {}
+        if result.get('isError') or reply.get('error'):
+            return {'ok':False,'error':'lighting_peer_rejected_request'}
+        record=result.get('structuredContent')
+        if record is None:
+            record=json.loads(next(c['text'] for c in result.get('content',[]) if c.get('type')=='text'))
+        if not record.get('ok'):return {'ok':False,'error':record.get('error','lighting_peer_failed')}
+        return {**record['result'],'forwarded_via':'intel_owner_mcp','peer_execution_id':record.get('execution_id')}
+
+
+def _call(operation, parameters, capability_id):
+    authorization=_authorize()  # Ignore caller-supplied approval/user context completely.
+    peer=os.getenv('ATLAS_LIGHTING_PEER_MCP_URL','').strip()
+    if peer:
+        return _peer_call(peer,authorization,capability_id,parameters)
     with httpx.Client(timeout=12,trust_env=False,follow_redirects=False) as client:
         headers={'X-Ambient-Skill-Bridge':_bridge_token()}
         response=(client.get(URL+'status',headers=headers) if operation=='status' else
@@ -59,10 +91,10 @@ def register_lighting_capabilities(register):
                   'keywords':['lighting','luces','switch','interruptor','dmx','artnet','kasa','tachos','pulpos'],
                   'required_scopes':['ralfia:write'],'owner_identity_required':True,
                   'parameters_schema':{'type':'object','properties':properties,'required':list(properties),'additionalProperties':False}}
-        def handler(parameters,context,operation=operation,properties=properties):
+        def handler(parameters,context,operation=operation,properties=properties,capability_id=cid):
             if not isinstance(parameters,dict) or set(parameters)!=set(properties):
                 return {'ok':False,'error':'explicit_operation_parameters_required'}
-            try:return _call(operation,parameters)
+            try:return _call(operation,parameters,capability_id)
             except PermissionError:return {'ok':False,'error':'lighting_owner_authorization_required'}
             except (OSError,RuntimeError,httpx.HTTPError):return {'ok':False,'error':'lighting_bridge_unavailable'}
         register(manifest,handler)
