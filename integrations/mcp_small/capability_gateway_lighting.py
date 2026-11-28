@@ -91,7 +91,7 @@ def register_lighting_capabilities(register):
     for cid,operation,mode,description,properties in specs:
         manifest={'capability_id':cid,'version':'1.0.0','title':description,'description':description,
                   'domain':'lighting','risk_class':'low' if mode=='read_only' else 'medium','mode':mode,
-                  'keywords':['lighting','lights','luces','iluminacion','control','encender','apagar','turn on','turn off','power','color','efectos','switch','interruptor','dmx','artnet','kasa','tachos','pulpos'],
+                  'keywords':['lighting','lights','luces','iluminacion','control','encender','apagar','turn on','turn off','power','color','efectos','switch','interruptor','dmx','artnet','kasa','tachos','pulpos','nexxt','next','esfera','esferas','disco','led','holo','holographic','fan01','fan02','toma tv','regleta','mini lasers','tachos negros'],
                   'required_scopes':['ralfia:write'],'owner_identity_required':True,
                   'parameters_schema':{'type':'object','properties':properties,'required':list(properties),'additionalProperties':False}}
         def handler(parameters,context,operation=operation,properties=properties,capability_id=cid):
