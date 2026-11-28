@@ -82,3 +82,27 @@ def test_unknown_individual_dmx_target_cannot_expand_to_all_tachos():
 def test_percent_brightness_is_not_silently_full_power():
     result=parse_dmx_command('pon los tachos verdes al 25%',_state())
     assert result['brightness']==64
+
+
+def test_delayed_ha_child_state_is_polled_without_repeating_switch_command(monkeypatch):
+    home=bridge(monkeypatch);posts=[];waits=[]
+    monkeypatch.setattr(home,'get_entity_state',lambda e:{'state':'on' if len(waits)>=10 else 'off'})
+    class Response:
+        def raise_for_status(self):pass
+    monkeypatch.setattr('ambient_guardian.home_assistant.httpx.post',lambda *a,**k:posts.append(k['json']) or Response())
+    monkeypatch.setattr('ambient_guardian.home_assistant.time.sleep',waits.append)
+    result=home.control_fixture_power('tachos',turn_on=True)
+    assert result['verified'] and len(posts)==1
+    assert waits==[0.5]*10
+
+
+def test_verification_timeout_is_bounded_and_does_not_retry_physical_action(monkeypatch):
+    home=bridge(monkeypatch);posts=[];waits=[]
+    monkeypatch.setattr(home,'get_entity_state',lambda e:{'state':'off'})
+    class Response:
+        def raise_for_status(self):pass
+    monkeypatch.setattr('ambient_guardian.home_assistant.httpx.post',lambda *a,**k:posts.append(k['json']) or Response())
+    monkeypatch.setattr('ambient_guardian.home_assistant.time.sleep',waits.append)
+    result=home.control_fixture_power('tachos',turn_on=True)
+    assert not result['verified'] and len(posts)==1
+    assert waits==[0.5]*12
