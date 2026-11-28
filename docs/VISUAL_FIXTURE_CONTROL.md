@@ -32,6 +32,6 @@ startup drop-ins. The immutable extension was restored from its previously
 verified release; no managed gateway source or other profile was changed.
 Public MCP calls then discovered all four lighting capabilities, read live
 states via Intel, and verified both sphere outlets off without actuation.
-Use the versioned installer in scripts/install_mcp_lighting_extension.py to
+Use the versioned installer in scripts/install_mcp_lighting_adapter.py to
 preserve the extension when rebuilding profile configuration; verify the
 managed gateway hash first. Do not edit the managed gateway to register it.
