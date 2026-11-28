@@ -106,3 +106,24 @@ def test_verification_timeout_is_bounded_and_does_not_retry_physical_action(monk
     result=home.control_fixture_power('tachos',turn_on=True)
     assert not result['verified'] and len(posts)==1
     assert waits==[0.5]*12
+
+
+@pytest.mark.parametrize('text,target',[
+    ('enciende fan01','fan01'),('enciende toma tv 01','fan01'),
+    ('turn on holo fan 02','fan02'),('apaga esfera disco','esfera_disco'),
+    ('enciende tachos negros','tachos_negros'),('apaga mini lasers','mini_lasers')])
+def test_owner_visual_fixture_names_are_distinct_power_targets(text,target):
+    assert parse_fixture_power(text)['target']==target
+
+
+def test_catalog_distinguishes_owner_names_from_verified_entity_bindings():
+    from ambient_guardian.fixture_control import visual_fixture_catalog
+    catalog=visual_fixture_catalog({'esfera_disco':['switch.verified']},{'switch.verified':'off'},['pulpos'])
+    assert catalog['esfera_disco']['power_available']
+    assert catalog['fan01']['owner_device_labels']==['Toma TV 01']
+    assert catalog['fan02']['owner_device_labels']==['Toma TV 02']
+    for target in ('fan01','fan02','pulpos','tachos_negros','mini_lasers'):
+        assert not catalog[target]['power_mapped']
+        assert catalog[target]['power_status']=='integration_pending'
+    assert catalog['pulpos']['dmx_target']=='pulpos'
+    assert catalog['esfera_disco']['dmx_target'] is None

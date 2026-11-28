@@ -10,10 +10,13 @@ def lighting_status(state: Any) -> dict[str, Any]:
     home=state.home_assistant
     entities=sorted({e for group in home.dmx_power_map.values() for e in group})
     readings={e:home.get_entity_state(e).get('state') for e in entities}
+    from .fixture_control import visual_fixture_catalog
+    engine=state.dmx.status().as_dict()
+    fixtures=visual_fixture_catalog(home.dmx_power_map,readings,engine.get('target_allowlist') or [])
     return {'ok':True,'observed_at':datetime.now(timezone.utc).isoformat(),
             'power':{'control_plane':'mains_power','groups':home.dmx_power_map,'switch_states':readings,
-                     'unmapped':['pulpos'] if not home.dmx_power_map.get('pulpos') else []},
-            'dmx':{'control_plane':'dmx','engine':state.dmx.status().as_dict(),
+                     'unmapped':[target for target,fixture in fixtures.items() if not fixture['power_mapped']]},
+            'fixtures':fixtures,'dmx':{'control_plane':'dmx','engine':engine,
                    'physical_light_verified':False},'implicit_power_on':False}
 
 
