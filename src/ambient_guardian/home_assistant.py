@@ -1285,10 +1285,18 @@ class HomeAssistantBridge:
                                       headers=self._headers(), json={"entity_id": row["entity_id"]},
                                       timeout=self.timeout)
                 response.raise_for_status()
-                time.sleep(0.25)
-            after = self.get_entity_state(row["entity_id"]).get("state")
             results.append({"entity_id": row["entity_id"], "before": row["state"],
-                            "after": after, "changed": changed, "verified": after == wanted})
+                            "after": row["state"], "changed": changed, "verified": False})
+        # Kasa's parent coordinator polls every five seconds. A successful service
+        # call can return before HA exposes the new child state. Only poll reads:
+        # retrying the physical command would duplicate an already accepted action.
+        for attempt in range(13):
+            for row in results:
+                row["after"] = self.get_entity_state(row["entity_id"]).get("state")
+                row["verified"] = row["after"] == wanted
+            if all(row["verified"] for row in results) or attempt == 12:
+                break
+            time.sleep(0.5)
         verified = all(row["verified"] for row in results)
         return {"ok": verified, "verified": verified, "target": target,
                 "state": wanted, "entities": results,
